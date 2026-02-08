@@ -39,19 +39,8 @@ import {
   useCategories,
   Expense,
 } from '@/hooks/useExpenses';
+import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { PAYMENT_METHOD_LABELS } from '@/lib/constants';
-
-const formSchema = z.object({
-  date: z.date({ required_error: 'Selecione uma data' }),
-  description: z.string().min(1, 'Descrição é obrigatória'),
-  category_id: z.string().optional(),
-  amount: z.string().min(1, 'Valor é obrigatório'),
-  payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
-  is_reimbursable: z.boolean(),
-  notes: z.string().optional(),
-});
-
-type FormData = z.infer<typeof formSchema>;
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -67,9 +56,31 @@ export function ExpenseFormDialog({
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const { data: categories } = useCategories();
+  const { data: policy } = useExpensePolicy();
+  const costCenters = useActiveCostCenters();
+  const projects = useActiveProjects();
 
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
+
+  // Build dynamic schema based on policy
+  const formSchema = z.object({
+    date: z.date({ required_error: 'Selecione uma data' }),
+    description: z.string().min(1, 'Descrição é obrigatória'),
+    category_id: z.string().optional(),
+    amount: z.string().min(1, 'Valor é obrigatório'),
+    payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
+    is_reimbursable: z.boolean(),
+    notes: z.string().optional(),
+    cost_center_id: policy?.require_cost_center 
+      ? z.string().min(1, 'Centro de custo é obrigatório') 
+      : z.string().optional(),
+    project_id: policy?.require_project 
+      ? z.string().min(1, 'Projeto é obrigatório') 
+      : z.string().optional(),
+  });
+
+  type FormData = z.infer<typeof formSchema>;
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -81,6 +92,8 @@ export function ExpenseFormDialog({
       payment_method: 'personal_card',
       is_reimbursable: true,
       notes: '',
+      cost_center_id: '',
+      project_id: '',
     },
   });
 
@@ -94,6 +107,8 @@ export function ExpenseFormDialog({
         payment_method: expense.payment_method,
         is_reimbursable: expense.is_reimbursable,
         notes: expense.notes || '',
+        cost_center_id: (expense as any).cost_center_id || '',
+        project_id: (expense as any).project_id || '',
       });
     } else {
       form.reset({
@@ -104,6 +119,8 @@ export function ExpenseFormDialog({
         payment_method: 'personal_card',
         is_reimbursable: true,
         notes: '',
+        cost_center_id: '',
+        project_id: '',
       });
     }
   }, [expense, form]);
@@ -121,6 +138,8 @@ export function ExpenseFormDialog({
       payment_method: data.payment_method,
       is_reimbursable: data.is_reimbursable,
       notes: data.notes || null,
+      cost_center_id: data.cost_center_id || null,
+      project_id: data.project_id || null,
     };
 
     if (isEditing && expense) {
@@ -136,7 +155,7 @@ export function ExpenseFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isReadOnly
@@ -279,6 +298,73 @@ export function ExpenseFormDialog({
                         {Object.entries(PAYMENT_METHOD_LABELS).map(([key, label]) => (
                           <SelectItem key={key} value={key}>
                             {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Cost Center and Project */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="cost_center_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Centro de Custo
+                      {policy?.require_cost_center && <span className="text-destructive"> *</span>}
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isReadOnly}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {costCenters.map((cc) => (
+                          <SelectItem key={cc.id} value={cc.id}>
+                            {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="project_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Projeto
+                      {policy?.require_project && <span className="text-destructive"> *</span>}
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={isReadOnly}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {projects.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.code ? `${p.code} - ${p.name}` : p.name}
                           </SelectItem>
                         ))}
                       </SelectContent>

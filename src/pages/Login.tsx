@@ -1,18 +1,24 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Receipt, Loader2 } from 'lucide-react';
+import { Receipt, Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { signIn, signUp, requestPasswordReset } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+
+  const inviteToken = searchParams.get('invite');
+  const defaultTab = searchParams.get('tab') === 'signup' ? 'signup' : 'login';
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({
@@ -57,10 +63,78 @@ export default function Login() {
       toast.error('Erro ao cadastrar: ' + error.message);
     } else {
       toast.success('Conta criada! Verifique seu email para confirmar.');
-      navigate('/app/dashboard');
     }
     setIsLoading(false);
   };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      toast.error('Informe seu email');
+      return;
+    }
+    setIsLoading(true);
+    const { error } = await requestPasswordReset(forgotEmail);
+    if (error) {
+      toast.error('Erro ao enviar email: ' + error.message);
+    } else {
+      toast.success('Email de recuperação enviado! Verifique sua caixa de entrada.');
+      setShowForgotPassword(false);
+    }
+    setIsLoading(false);
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mb-4 flex items-center justify-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
+                <Receipt className="h-6 w-6 text-primary-foreground" />
+              </div>
+              <span className="text-2xl font-bold">ExpenseHub</span>
+            </div>
+            <CardTitle className="text-2xl">Recuperar senha</CardTitle>
+            <CardDescription>
+              Informe seu email para receber o link de recuperação
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="forgot-email">Email</Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="seu@email.com"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full gap-2" disabled={isLoading}>
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                Enviar link de recuperação
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShowForgotPassword(false)}
+              >
+                Voltar ao login
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -99,11 +173,13 @@ export default function Login() {
             </div>
             <CardTitle className="text-2xl">Bem-vindo!</CardTitle>
             <CardDescription>
-              Entre na sua conta ou crie uma nova para começar
+              {inviteToken
+                ? 'Você foi convidado! Crie sua conta para continuar.'
+                : 'Entre na sua conta ou crie uma nova para começar'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs defaultValue={inviteToken ? 'signup' : defaultTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Entrar</TabsTrigger>
                 <TabsTrigger value="signup">Cadastrar</TabsTrigger>
@@ -125,7 +201,16 @@ export default function Login() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="login-password">Senha</Label>
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPassword(true)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Esqueceu a senha?
+                      </button>
+                    </div>
                     <Input
                       id="login-password"
                       type="password"

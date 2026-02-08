@@ -17,9 +17,13 @@ export interface Expense {
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
   receipt_path: string | null;
   notes: string | null;
+  cost_center_id: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
   category?: { name: string } | null;
+  cost_center?: { name: string; code: string | null } | null;
+  project?: { name: string; code: string | null } | null;
 }
 
 export interface ExpenseInput {
@@ -32,6 +36,8 @@ export interface ExpenseInput {
   is_reimbursable: boolean;
   receipt_path?: string | null;
   notes?: string | null;
+  cost_center_id?: string | null;
+  project_id?: string | null;
 }
 
 export function useExpenses(filters?: {
@@ -47,7 +53,7 @@ export function useExpenses(filters?: {
     queryFn: async () => {
       let query = supabase
         .from('expenses')
-        .select('*, category:expense_categories(name)')
+        .select('*, category:expense_categories(name), cost_center:cost_centers(name, code), project:projects(name, code)')
         .order('date', { ascending: false });
 
       if (filters?.status && filters.status !== 'all') {
@@ -77,7 +83,7 @@ export function useExpense(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('expenses')
-        .select('*, category:expense_categories(name)')
+        .select('*, category:expense_categories(name), cost_center:cost_centers(name, code), project:projects(name, code)')
         .eq('id', id)
         .single();
       if (error) throw error;

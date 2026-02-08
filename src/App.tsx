@@ -11,6 +11,8 @@ import Reports from "./pages/app/Reports";
 import ReportDetail from "./pages/app/ReportDetail";
 import SettingsProfile from "./pages/app/SettingsProfile";
 import SettingsPassword from "./pages/app/SettingsPassword";
+import SettingsPolicy from "./pages/app/SettingsPolicy";
+import SettingsTeam from "./pages/app/SettingsTeam";
 import Advances from "./pages/app/Advances";
 import Support from "./pages/app/Support";
 import NotFound from "./pages/NotFound";
@@ -18,9 +20,9 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isBootstrapping } = useAuth();
   
-  if (isLoading) {
+  if (isLoading || isBootstrapping) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
@@ -64,6 +66,8 @@ function AppRoutes() {
       <Route path="/app/reports/:id" element={<ProtectedRoute><ReportDetail /></ProtectedRoute>} />
       <Route path="/app/settings/profile" element={<ProtectedRoute><SettingsProfile /></ProtectedRoute>} />
       <Route path="/app/settings/password" element={<ProtectedRoute><SettingsPassword /></ProtectedRoute>} />
+      <Route path="/app/settings/policy" element={<ProtectedRoute><SettingsPolicy /></ProtectedRoute>} />
+      <Route path="/app/settings/team" element={<ProtectedRoute><SettingsTeam /></ProtectedRoute>} />
       <Route path="/app/advances" element={<ProtectedRoute><Advances /></ProtectedRoute>} />
       <Route path="/app/support" element={<ProtectedRoute><Support /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />

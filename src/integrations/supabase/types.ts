@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      cost_centers: {
+        Row: {
+          code: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_centers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_categories: {
         Row: {
           created_at: string
@@ -43,10 +81,49 @@ export type Database = {
           },
         ]
       }
+      expense_policies: {
+        Row: {
+          default_currency: string
+          id: string
+          org_id: string
+          require_cost_center: boolean
+          require_project: boolean
+          require_receipt: boolean
+          updated_at: string
+        }
+        Insert: {
+          default_currency?: string
+          id?: string
+          org_id: string
+          require_cost_center?: boolean
+          require_project?: boolean
+          require_receipt?: boolean
+          updated_at?: string
+        }
+        Update: {
+          default_currency?: string
+          id?: string
+          org_id?: string
+          require_cost_center?: boolean
+          require_project?: boolean
+          require_receipt?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_policies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount_cents: number
           category_id: string | null
+          cost_center_id: string | null
           created_at: string
           currency: string | null
           date: string
@@ -56,6 +133,7 @@ export type Database = {
           notes: string | null
           org_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          project_id: string | null
           receipt_path: string | null
           status: Database["public"]["Enums"]["expense_status"]
           updated_at: string
@@ -64,6 +142,7 @@ export type Database = {
         Insert: {
           amount_cents: number
           category_id?: string | null
+          cost_center_id?: string | null
           created_at?: string
           currency?: string | null
           date: string
@@ -73,6 +152,7 @@ export type Database = {
           notes?: string | null
           org_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          project_id?: string | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["expense_status"]
           updated_at?: string
@@ -81,6 +161,7 @@ export type Database = {
         Update: {
           amount_cents?: number
           category_id?: string | null
+          cost_center_id?: string | null
           created_at?: string
           currency?: string | null
           date?: string
@@ -90,6 +171,7 @@ export type Database = {
           notes?: string | null
           org_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          project_id?: string | null
           receipt_path?: string | null
           status?: Database["public"]["Enums"]["expense_status"]
           updated_at?: string
@@ -104,7 +186,94 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_centers"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_domains: {
+        Row: {
+          created_at: string
+          domain: string
+          id: string
+          org_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          id?: string
+          org_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          id?: string
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_domains_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          org_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          org_id: string
+          role?: Database["public"]["Enums"]["app_role"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          org_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_invites_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -164,6 +333,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "profiles_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          code: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          updated_at: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -309,6 +516,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bootstrap_user: { Args: never; Returns: Json }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

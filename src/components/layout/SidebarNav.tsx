@@ -6,15 +6,8 @@ import {
   Wallet,
   Settings,
   HelpCircle,
-  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { useState } from 'react';
 
 const mainNavItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Início' },
@@ -23,16 +16,9 @@ const mainNavItems = [
   { to: '/app/advances', icon: Wallet, label: 'Adiantamentos' },
 ];
 
-const settingsNavItems = [
-  { to: '/app/settings/profile', label: 'Meu Perfil' },
-  { to: '/app/settings/password', label: 'Alterar Senha' },
-];
-
 export function SidebarNav() {
   const location = useLocation();
-  const [settingsOpen, setSettingsOpen] = useState(
-    location.pathname.startsWith('/app/settings')
-  );
+  const isSettingsActive = location.pathname.startsWith('/app/settings');
 
   return (
     <aside className="flex w-64 flex-col bg-sidebar text-sidebar-foreground">
@@ -64,37 +50,19 @@ export function SidebarNav() {
           </NavLink>
         ))}
 
-        {/* Settings Collapsible */}
-        <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
-          <CollapsibleTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground">
-            <Settings className="h-5 w-5" />
-            <span className="flex-1 text-left">Configurações</span>
-            <ChevronDown
-              className={cn(
-                'h-4 w-4 transition-transform',
-                settingsOpen && 'rotate-180'
-              )}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-1 pl-8 pt-1">
-            {settingsNavItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  cn(
-                    'block rounded-lg px-3 py-2 text-sm transition-colors',
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
+        {/* Settings Link */}
+        <NavLink
+          to="/app/settings/policy"
+          className={cn(
+            'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+            isSettingsActive
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+          )}
+        >
+          <Settings className="h-5 w-5" />
+          Configurações
+        </NavLink>
 
         <NavLink
           to="/app/support"
