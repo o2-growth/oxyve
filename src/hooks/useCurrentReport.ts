@@ -11,7 +11,16 @@ export interface CurrentReport {
   due_date: string;
   cycle_key: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
+  submitted_at?: string;
+  submitted_late?: boolean;
   created_at: string;
+}
+
+export interface DashboardContext {
+  current_report: CurrentReport;
+  pending_due_report: (CurrentReport & { days_overdue: number }) | null;
+  days_until_due: number;
+  today: string;
 }
 
 export interface CreateExpenseInReportResult {
@@ -21,7 +30,6 @@ export interface CreateExpenseInReportResult {
     amount_cents: number;
     date: string;
     is_out_of_policy: boolean;
-    // ... other fields
   };
   report: CurrentReport;
   is_out_of_policy: boolean;
@@ -38,6 +46,39 @@ export function useCurrentReport() {
       return data as unknown as CurrentReport;
     },
     enabled: !!user,
+  });
+}
+
+export function useDashboardContext() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['dashboard-context'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_dashboard_context');
+      if (error) throw error;
+      return data as unknown as DashboardContext;
+    },
+    enabled: !!user,
+  });
+}
+
+export function useReportForDate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (date: string) => {
+      const { data, error } = await supabase.rpc('get_or_create_report_for_date', {
+        p_date: date,
+      });
+      if (error) throw error;
+      return data as unknown as CurrentReport;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
+    },
   });
 }
 
@@ -79,6 +120,7 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       
       if (data.is_out_of_policy) {
         toast.warning('Despesa criada, mas está fora da política de limite diário');
@@ -88,6 +130,35 @@ export function useCreateExpenseInReport() {
     },
     onError: (error) => {
       toast.error('Erro ao criar despesa: ' + error.message);
+    },
+  });
+}
+
+export function useSubmitReportRpc() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      const { data, error } = await supabase.rpc('submit_report', {
+        p_report_id: reportId,
+      });
+      if (error) throw error;
+      return data as unknown as { report: CurrentReport; submitted_late: boolean };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      
+      if (data.submitted_late) {
+        toast.warning('Relatório enviado com atraso');
+      } else {
+        toast.success('Relatório enviado para aprovação!');
+      }
+    },
+    onError: (error) => {
+      toast.error('Erro ao enviar relatório: ' + error.message);
     },
   });
 }

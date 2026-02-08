@@ -9,9 +9,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { LogOut, User, Settings } from 'lucide-react';
+import { LogOut, User, Settings, Receipt } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
+import { MobileSidebar } from './MobileSidebar';
 
 export function TopBar() {
   const { user, profile, roles, signOut, isAdmin, isManager } = useAuth();
@@ -41,19 +42,30 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-card px-6">
-      <div className="flex items-center gap-4">
-        {/* Breadcrumb could go here */}
+    <header className="flex h-14 md:h-16 items-center justify-between border-b bg-card px-4 md:px-6">
+      <div className="flex items-center gap-3">
+        {/* Mobile menu trigger */}
+        <MobileSidebar />
+        
+        {/* Mobile logo */}
+        <div className="flex items-center gap-2 md:hidden">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+            <Receipt className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span className="font-semibold">ExpenseHub</span>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {getRoleBadge()}
+      <div className="flex items-center gap-2 md:gap-4">
+        <div className="hidden sm:block">
+          {getRoleBadge()}
+        </div>
         
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-primary text-primary-foreground">
+            <Button variant="ghost" className="relative h-9 w-9 md:h-10 md:w-10 rounded-full">
+              <Avatar className="h-9 w-9 md:h-10 md:w-10">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                   {getInitials()}
                 </AvatarFallback>
               </Avatar>
@@ -71,6 +83,10 @@ export function TopBar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <div className="sm:hidden px-2 py-1.5">
+              {getRoleBadge()}
+            </div>
+            <DropdownMenuSeparator className="sm:hidden" />
             <DropdownMenuItem onClick={() => navigate('/app/settings/profile')}>
               <User className="mr-2 h-4 w-4" />
               Meu Perfil
