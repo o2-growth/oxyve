@@ -14,6 +14,7 @@ export interface Report {
   created_at: string;
   updated_at: string;
   total_cents?: number;
+  reimbursable_cents?: number;
   expense_count?: number;
   user?: { full_name: string | null } | null;
 }
@@ -67,7 +68,7 @@ export function useReports(filters?: { status?: string }) {
         (reports || []).map(async (report) => {
           const { data: items } = await supabase
             .from('report_items')
-            .select('expense:expenses(amount_cents)')
+            .select('expense:expenses(amount_cents, is_reimbursable)')
             .eq('report_id', report.id);
 
           const { data: profileData } = await supabase
@@ -81,9 +82,15 @@ export function useReports(filters?: { status?: string }) {
             0
           ) || 0;
 
+          const reimbursable_cents = items?.reduce(
+            (sum, item: any) => sum + (item.expense?.is_reimbursable ? (item.expense?.amount_cents || 0) : 0),
+            0
+          ) || 0;
+
           return {
             ...report,
             total_cents,
+            reimbursable_cents,
             expense_count: items?.length || 0,
             user: profileData,
           };

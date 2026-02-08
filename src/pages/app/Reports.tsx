@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -31,6 +32,9 @@ import {
   Eye,
   Trash2,
   FileText,
+  DollarSign,
+  Receipt,
+  TrendingUp,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -46,6 +50,18 @@ export default function Reports() {
   const { isManager } = useAuth();
   const { data: reports, isLoading } = useReports({ status: statusFilter });
   const deleteReport = useDeleteReport();
+
+  // Calculate summary stats
+  const stats = useMemo(() => {
+    if (!reports) return { total: 0, reimbursable: 0, nonReimbursable: 0, average: 0 };
+    
+    const total = reports.reduce((sum, r) => sum + (r.total_cents || 0), 0);
+    const reimbursable = reports.reduce((sum, r) => sum + (r.reimbursable_cents || 0), 0);
+    const nonReimbursable = total - reimbursable;
+    const average = reports.length > 0 ? total / reports.length : 0;
+
+    return { total, reimbursable, nonReimbursable, average };
+  }, [reports]);
 
   const handleStatusChange = (status: string) => {
     if (status === 'all') {
@@ -82,12 +98,63 @@ export default function Reports() {
         }
       />
 
+      {/* Summary Cards */}
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+              <DollarSign className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total</p>
+              <p className="text-xl font-bold">{formatCurrency(stats.total)}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+              <Receipt className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Reembolsável</p>
+              <p className="text-xl font-bold">{formatCurrency(stats.reimbursable)}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
+              <Receipt className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Não Reembolsável</p>
+              <p className="text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+              <TrendingUp className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Média por Relatório</p>
+              <p className="text-xl font-bold">{formatCurrency(stats.average)}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Filters */}
       <div className="mb-6">
         <Tabs value={statusFilter} onValueChange={handleStatusChange}>
           <TabsList>
             <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="draft">Rascunho</TabsTrigger>
+            <TabsTrigger value="draft">Abertos</TabsTrigger>
             <TabsTrigger value="submitted">Enviados</TabsTrigger>
             <TabsTrigger value="approved">Aprovados</TabsTrigger>
             <TabsTrigger value="rejected">Reprovados</TabsTrigger>

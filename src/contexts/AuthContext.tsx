@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { bootstrapUser } from '@/hooks/useBootstrap';
 
 interface Profile {
   id: string;
@@ -20,12 +21,14 @@ interface AuthContextType {
   profile: Profile | null;
   roles: UserRole[];
   isLoading: boolean;
+  isBootstrapping: boolean;
   isAdmin: boolean;
   isManager: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -36,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     const { data: profileData } = await supabase
@@ -58,6 +62,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const runBootstrap = async (userId: string) => {
+    setIsBootstrapping(true);
+    try {
+      // Check if profile exists
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single();
+
+      if (!existingProfile) {
+        // Run bootstrap to create profile
+        await bootstrapUser();
+      }
+      
+      // Fetch the profile after bootstrap
+      await fetchProfile(userId);
+    } catch (error) {
+      console.error('Bootstrap error:', error);
+    } finally {
+      setIsBootstrapping(false);
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
@@ -73,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (session?.user) {
           // Use setTimeout to avoid blocking the auth state change
-          setTimeout(() => fetchProfile(session.user.id), 0);
+          setTimeout(() => runBootstrap(session.user.id), 0);
         } else {
           setProfile(null);
           setRoles([]);
@@ -87,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        runBootstrap(session.user.id);
       }
       setIsLoading(false);
     });
@@ -118,6 +146,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRoles([]);
   };
 
+  const requestPasswordReset = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login?reset=true`,
+    });
+    return { error };
+  };
+
   const isAdmin = roles.some(r => r.role === 'admin');
   const isManager = roles.some(r => r.role === 'manager' || r.role === 'admin');
 
@@ -129,12 +164,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         roles,
         isLoading,
+        isBootstrapping,
         isAdmin,
         isManager,
         signIn,
         signUp,
         signOut,
         refreshProfile,
+        requestPasswordReset,
       }}
     >
       {children}
