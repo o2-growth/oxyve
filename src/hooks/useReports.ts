@@ -245,10 +245,37 @@ export function useAddExpenseToReport() {
     onSuccess: (_, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
       toast.success('Despesa adicionada ao relatório!');
     },
     onError: (error) => {
       toast.error('Erro ao adicionar despesa: ' + error.message);
+    },
+  });
+}
+
+export function useAddExpensesToReport() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ reportId, expenseIds }: { reportId: string; expenseIds: string[] }) => {
+      const items = expenseIds.map((expenseId) => ({
+        report_id: reportId,
+        expense_id: expenseId,
+      }));
+      const { error } = await supabase.from('report_items').insert(items);
+      if (error) throw error;
+    },
+    onSuccess: (_, { reportId }) => {
+      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
+      toast.success('Despesas adicionadas ao relatório!');
+    },
+    onError: (error) => {
+      toast.error('Erro ao adicionar despesas: ' + error.message);
     },
   });
 }
