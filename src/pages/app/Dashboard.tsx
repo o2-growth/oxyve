@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
-import { useCurrentReport } from '@/hooks/useCurrentReport';
+import { useDashboardContext } from '@/hooks/useCurrentReport';
 import { formatCurrency } from '@/lib/constants';
-import { FileText, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
+import { FileText, TrendingUp, Clock, CheckCircle2, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
+import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
@@ -19,24 +21,25 @@ export default function Dashboard() {
   
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: reports, isLoading: reportsLoading } = useReports();
-  const { data: currentReport, isLoading: currentReportLoading } = useCurrentReport();
+  const { data: dashboardContext, isLoading: contextLoading } = useDashboardContext();
 
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
 
-  const isLoading = expensesLoading || reportsLoading || currentReportLoading;
+  const isLoading = expensesLoading || reportsLoading || contextLoading;
 
   // Calculate stats
   const draftReports = reports?.filter((r) => r.status === 'draft').length || 0;
   const submittedReports = reports?.filter((r) => r.status === 'submitted').length || 0;
   const approvedReports = reports?.filter((r) => r.status === 'approved').length || 0;
 
-  // Calculate current report expenses
-  const currentReportExpenses = currentReport ? {
+  // Calculate current report expenses using dashboard context
+  const currentReportId = dashboardContext?.current_report?.id;
+  const currentReportExpenses = currentReportId ? {
     total_cents: expenses
-      ?.filter((e) => (e as any).report?.id === currentReport.id)
+      ?.filter((e) => (e as any).report?.id === currentReportId)
       .reduce((sum, e) => sum + e.amount_cents, 0) || 0,
     count: expenses
-      ?.filter((e) => (e as any).report?.id === currentReport.id)
+      ?.filter((e) => (e as any).report?.id === currentReportId)
       .length || 0,
   } : null;
 
@@ -50,27 +53,27 @@ export default function Dashboard() {
       />
 
       {/* Current Period Report Card */}
-      <div className="mb-8">
+      <div className="mb-6 md:mb-8">
         <CurrentReportCard 
           onAddExpense={() => setExpenseDialogOpen(true)}
           reportExpenses={currentReportExpenses}
         />
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {/* Stats Cards - 2 cols on mobile, 4 on desktop */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card className="animate-fade-in">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Período Atual
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-7 w-24" />
             ) : (
-              <div className="text-2xl font-bold">
+              <div className="text-xl sm:text-2xl font-bold">
                 {formatCurrency(currentReportExpenses?.total_cents || 0)}
               </div>
             )}
@@ -81,51 +84,51 @@ export default function Dashboard() {
         </Card>
 
         <Card className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Relatórios em Rascunho
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Rascunhos
             </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-7 w-12" />
             ) : (
-              <div className="text-2xl font-bold">{draftReports}</div>
+              <div className="text-xl sm:text-2xl font-bold">{draftReports}</div>
             )}
             <p className="text-xs text-muted-foreground">Aguardando envio</p>
           </CardContent>
         </Card>
 
         <Card className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Aguardando Aprovação
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Enviados
             </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-7 w-12" />
             ) : (
-              <div className="text-2xl font-bold">{submittedReports}</div>
+              <div className="text-xl sm:text-2xl font-bold">{submittedReports}</div>
             )}
-            <p className="text-xs text-muted-foreground">Relatórios enviados</p>
+            <p className="text-xs text-muted-foreground">Em aprovação</p>
           </CardContent>
         </Card>
 
         <Card className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
               Aprovados
             </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-status-approved" />
+            <CheckCircle2 className="h-4 w-4 text-green-600 hidden sm:block" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-8 w-16" />
+              <Skeleton className="h-7 w-12" />
             ) : (
-              <div className="text-2xl font-bold">{approvedReports}</div>
+              <div className="text-xl sm:text-2xl font-bold">{approvedReports}</div>
             )}
             <p className="text-xs text-muted-foreground">Relatórios aprovados</p>
           </CardContent>
@@ -134,10 +137,10 @@ export default function Dashboard() {
 
       {/* Manager Section */}
       {isManager && pendingApproval > 0 && (
-        <Card className="mt-8 border-status-submitted/50 bg-status-submitted/5">
+        <Card className="mt-6 md:mt-8 border-primary/30 bg-primary/5">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-status-submitted" />
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+              <Clock className="h-5 w-5 text-primary" />
               Relatórios Pendentes de Aprovação
             </CardTitle>
             <CardDescription>
@@ -145,38 +148,38 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <button 
+            <Button 
               onClick={() => navigate('/app/reports?status=submitted')}
-              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+              className="w-full sm:w-auto h-12 sm:h-10"
             >
               Ver Relatórios Pendentes
-            </button>
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Recent Activity */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      {/* Recent Activity - stack on mobile */}
+      <div className="mt-6 md:mt-8 grid gap-4 md:gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Despesas do Período</CardTitle>
-            <CardDescription>Despesas do relatório atual</CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Despesas do Período</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Despesas do relatório atual</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
+                  <Skeleton key={i} className="h-14 w-full" />
                 ))}
               </div>
             ) : !currentReportExpenses?.count ? (
-              <p className="text-center text-muted-foreground py-4">
+              <p className="text-center text-muted-foreground py-6 text-sm">
                 Nenhuma despesa neste período
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {expenses
-                  ?.filter((e) => (e as any).report?.id === currentReport?.id)
+                  ?.filter((e) => (e as any).report?.id === currentReportId)
                   .slice(0, 5)
                   .map((expense) => (
                     <div
@@ -184,19 +187,19 @@ export default function Dashboard() {
                       className="flex items-center justify-between rounded-lg border p-3"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium truncate">{expense.description}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium truncate text-sm">{expense.description}</p>
                           {(expense as any).is_out_of_policy && (
                             <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
                               Fora da política
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           {new Date(expense.date).toLocaleDateString('pt-BR')}
                         </p>
                       </div>
-                      <p className="font-semibold">
+                      <p className="font-semibold text-sm sm:text-base shrink-0 ml-2">
                         {formatCurrency(expense.amount_cents, expense.currency)}
                       </p>
                     </div>
@@ -207,36 +210,36 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Relatórios Recentes</CardTitle>
-            <CardDescription>Seus últimos 5 relatórios</CardDescription>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base sm:text-lg">Relatórios Recentes</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Seus últimos 5 relatórios</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="space-y-3">
                 {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
+                  <Skeleton key={i} className="h-14 w-full" />
                 ))}
               </div>
             ) : reports?.length === 0 ? (
-              <p className="text-center text-muted-foreground py-4">
+              <p className="text-center text-muted-foreground py-6 text-sm">
                 Nenhum relatório encontrado
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {reports?.slice(0, 5).map((report) => (
                   <div
                     key={report.id}
-                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 active:bg-muted"
                     onClick={() => navigate(`/app/reports/${report.id}`)}
                   >
-                    <div>
-                      <p className="font-medium">{report.title}</p>
-                      <p className="text-sm text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate text-sm">{report.title}</p>
+                      <p className="text-xs text-muted-foreground">
                         {report.expense_count} despesa(s)
                       </p>
                     </div>
-                    <p className="font-semibold">
+                    <p className="font-semibold text-sm sm:text-base shrink-0 ml-2">
                       {formatCurrency(report.total_cents || 0)}
                     </p>
                   </div>
@@ -246,6 +249,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating Action Button - Mobile only */}
+      <FloatingActionButton
+        icon={Plus}
+        label="Nova despesa"
+        onClick={() => setExpenseDialogOpen(true)}
+      />
 
       {/* Expense Form Dialog */}
       <ExpenseFormDialog 

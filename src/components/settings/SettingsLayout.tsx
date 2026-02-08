@@ -3,6 +3,15 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { FileText, User, Lock, Users } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useNavigate } from 'react-router-dom';
 
 interface SettingsLayoutProps {
   children: ReactNode;
@@ -37,11 +46,51 @@ const settingsLinks = [
 
 export function SettingsLayout({ children }: SettingsLayoutProps) {
   const { isAdmin } = useAuth();
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const visibleLinks = settingsLinks.filter(
     (link) => !link.adminOnly || isAdmin
   );
 
+  const currentLink = visibleLinks.find(link => location.pathname === link.to);
+
+  // Mobile: Use a dropdown select instead of sidebar
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        <Select
+          value={location.pathname}
+          onValueChange={(value) => navigate(value)}
+        >
+          <SelectTrigger className="w-full h-12">
+            <SelectValue>
+              {currentLink && (
+                <span className="flex items-center gap-2">
+                  <currentLink.icon className="h-4 w-4" />
+                  {currentLink.label}
+                </span>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {visibleLinks.map((link) => (
+              <SelectItem key={link.to} value={link.to}>
+                <span className="flex items-center gap-2">
+                  <link.icon className="h-4 w-4" />
+                  {link.label}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <main>{children}</main>
+      </div>
+    );
+  }
+
+  // Desktop: Side navigation
   return (
     <div className="flex gap-8">
       {/* Sidebar */}

@@ -13,6 +13,8 @@ import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
 import { AddToReportDialog } from '@/components/expenses/AddToReportDialog';
 import { ExpenseFiltersPopover, AdvancedFilters } from '@/components/expenses/ExpenseFiltersPopover';
 import { ExpensesTable } from '@/components/expenses/ExpensesTable';
+import { ExpenseCard } from '@/components/expenses/ExpenseCard';
+import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
 import {
   useExpenses,
   useExpenseCounts,
@@ -21,10 +23,11 @@ import {
   Expense,
   ExpenseTab,
 } from '@/hooks/useExpenses';
-import { Plus, Search, Receipt, CalendarIcon, Trash2, FileText } from 'lucide-react';
+import { Plus, Search, Receipt, CalendarIcon, Trash2, FileText, Filter } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const TAB_CONFIG: { value: ExpenseTab; label: string; emptyMessage: string }[] = [
   { value: 'all', label: 'Todas', emptyMessage: 'Nenhuma despesa encontrada' },
@@ -37,6 +40,7 @@ const TAB_CONFIG: { value: ExpenseTab; label: string; emptyMessage: string }[] =
 ];
 
 export default function Expenses() {
+  const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<ExpenseTab>('all');
   const [startDate, setStartDate] = useState<Date | undefined>();
@@ -69,8 +73,9 @@ export default function Expenses() {
     if (advancedFilters.isReimbursable !== null && advancedFilters.isReimbursable !== undefined) count++;
     if (advancedFilters.costCenterId) count++;
     if (advancedFilters.projectId) count++;
+    if (startDate || endDate) count++;
     return count;
-  }, [advancedFilters]);
+  }, [advancedFilters, startDate, endDate]);
 
   // Get selected expenses
   const selectedExpenses = useMemo(() => {
@@ -106,6 +111,16 @@ export default function Expenses() {
   const handleAddToReport = (expense: Expense) => {
     setSelectedExpense(expense);
     setIsAddToReportOpen(true);
+  };
+
+  const toggleSelection = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
   };
 
   const confirmDelete = async () => {
@@ -147,7 +162,7 @@ export default function Expenses() {
         title="Despesas"
         description="Gerencie suas despesas e comprovantes"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="hidden md:flex items-center gap-2">
             {selectedIds.size > 0 && (
               <>
                 {canAddToReport && (
@@ -180,21 +195,49 @@ export default function Expenses() {
         }
       />
 
-      {/* Tabs with counters */}
-      <div className="mb-6">
+      {/* Mobile bulk actions */}
+      {isMobile && selectedIds.size > 0 && (
+        <div className="mb-4 flex gap-2">
+          {canAddToReport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsAddToReportOpen(true)}
+              className="flex-1 gap-1"
+            >
+              <FileText className="h-4 w-4" />
+              Relatório ({selectedIds.size})
+            </Button>
+          )}
+          {canDeleteSelected && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsBulkDeleteOpen(true)}
+              className="flex-1 gap-1 text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+              Excluir ({selectedIds.size})
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Tabs with counters - scrollable on mobile */}
+      <div className="mb-4 md:mb-6 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList className="flex-wrap h-auto gap-1 p-1">
+          <TabsList className="inline-flex h-auto gap-1 p-1 min-w-max">
             {TAB_CONFIG.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="gap-2 data-[state=active]:shadow-sm"
+                className="gap-1.5 text-xs sm:text-sm data-[state=active]:shadow-sm whitespace-nowrap"
               >
                 {tab.label}
                 {counts && (
                   <span
                     className={cn(
-                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium',
+                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-medium',
                       activeTab === tab.value
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground'
@@ -209,84 +252,89 @@ export default function Expenses() {
         </Tabs>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap items-end gap-4">
-        {/* Date filters */}
-        <div className="flex items-end gap-2">
-          <div className="space-y-1">
-            <Label className="text-xs">De</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-36 justify-start text-left font-normal',
-                    !startDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, 'dd/MM/yyyy') : 'Início'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={startDate}
-                  onSelect={setStartDate}
-                  initialFocus
-                  className="pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Até</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'w-36 justify-start text-left font-normal',
-                    !endDate && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, 'dd/MM/yyyy') : 'Fim'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={endDate}
-                  onSelect={setEndDate}
-                  initialFocus
-                  className="pointer-events-auto"
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-          {(startDate || endDate) && (
-            <Button variant="ghost" size="sm" onClick={clearDateFilter}>
-              Limpar
-            </Button>
-          )}
-        </div>
-
-        {/* Advanced Filters */}
-        <ExpenseFiltersPopover
-          filters={advancedFilters}
-          onChange={setAdvancedFilters}
-          activeCount={advancedFilterCount}
-        />
-
+      {/* Filters - stack on mobile */}
+      <div className="mb-4 md:mb-6 flex flex-col md:flex-row gap-3 md:items-end">
         {/* Search */}
-        <div className="relative flex-1 min-w-64">
+        <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar despesas..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-10"
+          />
+        </div>
+
+        {/* Filter buttons */}
+        <div className="flex gap-2">
+          {/* Date filters - hidden on mobile, in popover */}
+          {!isMobile && (
+            <div className="flex items-end gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">De</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-36 justify-start text-left font-normal',
+                        !startDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, 'dd/MM/yyyy') : 'Início'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={startDate}
+                      onSelect={setStartDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Até</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-36 justify-start text-left font-normal',
+                        !endDate && 'text-muted-foreground'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {endDate ? format(endDate, 'dd/MM/yyyy') : 'Fim'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={endDate}
+                      onSelect={setEndDate}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              {(startDate || endDate) && (
+                <Button variant="ghost" size="sm" onClick={clearDateFilter}>
+                  Limpar
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Advanced Filters */}
+          <ExpenseFiltersPopover
+            filters={advancedFilters}
+            onChange={setAdvancedFilters}
+            activeCount={advancedFilterCount}
           />
         </div>
       </div>
@@ -295,7 +343,7 @@ export default function Expenses() {
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+            <Skeleton key={i} className="h-24 md:h-16 w-full" />
           ))}
         </div>
       ) : expenses?.length === 0 ? (
@@ -316,7 +364,23 @@ export default function Expenses() {
             ) : undefined
           }
         />
+      ) : isMobile ? (
+        // Mobile: Card layout
+        <div className="space-y-3">
+          {expenses?.map((expense) => (
+            <ExpenseCard
+              key={expense.id}
+              expense={expense}
+              isSelected={selectedIds.has(expense.id)}
+              onSelect={toggleSelection}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onAddToReport={handleAddToReport}
+            />
+          ))}
+        </div>
       ) : (
+        // Desktop: Table layout
         <ExpensesTable
           expenses={expenses || []}
           selectedIds={selectedIds}
@@ -327,11 +391,19 @@ export default function Expenses() {
         />
       )}
 
+      {/* Floating Action Button - Mobile only */}
+      <FloatingActionButton
+        icon={Plus}
+        label="Nova despesa"
+        onClick={() => setIsFormOpen(true)}
+      />
+
       {/* Dialogs */}
       <ExpenseFormDialog
         open={isFormOpen}
         onOpenChange={handleFormClose}
         expense={selectedExpense}
+        useCurrentReportFlow={true}
       />
 
       <AddToReportDialog

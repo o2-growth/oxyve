@@ -538,6 +538,8 @@ export type Database = {
           org_id: string
           start_date: string | null
           status: Database["public"]["Enums"]["report_status"]
+          submitted_at: string | null
+          submitted_late: boolean | null
           title: string
           updated_at: string
           user_id: string
@@ -551,6 +553,8 @@ export type Database = {
           org_id: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["report_status"]
+          submitted_at?: string | null
+          submitted_late?: boolean | null
           title: string
           updated_at?: string
           user_id: string
@@ -564,6 +568,8 @@ export type Database = {
           org_id?: string
           start_date?: string | null
           status?: Database["public"]["Enums"]["report_status"]
+          submitted_at?: string | null
+          submitted_late?: boolean | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -618,7 +624,9 @@ export type Database = {
         }
         Returns: Json
       }
+      get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
+      get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -628,6 +636,7 @@ export type Database = {
         Returns: boolean
       }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      submit_report: { Args: { p_report_id: string }; Returns: Json }
     }
     Enums: {
       app_role: "employee" | "manager" | "admin"

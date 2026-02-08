@@ -1,166 +1,186 @@
-import { format, isToday, isBefore, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, Send, Calendar, Clock, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
-import { useCurrentReport, useSubmitReport, CurrentReport } from '@/hooks/useCurrentReport';
+import { useDashboardContext, useSubmitReportRpc, CurrentReport } from '@/hooks/useCurrentReport';
 import { formatCurrency } from '@/lib/constants';
+import { Plus, Send, Clock, AlertTriangle, CalendarClock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CurrentReportCardProps {
   onAddExpense: () => void;
-  reportExpenses?: { total_cents: number; count: number } | null;
+  reportExpenses?: {
+    total_cents: number;
+    count: number;
+  } | null;
 }
 
 export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentReportCardProps) {
-  const { data: report, isLoading } = useCurrentReport();
-  const submitReport = useSubmitReport();
+  const { data: context, isLoading } = useDashboardContext();
+  const submitReport = useSubmitReportRpc();
 
   if (isLoading) {
     return (
       <Card>
         <CardHeader>
           <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-64 mt-2" />
+          <Skeleton className="h-4 w-32" />
         </CardHeader>
         <CardContent>
-          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-20 w-full" />
         </CardContent>
       </Card>
     );
   }
 
-  if (!report) {
-    return null;
-  }
+  if (!context) return null;
 
-  const today = new Date();
-  const dueDate = parseISO(report.due_date);
-  const startDate = parseISO(report.start_date);
-  const endDate = parseISO(report.end_date);
-  
-  const isDueToday = isToday(dueDate);
-  const isOverdue = isBefore(dueDate, today) && report.status === 'draft';
-  const isDraft = report.status === 'draft';
+  const { current_report, pending_due_report, days_until_due, today } = context;
 
-  const handleSubmit = async () => {
-    await submitReport.mutateAsync(report.id);
+  const handleSubmit = (report: CurrentReport) => {
+    submitReport.mutate(report.id);
   };
 
+  // Check due status
+  const isDueToday = days_until_due === 0;
+  const isOverdue = days_until_due < 0;
+
   return (
-    <Card className={cn(
-      isOverdue && "border-destructive/50 bg-destructive/5",
-      isDueToday && isDraft && "border-status-submitted/50 bg-status-submitted/5"
-    )}>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              {report.title}
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Período: {format(startDate, "dd/MM/yyyy", { locale: ptBR })} — {format(endDate, "dd/MM/yyyy", { locale: ptBR })}
-            </CardDescription>
-          </div>
-          <Badge 
-            variant={
-              report.status === 'draft' ? 'secondary' : 
-              report.status === 'submitted' ? 'outline' : 
-              report.status === 'approved' ? 'default' :
-              report.status === 'rejected' ? 'destructive' : 'default'
-            }
-          >
-            {report.status === 'draft' && 'Rascunho'}
-            {report.status === 'submitted' && 'Enviado'}
-            {report.status === 'approved' && 'Aprovado'}
-            {report.status === 'rejected' && 'Reprovado'}
-            {report.status === 'paid' && 'Pago'}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Alerts */}
-        {isOverdue && (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Relatório atrasado</AlertTitle>
-            <AlertDescription>
-              O prazo para envio era {format(dueDate, "dd/MM/yyyy", { locale: ptBR })}. 
-              Envie o quanto antes para aprovação.
-            </AlertDescription>
-          </Alert>
-        )}
+    <div className="space-y-4">
+      {/* Pending overdue report alert */}
+      {pending_due_report && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Relatório atrasado</AlertTitle>
+          <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span>
+              O relatório "{pending_due_report.title}" está {pending_due_report.days_overdue} dia(s) atrasado.
+            </span>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => handleSubmit(pending_due_report)}
+              disabled={submitReport.isPending}
+              className="shrink-0"
+            >
+              {submitReport.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Enviar agora
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {isDueToday && isDraft && (
-          <Alert>
-            <Clock className="h-4 w-4" />
-            <AlertTitle>Prazo de envio hoje</AlertTitle>
-            <AlertDescription>
-              Este é o último dia para enviar seu relatório do período.
-            </AlertDescription>
-          </Alert>
-        )}
+      {/* Due today alert */}
+      {isDueToday && current_report.status === 'draft' && !pending_due_report && (
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <CalendarClock className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-600">Prazo de envio hoje!</AlertTitle>
+          <AlertDescription>
+            O relatório do período atual deve ser enviado até o fim do dia.
+          </AlertDescription>
+        </Alert>
+      )}
 
-        {report.status === 'submitted' && (
-          <Alert>
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>Aguardando aprovação</AlertTitle>
-            <AlertDescription>
-              Seu relatório foi enviado e está aguardando análise do gestor.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Summary */}
-        {reportExpenses && (
-          <div className="flex items-center gap-6 py-3 px-4 rounded-lg bg-muted/50">
-            <div>
-              <p className="text-sm text-muted-foreground">Total do período</p>
-              <p className="text-2xl font-bold">{formatCurrency(reportExpenses.total_cents)}</p>
+      {/* Current period card */}
+      <Card className={cn(
+        isDueToday && current_report.status === 'draft' && "border-amber-500/50",
+        isOverdue && current_report.status === 'draft' && "border-destructive/50"
+      )}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1">
+              <CardTitle className="text-lg sm:text-xl">{current_report.title}</CardTitle>
+              <CardDescription className="flex items-center gap-2 flex-wrap">
+                <span>
+                  {format(parseISO(current_report.start_date), "dd 'de' MMM", { locale: ptBR })} 
+                  {' - '}
+                  {format(parseISO(current_report.end_date), "dd 'de' MMM", { locale: ptBR })}
+                </span>
+                {current_report.status === 'draft' && (
+                  <Badge variant={isDueToday ? "outline" : "secondary"} className={cn(
+                    "text-xs",
+                    isDueToday && "border-amber-500 text-amber-600"
+                  )}>
+                    <Clock className="mr-1 h-3 w-3" />
+                    {days_until_due > 0 
+                      ? `${days_until_due} dias para enviar`
+                      : isDueToday 
+                        ? 'Enviar hoje'
+                        : `${Math.abs(days_until_due)} dias atrasado`
+                    }
+                  </Badge>
+                )}
+                {current_report.status === 'submitted' && (
+                  <Badge variant="outline" className="text-xs border-blue-500 text-blue-600">
+                    Aguardando aprovação
+                  </Badge>
+                )}
+                {current_report.status === 'approved' && (
+                  <Badge variant="outline" className="text-xs border-green-500 text-green-600">
+                    Aprovado
+                  </Badge>
+                )}
+              </CardDescription>
             </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Stats */}
+          <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
             <div>
-              <p className="text-sm text-muted-foreground">Despesas</p>
-              <p className="text-2xl font-bold">{reportExpenses.count}</p>
+              <p className="text-2xl sm:text-3xl font-bold">
+                {formatCurrency(reportExpenses?.total_cents || 0)}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {reportExpenses?.count || 0} despesa(s) no período
+              </p>
             </div>
           </div>
-        )}
 
-        {/* Actions */}
-        <div className="flex flex-wrap gap-3">
-          {isDraft && (
-            <>
-              <Button onClick={onAddExpense} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Adicionar Despesa
-              </Button>
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button 
+              onClick={onAddExpense} 
+              className="flex-1 h-12 sm:h-10"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Adicionar Despesa
+            </Button>
+            
+            {current_report.status === 'draft' && (
               <Button 
-                variant="outline" 
-                onClick={handleSubmit}
-                disabled={submitReport.isPending || (reportExpenses?.count === 0)}
-                className="gap-2"
+                variant={isDueToday || isOverdue ? "default" : "outline"}
+                onClick={() => handleSubmit(current_report)}
+                disabled={submitReport.isPending || (reportExpenses?.count || 0) === 0}
+                className={cn(
+                  "flex-1 h-12 sm:h-10",
+                  (isDueToday || isOverdue) && "bg-amber-600 hover:bg-amber-700"
+                )}
               >
                 {submitReport.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <Send className="mr-2 h-4 w-4" />
                 )}
                 Enviar Relatório
               </Button>
-            </>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Due date info */}
-        {isDraft && !isOverdue && !isDueToday && (
-          <p className="text-sm text-muted-foreground">
-            Prazo para envio: {format(dueDate, "dd 'de' MMMM", { locale: ptBR })}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+          {(reportExpenses?.count || 0) === 0 && current_report.status === 'draft' && (
+            <p className="text-xs text-muted-foreground text-center">
+              Adicione despesas antes de enviar o relatório
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

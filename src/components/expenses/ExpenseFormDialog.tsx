@@ -9,6 +9,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer';
+import {
   Form,
   FormControl,
   FormField,
@@ -29,11 +35,10 @@ import {
 } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Upload, X, FileText, Image as ImageIcon, AlertTriangle } from 'lucide-react';
+import { CalendarIcon, Loader2, AlertTriangle } from 'lucide-react';
 import {
   useCreateExpense,
   useUpdateExpense,
@@ -41,8 +46,13 @@ import {
 } from '@/hooks/useExpenses';
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
-import { useCurrentReport, useCreateExpenseInReport } from '@/hooks/useCurrentReport';
+import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
 import { PAYMENT_METHOD_LABELS, formatCurrency } from '@/lib/constants';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { ReceiptUpload } from './ReceiptUpload';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -57,27 +67,28 @@ export function ExpenseFormDialog({
   expense,
   useCurrentReportFlow = false,
 }: ExpenseFormDialogProps) {
+  const isMobile = useIsMobile();
+  const { profile } = useAuth();
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const createExpenseInReport = useCreateExpenseInReport();
+  const reportForDate = useReportForDate();
   const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
   const { data: costCenters = [] } = useActiveCostCenters();
   const { data: projects = [] } = useActiveProjects();
-  const { data: currentReport } = useCurrentReport();
+  const { data: dashboardContext } = useDashboardContext();
 
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ExpenseType | null>(null);
+  const [currentReportForDate, setCurrentReportForDate] = useState<CurrentReport | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
-
-  // Check if receipt already exists for this expense
   const hasExistingReceipt = expense?.receipt_path ? true : false;
   const hasReceipt = receiptFile !== null || hasExistingReceipt;
-
-  // Check if selected category requires receipt
   const categoryRequiresReceipt = selectedCategory?.requires_receipt || false;
   const requiresReceipt = policy?.require_receipt || categoryRequiresReceipt;
 
@@ -117,6 +128,7 @@ export function ExpenseFormDialog({
 
   // Watch category changes
   const watchedCategoryId = form.watch('category_id');
+  const watchedDate = form.watch('date');
   
   useEffect(() => {
     if (watchedCategoryId && categories) {
@@ -126,6 +138,18 @@ export function ExpenseFormDialog({
       setSelectedCategory(null);
     }
   }, [watchedCategoryId, categories]);
+
+  // Update report for selected date
+  useEffect(() => {
+    if (useCurrentReportFlow && watchedDate && !isEditing) {
+      const dateStr = format(watchedDate, 'yyyy-MM-dd');
+      reportForDate.mutate(dateStr, {
+        onSuccess: (report) => {
+          setCurrentReportForDate(report);
+        },
+      });
+    }
+  }, [watchedDate, useCurrentReportFlow, isEditing]);
 
   useEffect(() => {
     if (expense) {
@@ -156,476 +180,452 @@ export function ExpenseFormDialog({
       });
       setReceiptFile(null);
       setReceiptPreview(null);
-    }
-  }, [expense, form, open]);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setReceiptFile(file);
-      
-      // Create preview for images
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setReceiptPreview(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        setReceiptPreview(null);
+      if (dashboardContext?.current_report) {
+        setCurrentReportForDate(dashboardContext.current_report);
       }
     }
+  }, [expense, form, open, dashboardContext]);
+
+  const handleFileChange = (file: File | null) => {
+    setReceiptFile(file);
+    
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setReceiptPreview(null);
+    }
   };
 
-  const removeFile = () => {
-    setReceiptFile(null);
-    setReceiptPreview(null);
-  };
+  const uploadReceipt = async (expenseId: string): Promise<string | null> => {
+    if (!receiptFile || !profile?.org_id) return null;
 
-  // Check if date is within current report period
-  const isDateInReportPeriod = (date: Date): boolean => {
-    if (!currentReport || !useCurrentReportFlow) return true;
-    const startDate = parseISO(currentReport.start_date);
-    const endDate = parseISO(currentReport.end_date);
-    return date >= startDate && date <= endDate;
+    const fileExt = receiptFile.name.split('.').pop();
+    const fileName = `${Date.now()}.${fileExt}`;
+    const reportId = currentReportForDate?.id || 'unassigned';
+    const filePath = `${profile.org_id}/${profile.id}/${reportId}/${expenseId}/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('receipts')
+      .upload(filePath, receiptFile);
+
+    if (error) throw error;
+    return filePath;
   };
 
   const onSubmit = async (data: FormData) => {
-    // Check if receipt is required but not provided
     if (requiresReceipt && !hasReceipt && !isEditing) {
       form.setError('root', { message: 'Comprovante é obrigatório' });
       return;
     }
 
-    // Check date is in report period for current report flow
-    if (useCurrentReportFlow && currentReport && !isDateInReportPeriod(data.date)) {
-      form.setError('date', { 
-        message: `A data deve estar dentro do período do relatório (${format(parseISO(currentReport.start_date), 'dd/MM')} a ${format(parseISO(currentReport.end_date), 'dd/MM')})` 
-      });
-      return;
+    setIsUploading(true);
+
+    try {
+      const amountCents = Math.round(
+        parseFloat(data.amount.replace(',', '.')) * 100
+      );
+
+      const payload = {
+        date: format(data.date, 'yyyy-MM-dd'),
+        description: data.description,
+        category_id: data.category_id || null,
+        amount_cents: amountCents,
+        payment_method: data.payment_method,
+        is_reimbursable: data.is_reimbursable,
+        notes: data.notes || null,
+        cost_center_id: data.cost_center_id || null,
+        project_id: data.project_id || null,
+        receipt_path: null as string | null,
+      };
+
+      if (isEditing && expense) {
+        // Upload receipt if new file
+        if (receiptFile) {
+          payload.receipt_path = await uploadReceipt(expense.id);
+        }
+        await updateExpense.mutateAsync({ id: expense.id, ...payload });
+      } else if (useCurrentReportFlow) {
+        // Create expense in report flow
+        const result = await createExpenseInReport.mutateAsync(payload);
+        
+        // Upload receipt after expense is created
+        if (receiptFile && result.expense?.id) {
+          const receiptPath = await uploadReceipt(result.expense.id);
+          if (receiptPath) {
+            await supabase
+              .from('expenses')
+              .update({ receipt_path: receiptPath })
+              .eq('id', result.expense.id);
+          }
+        }
+      } else {
+        await createExpense.mutateAsync(payload);
+      }
+
+      onOpenChange(false);
+    } finally {
+      setIsUploading(false);
     }
-
-    const amountCents = Math.round(
-      parseFloat(data.amount.replace(',', '.')) * 100
-    );
-
-    const payload = {
-      date: format(data.date, 'yyyy-MM-dd'),
-      description: data.description,
-      category_id: data.category_id || null,
-      amount_cents: amountCents,
-      payment_method: data.payment_method,
-      is_reimbursable: data.is_reimbursable,
-      notes: data.notes || null,
-      cost_center_id: data.cost_center_id || null,
-      project_id: data.project_id || null,
-    };
-
-    // TODO: Handle file upload to storage bucket when implementing receipt upload
-
-    if (isEditing && expense) {
-      await updateExpense.mutateAsync({ id: expense.id, ...payload });
-    } else if (useCurrentReportFlow) {
-      // Use RPC to create expense and link to current report
-      await createExpenseInReport.mutateAsync(payload);
-    } else {
-      await createExpense.mutateAsync(payload);
-    }
-
-    onOpenChange(false);
   };
 
-  const isLoading = createExpense.isPending || updateExpense.isPending || createExpenseInReport.isPending;
+  const isLoading = createExpense.isPending || updateExpense.isPending || createExpenseInReport.isPending || isUploading;
   const requireReceiptError = requiresReceipt && !hasReceipt && !isEditing;
 
-  // Get daily limit info for selected category
   const dailyLimitInfo = selectedCategory?.daily_limit_cents 
     ? `Limite diário: ${formatCurrency(selectedCategory.daily_limit_cents)}`
     : null;
+
+  const displayReport = currentReportForDate || dashboardContext?.current_report;
+
+  const formContent = (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* Period indicator */}
+        {useCurrentReportFlow && displayReport && (
+          <Alert>
+            <AlertDescription className="text-sm">
+              Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title})
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Date and Amount - stack on mobile */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="date"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Data</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        disabled={isReadOnly}
+                        className={cn(
+                          'h-12 pl-3 text-left font-normal',
+                          !field.value && 'text-muted-foreground'
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, 'dd/MM/yyyy', { locale: ptBR })
+                        ) : (
+                          <span>Selecione</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) => date > new Date()}
+                      initialFocus
+                      className="pointer-events-auto"
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="amount"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Valor (R$)</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="0,00"
+                    {...field}
+                    disabled={isReadOnly}
+                    className="h-12"
+                    inputMode="decimal"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descrição</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Ex: Almoço com cliente"
+                  {...field}
+                  disabled={isReadOnly}
+                  className="h-12"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Category and Payment - stack on mobile */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="category_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tipo de Despesa</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isReadOnly}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {categories?.filter(c => c.is_active).map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                        {cat.daily_limit_cents && (
+                          <span className="text-muted-foreground ml-1">
+                            (até {formatCurrency(cat.daily_limit_cents)}/dia)
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {dailyLimitInfo && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {dailyLimitInfo}
+                  </p>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="payment_method"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Forma de Pagamento</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isReadOnly}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-12">
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {Object.entries(PAYMENT_METHOD_LABELS).map(([key, label]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Cost Center and Project */}
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <FormField
+            control={form.control}
+            name="cost_center_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Centro de Custo
+                  {policy?.require_cost_center && <span className="text-destructive"> *</span>}
+                </FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isReadOnly}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {costCenters.map((cc) => (
+                      <SelectItem key={cc.id} value={cc.id}>
+                        {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="project_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Projeto
+                  {policy?.require_project && <span className="text-destructive"> *</span>}
+                </FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isReadOnly}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.code ? `${p.code} - ${p.name}` : p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Receipt Upload - Mobile optimized */}
+        <div className="space-y-2">
+          <FormLabel>
+            Comprovante
+            {requiresReceipt && <span className="text-destructive"> *</span>}
+          </FormLabel>
+          <ReceiptUpload
+            file={receiptFile}
+            preview={receiptPreview}
+            hasExistingReceipt={hasExistingReceipt}
+            required={requiresReceipt}
+            disabled={isReadOnly}
+            error={requireReceiptError}
+            onFileChange={handleFileChange}
+          />
+        </div>
+
+        <FormField
+          control={form.control}
+          name="notes"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Observações</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Observações adicionais..."
+                  {...field}
+                  disabled={isReadOnly}
+                  className="min-h-[80px]"
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="is_reimbursable"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 py-2">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={isReadOnly}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Reembolsável</FormLabel>
+              </div>
+            </FormItem>
+          )}
+        />
+
+        {form.formState.errors.root && (
+          <p className="text-sm text-destructive">
+            {form.formState.errors.root.message}
+          </p>
+        )}
+
+        {!isReadOnly && (
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-12"
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isLoading} className="h-12">
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditing ? 'Salvar' : 'Criar Despesa'}
+            </Button>
+          </div>
+        )}
+      </form>
+    </Form>
+  );
+
+  const title = isReadOnly
+    ? 'Detalhes da Despesa'
+    : isEditing
+    ? 'Editar Despesa'
+    : 'Nova Despesa';
+
+  // Use Drawer on mobile, Dialog on desktop
+  if (isMobile) {
+    return (
+      <Drawer open={open} onOpenChange={onOpenChange}>
+        <DrawerContent className="max-h-[90vh]">
+          <DrawerHeader>
+            <DrawerTitle>{title}</DrawerTitle>
+          </DrawerHeader>
+          <div className="overflow-y-auto px-4 pb-6">
+            {formContent}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {isReadOnly
-              ? 'Detalhes da Despesa'
-              : isEditing
-              ? 'Editar Despesa'
-              : 'Nova Despesa'}
-          </DialogTitle>
-          {useCurrentReportFlow && currentReport && (
-            <p className="text-sm text-muted-foreground">
-              {currentReport.title} ({format(parseISO(currentReport.start_date), 'dd/MM')} - {format(parseISO(currentReport.end_date), 'dd/MM')})
-            </p>
-          )}
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Data</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            disabled={isReadOnly}
-                            className={cn(
-                              'pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, 'dd/MM/yyyy', { locale: ptBR })
-                            ) : (
-                              <span>Selecione</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => {
-                            if (date > new Date()) return true;
-                            if (useCurrentReportFlow && currentReport) {
-                              return !isDateInReportPeriod(date);
-                            }
-                            return false;
-                          }}
-                          initialFocus
-                          className="pointer-events-auto"
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor (R$)</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="0,00"
-                        {...field}
-                        disabled={isReadOnly}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descrição</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Ex: Almoço com cliente"
-                      {...field}
-                      disabled={isReadOnly}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="category_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Despesa</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isReadOnly}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {categories?.filter(c => c.is_active).map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                            {cat.daily_limit_cents && (
-                              <span className="text-muted-foreground ml-1">
-                                (até {formatCurrency(cat.daily_limit_cents)}/dia)
-                              </span>
-                            )}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {dailyLimitInfo && (
-                      <p className="text-xs text-muted-foreground">{dailyLimitInfo}</p>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="payment_method"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Forma de Pagamento</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isReadOnly}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {Object.entries(PAYMENT_METHOD_LABELS).map(([key, label]) => (
-                          <SelectItem key={key} value={key}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Cost Center and Project */}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="cost_center_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Centro de Custo
-                      {policy?.require_cost_center && <span className="text-destructive"> *</span>}
-                    </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isReadOnly}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {costCenters.map((cc) => (
-                          <SelectItem key={cc.id} value={cc.id}>
-                            {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="project_id"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Projeto
-                      {policy?.require_project && <span className="text-destructive"> *</span>}
-                    </FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                      disabled={isReadOnly}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {projects.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.code ? `${p.code} - ${p.name}` : p.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Receipt Upload */}
-            <div className="space-y-2">
-              <FormLabel>
-                Comprovante
-                {requiresReceipt && <span className="text-destructive"> *</span>}
-              </FormLabel>
-              
-              {!isReadOnly && (
-                <>
-                  {receiptFile ? (
-                    <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
-                      {receiptPreview ? (
-                        <img
-                          src={receiptPreview}
-                          alt="Preview"
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                      ) : (
-                        <FileText className="w-12 h-12 text-muted-foreground" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{receiptFile.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(receiptFile.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={removeFile}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : hasExistingReceipt ? (
-                    <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
-                      <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Comprovante já anexado
-                      </span>
-                    </div>
-                  ) : (
-                    <label
-                      className={cn(
-                        "flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
-                        requireReceiptError && "border-destructive"
-                      )}
-                    >
-                      <Upload className="h-8 w-8 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Clique para selecionar um arquivo
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        PNG, JPG ou PDF até 10MB
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
-                    </label>
-                  )}
-                  {requireReceiptError && (
-                    <p className="text-sm text-destructive">
-                      Comprovante é obrigatório conforme política da empresa
-                    </p>
-                  )}
-                </>
-              )}
-
-              {isReadOnly && hasExistingReceipt && (
-                <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
-                  <ImageIcon className="w-8 h-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Comprovante anexado
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Observações</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Observações adicionais..."
-                      {...field}
-                      disabled={isReadOnly}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="is_reimbursable"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      disabled={isReadOnly}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Reembolsável</FormLabel>
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            {form.formState.errors.root && (
-              <p className="text-sm text-destructive">
-                {form.formState.errors.root.message}
-              </p>
-            )}
-
-            {!isReadOnly && (
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isEditing ? 'Salvar' : 'Criar'}
-                </Button>
-              </div>
-            )}
-          </form>
-        </Form>
+        {formContent}
       </DialogContent>
     </Dialog>
   );
