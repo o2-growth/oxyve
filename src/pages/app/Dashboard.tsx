@@ -1,14 +1,17 @@
+import { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
+import { useCurrentReport } from '@/hooks/useCurrentReport';
 import { formatCurrency } from '@/lib/constants';
-import { Plus, FileText, Receipt, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
+import { FileText, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
+import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
@@ -16,24 +19,26 @@ export default function Dashboard() {
   
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: reports, isLoading: reportsLoading } = useReports();
+  const { data: currentReport, isLoading: currentReportLoading } = useCurrentReport();
 
-  const isLoading = expensesLoading || reportsLoading;
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+
+  const isLoading = expensesLoading || reportsLoading || currentReportLoading;
 
   // Calculate stats
   const draftReports = reports?.filter((r) => r.status === 'draft').length || 0;
   const submittedReports = reports?.filter((r) => r.status === 'submitted').length || 0;
   const approvedReports = reports?.filter((r) => r.status === 'approved').length || 0;
 
-  const totalExpensesThisMonth = expenses
-    ?.filter((e) => {
-      const expenseDate = new Date(e.date);
-      const now = new Date();
-      return (
-        expenseDate.getMonth() === now.getMonth() &&
-        expenseDate.getFullYear() === now.getFullYear()
-      );
-    })
-    .reduce((sum, e) => sum + e.amount_cents, 0) || 0;
+  // Calculate current report expenses
+  const currentReportExpenses = currentReport ? {
+    total_cents: expenses
+      ?.filter((e) => (e as any).report?.id === currentReport.id)
+      .reduce((sum, e) => sum + e.amount_cents, 0) || 0,
+    count: expenses
+      ?.filter((e) => (e as any).report?.id === currentReport.id)
+      .length || 0,
+  } : null;
 
   const pendingApproval = reports?.filter((r) => r.status === 'submitted').length || 0;
 
@@ -44,20 +49,12 @@ export default function Dashboard() {
         description="Veja o resumo das suas despesas e relatórios"
       />
 
-      {/* Quick Actions */}
-      <div className="mb-8 flex flex-wrap gap-4">
-        <Button onClick={() => navigate('/app/expenses')} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nova Despesa
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => navigate('/app/reports')}
-          className="gap-2"
-        >
-          <FileText className="h-4 w-4" />
-          Novo Relatório
-        </Button>
+      {/* Current Period Report Card */}
+      <div className="mb-8">
+        <CurrentReportCard 
+          onAddExpense={() => setExpenseDialogOpen(true)}
+          reportExpenses={currentReportExpenses}
+        />
       </div>
 
       {/* Stats Cards */}
@@ -65,7 +62,7 @@ export default function Dashboard() {
         <Card className="animate-fade-in">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Despesas do Mês
+              Período Atual
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -74,16 +71,11 @@ export default function Dashboard() {
               <Skeleton className="h-8 w-32" />
             ) : (
               <div className="text-2xl font-bold">
-                {formatCurrency(totalExpensesThisMonth)}
+                {formatCurrency(currentReportExpenses?.total_cents || 0)}
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              {expenses?.filter((e) => {
-                const d = new Date(e.date);
-                const n = new Date();
-                return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
-              }).length || 0}{' '}
-              despesas
+              {currentReportExpenses?.count || 0} despesas
             </p>
           </CardContent>
         </Card>
@@ -110,7 +102,7 @@ export default function Dashboard() {
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Aguardando Aprovação
             </CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -153,9 +145,12 @@ export default function Dashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button onClick={() => navigate('/app/reports?status=submitted')}>
+            <button 
+              onClick={() => navigate('/app/reports?status=submitted')}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+            >
               Ver Relatórios Pendentes
-            </Button>
+            </button>
           </CardContent>
         </Card>
       )}
@@ -164,8 +159,8 @@ export default function Dashboard() {
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Despesas Recentes</CardTitle>
-            <CardDescription>Suas últimas 5 despesas</CardDescription>
+            <CardTitle>Despesas do Período</CardTitle>
+            <CardDescription>Despesas do relatório atual</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -174,28 +169,38 @@ export default function Dashboard() {
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
-            ) : expenses?.length === 0 ? (
+            ) : !currentReportExpenses?.count ? (
               <p className="text-center text-muted-foreground py-4">
-                Nenhuma despesa encontrada
+                Nenhuma despesa neste período
               </p>
             ) : (
               <div className="space-y-3">
-                {expenses?.slice(0, 5).map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="font-medium">{expense.description}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(expense.date).toLocaleDateString('pt-BR')}
+                {expenses
+                  ?.filter((e) => (e as any).report?.id === currentReport?.id)
+                  .slice(0, 5)
+                  .map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{expense.description}</p>
+                          {(expense as any).is_out_of_policy && (
+                            <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
+                              Fora da política
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(expense.date).toLocaleDateString('pt-BR')}
+                        </p>
+                      </div>
+                      <p className="font-semibold">
+                        {formatCurrency(expense.amount_cents, expense.currency)}
                       </p>
                     </div>
-                    <p className="font-semibold">
-                      {formatCurrency(expense.amount_cents, expense.currency)}
-                    </p>
-                  </div>
-                ))}
+                  ))}
               </div>
             )}
           </CardContent>
@@ -241,6 +246,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Expense Form Dialog */}
+      <ExpenseFormDialog 
+        open={expenseDialogOpen} 
+        onOpenChange={setExpenseDialogOpen}
+        useCurrentReportFlow={true}
+      />
     </AppShell>
   );
 }

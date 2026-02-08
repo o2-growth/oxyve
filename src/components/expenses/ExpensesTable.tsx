@@ -130,8 +130,15 @@ export function ExpensesTable({
               <TableCell className="font-medium whitespace-nowrap">
                 {formatDate(expense.date)}
               </TableCell>
-              <TableCell className="max-w-48 truncate">
-                {expense.description}
+              <TableCell className="max-w-48">
+                <div className="flex items-center gap-2">
+                  <span className="truncate">{expense.description}</span>
+                  {(expense as any).is_out_of_policy && (
+                    <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
+                      Fora da política
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {expense.category?.name || '-'}

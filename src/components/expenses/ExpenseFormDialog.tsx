@@ -29,39 +29,46 @@ import {
 } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Upload, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { CalendarIcon, Loader2, Upload, X, FileText, Image as ImageIcon, AlertTriangle } from 'lucide-react';
 import {
   useCreateExpense,
   useUpdateExpense,
-  useCategories,
   Expense,
 } from '@/hooks/useExpenses';
+import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
-import { PAYMENT_METHOD_LABELS } from '@/lib/constants';
+import { useCurrentReport, useCreateExpenseInReport } from '@/hooks/useCurrentReport';
+import { PAYMENT_METHOD_LABELS, formatCurrency } from '@/lib/constants';
 
 interface ExpenseFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   expense?: Expense | null;
+  useCurrentReportFlow?: boolean;
 }
 
 export function ExpenseFormDialog({
   open,
   onOpenChange,
   expense,
+  useCurrentReportFlow = false,
 }: ExpenseFormDialogProps) {
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
-  const { data: categories } = useCategories();
+  const createExpenseInReport = useCreateExpenseInReport();
+  const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
   const { data: costCenters = [] } = useActiveCostCenters();
   const { data: projects = [] } = useActiveProjects();
+  const { data: currentReport } = useCurrentReport();
 
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<ExpenseType | null>(null);
 
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
@@ -69,6 +76,10 @@ export function ExpenseFormDialog({
   // Check if receipt already exists for this expense
   const hasExistingReceipt = expense?.receipt_path ? true : false;
   const hasReceipt = receiptFile !== null || hasExistingReceipt;
+
+  // Check if selected category requires receipt
+  const categoryRequiresReceipt = selectedCategory?.requires_receipt || false;
+  const requiresReceipt = policy?.require_receipt || categoryRequiresReceipt;
 
   // Build dynamic schema based on policy
   const formSchema = z.object({
@@ -104,6 +115,18 @@ export function ExpenseFormDialog({
     },
   });
 
+  // Watch category changes
+  const watchedCategoryId = form.watch('category_id');
+  
+  useEffect(() => {
+    if (watchedCategoryId && categories) {
+      const cat = categories.find(c => c.id === watchedCategoryId);
+      setSelectedCategory(cat || null);
+    } else {
+      setSelectedCategory(null);
+    }
+  }, [watchedCategoryId, categories]);
+
   useEffect(() => {
     if (expense) {
       form.reset({
@@ -114,8 +137,8 @@ export function ExpenseFormDialog({
         payment_method: expense.payment_method,
         is_reimbursable: expense.is_reimbursable,
         notes: expense.notes || '',
-        cost_center_id: (expense as any).cost_center_id || '',
-        project_id: (expense as any).project_id || '',
+        cost_center_id: expense.cost_center_id || '',
+        project_id: expense.project_id || '',
       });
       setReceiptFile(null);
       setReceiptPreview(null);
@@ -159,10 +182,26 @@ export function ExpenseFormDialog({
     setReceiptPreview(null);
   };
 
+  // Check if date is within current report period
+  const isDateInReportPeriod = (date: Date): boolean => {
+    if (!currentReport || !useCurrentReportFlow) return true;
+    const startDate = parseISO(currentReport.start_date);
+    const endDate = parseISO(currentReport.end_date);
+    return date >= startDate && date <= endDate;
+  };
+
   const onSubmit = async (data: FormData) => {
     // Check if receipt is required but not provided
-    if (policy?.require_receipt && !hasReceipt && !isEditing) {
+    if (requiresReceipt && !hasReceipt && !isEditing) {
       form.setError('root', { message: 'Comprovante é obrigatório' });
+      return;
+    }
+
+    // Check date is in report period for current report flow
+    if (useCurrentReportFlow && currentReport && !isDateInReportPeriod(data.date)) {
+      form.setError('date', { 
+        message: `A data deve estar dentro do período do relatório (${format(parseISO(currentReport.start_date), 'dd/MM')} a ${format(parseISO(currentReport.end_date), 'dd/MM')})` 
+      });
       return;
     }
 
@@ -183,10 +222,12 @@ export function ExpenseFormDialog({
     };
 
     // TODO: Handle file upload to storage bucket when implementing receipt upload
-    // For now, just save the expense without the file
 
     if (isEditing && expense) {
       await updateExpense.mutateAsync({ id: expense.id, ...payload });
+    } else if (useCurrentReportFlow) {
+      // Use RPC to create expense and link to current report
+      await createExpenseInReport.mutateAsync(payload);
     } else {
       await createExpense.mutateAsync(payload);
     }
@@ -194,8 +235,13 @@ export function ExpenseFormDialog({
     onOpenChange(false);
   };
 
-  const isLoading = createExpense.isPending || updateExpense.isPending;
-  const requireReceiptError = policy?.require_receipt && !hasReceipt && !isEditing;
+  const isLoading = createExpense.isPending || updateExpense.isPending || createExpenseInReport.isPending;
+  const requireReceiptError = requiresReceipt && !hasReceipt && !isEditing;
+
+  // Get daily limit info for selected category
+  const dailyLimitInfo = selectedCategory?.daily_limit_cents 
+    ? `Limite diário: ${formatCurrency(selectedCategory.daily_limit_cents)}`
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -208,6 +254,11 @@ export function ExpenseFormDialog({
               ? 'Editar Despesa'
               : 'Nova Despesa'}
           </DialogTitle>
+          {useCurrentReportFlow && currentReport && (
+            <p className="text-sm text-muted-foreground">
+              {currentReport.title} ({format(parseISO(currentReport.start_date), 'dd/MM')} - {format(parseISO(currentReport.end_date), 'dd/MM')})
+            </p>
+          )}
         </DialogHeader>
 
         <Form {...form}>
@@ -244,7 +295,13 @@ export function ExpenseFormDialog({
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date > new Date()}
+                          disabled={(date) => {
+                            if (date > new Date()) return true;
+                            if (useCurrentReportFlow && currentReport) {
+                              return !isDateInReportPeriod(date);
+                            }
+                            return false;
+                          }}
                           initialFocus
                           className="pointer-events-auto"
                         />
@@ -298,7 +355,7 @@ export function ExpenseFormDialog({
                 name="category_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Categoria</FormLabel>
+                    <FormLabel>Tipo de Despesa</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}
@@ -310,13 +367,21 @@ export function ExpenseFormDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories?.map((cat) => (
+                        {categories?.filter(c => c.is_active).map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.name}
+                            {cat.daily_limit_cents && (
+                              <span className="text-muted-foreground ml-1">
+                                (até {formatCurrency(cat.daily_limit_cents)}/dia)
+                              </span>
+                            )}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {dailyLimitInfo && (
+                      <p className="text-xs text-muted-foreground">{dailyLimitInfo}</p>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -423,7 +488,7 @@ export function ExpenseFormDialog({
             <div className="space-y-2">
               <FormLabel>
                 Comprovante
-                {policy?.require_receipt && <span className="text-destructive"> *</span>}
+                {requiresReceipt && <span className="text-destructive"> *</span>}
               </FormLabel>
               
               {!isReadOnly && (
