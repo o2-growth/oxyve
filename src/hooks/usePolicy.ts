@@ -95,8 +95,21 @@ export function useCostCenters() {
 }
 
 export function useActiveCostCenters() {
-  const { data: costCenters } = useCostCenters();
-  return costCenters?.filter((cc) => cc.is_active) || [];
+  const { profile } = useAuth();
+
+  return useQuery({
+    queryKey: ['cost-centers', 'active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cost_centers')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data as CostCenter[];
+    },
+    enabled: !!profile?.org_id,
+  });
 }
 
 export function useCreateCostCenter() {
@@ -185,8 +198,21 @@ export function useProjects() {
 }
 
 export function useActiveProjects() {
-  const { data: projects } = useProjects();
-  return projects?.filter((p) => p.is_active) || [];
+  const { profile } = useAuth();
+
+  return useQuery({
+    queryKey: ['projects', 'active'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) throw error;
+      return data as Project[];
+    },
+    enabled: !!profile?.org_id,
+  });
 }
 
 export function useCreateProject() {
