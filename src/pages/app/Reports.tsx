@@ -4,7 +4,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -23,6 +23,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ReportFormDialog } from '@/components/reports/ReportFormDialog';
+import { ReportCard } from '@/components/reports/ReportCard';
+import { ApprovalQueue } from '@/components/reports/ApprovalQueue';
 import { useReports, useDeleteReport, Report } from '@/hooks/useReports';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
@@ -35,20 +37,25 @@ import {
   DollarSign,
   Receipt,
   TrendingUp,
+  ClipboardCheck,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function Reports() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = searchParams.get('status') || 'all';
+  const tab = searchParams.get('tab') || 'my-reports';
   
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
 
   const { isManager } = useAuth();
+  const isMobile = useIsMobile();
   const { data: reports, isLoading } = useReports({ status: statusFilter });
+  const { data: pendingReports } = useReports({ status: 'submitted' });
   const deleteReport = useDeleteReport();
 
   // Calculate summary stats
@@ -63,11 +70,21 @@ export default function Reports() {
     return { total, reimbursable, nonReimbursable, average };
   }, [reports]);
 
+  const pendingCount = pendingReports?.length || 0;
+
   const handleStatusChange = (status: string) => {
     if (status === 'all') {
       searchParams.delete('status');
     } else {
       searchParams.set('status', status);
+    }
+    setSearchParams(searchParams);
+  };
+
+  const handleTabChange = (newTab: string) => {
+    searchParams.set('tab', newTab);
+    if (newTab === 'approval') {
+      searchParams.delete('status');
     }
     setSearchParams(searchParams);
   };
@@ -89,70 +106,169 @@ export default function Reports() {
     <AppShell>
       <PageHeader
         title="Relatórios"
-        description="Agrupe despesas em relatórios e envie para aprovação"
+        description={isManager ? "Gerencie e aprove relatórios de despesas" : "Agrupe despesas em relatórios e envie para aprovação"}
         actions={
-          <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+          <Button onClick={() => setIsFormOpen(true)} className="gap-2 hidden sm:flex">
             <Plus className="h-4 w-4" />
             Novo Relatório
           </Button>
         }
       />
 
-      {/* Summary Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Manager: Show tabs for My Reports vs Approval Queue */}
+      {isManager ? (
+        <Tabs value={tab} onValueChange={handleTabChange} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 sm:w-auto sm:inline-grid">
+            <TabsTrigger value="my-reports" className="gap-2">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Meus Relatórios</span>
+              <span className="sm:hidden">Meus</span>
+            </TabsTrigger>
+            <TabsTrigger value="approval" className="gap-2">
+              <ClipboardCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Fila de Aprovação</span>
+              <span className="sm:hidden">Aprovação</span>
+              {pendingCount > 0 && (
+                <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                  {pendingCount}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="my-reports" className="space-y-4 mt-4">
+            <ReportsContent
+              reports={reports}
+              isLoading={isLoading}
+              stats={stats}
+              statusFilter={statusFilter}
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+              onCreateNew={() => setIsFormOpen(true)}
+              isMobile={isMobile}
+              isManager={isManager}
+            />
+          </TabsContent>
+
+          <TabsContent value="approval" className="mt-4">
+            <ApprovalQueue />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="space-y-4">
+          <ReportsContent
+            reports={reports}
+            isLoading={isLoading}
+            stats={stats}
+            statusFilter={statusFilter}
+            onStatusChange={handleStatusChange}
+            onDelete={handleDelete}
+            onCreateNew={() => setIsFormOpen(true)}
+            isMobile={isMobile}
+            isManager={false}
+          />
+        </div>
+      )}
+
+      {/* Dialogs */}
+      <ReportFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} />
+
+      <ConfirmDialog
+        open={isDeleteOpen}
+        onOpenChange={setIsDeleteOpen}
+        title="Excluir relatório"
+        description="Tem certeza que deseja excluir este relatório? As despesas não serão excluídas."
+        confirmLabel="Excluir"
+        variant="destructive"
+        onConfirm={confirmDelete}
+        isLoading={deleteReport.isPending}
+      />
+    </AppShell>
+  );
+}
+
+interface ReportsContentProps {
+  reports: Report[] | undefined;
+  isLoading: boolean;
+  stats: { total: number; reimbursable: number; nonReimbursable: number; average: number };
+  statusFilter: string;
+  onStatusChange: (status: string) => void;
+  onDelete: (report: Report) => void;
+  onCreateNew: () => void;
+  isMobile: boolean;
+  isManager: boolean;
+}
+
+function ReportsContent({
+  reports,
+  isLoading,
+  stats,
+  statusFilter,
+  onStatusChange,
+  onDelete,
+  onCreateNew,
+  isMobile,
+  isManager,
+}: ReportsContentProps) {
+  const navigate = useNavigate();
+
+  return (
+    <>
+      {/* Summary Cards - hide on mobile for cleaner view */}
+      <div className="mb-6 grid gap-4 grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <DollarSign className="h-6 w-6 text-primary" />
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-primary/10">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total</p>
-              <p className="text-xl font-bold">{formatCurrency(stats.total)}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Total</p>
+              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.total)}</p>
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <Receipt className="h-6 w-6 text-primary" />
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-primary/10">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Reembolsável</p>
-              <p className="text-xl font-bold">{formatCurrency(stats.reimbursable)}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Reembolsável</p>
+              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.reimbursable)}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hidden sm:block">
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-              <Receipt className="h-6 w-6 text-muted-foreground" />
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-muted">
+              <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Não Reembolsável</p>
-              <p className="text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Não Reembolsável</p>
+              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="hidden sm:block">
           <CardContent className="flex items-center gap-4 p-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-              <TrendingUp className="h-6 w-6 text-primary" />
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-primary/10">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Média por Relatório</p>
-              <p className="text-xl font-bold">{formatCurrency(stats.average)}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Média</p>
+              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.average)}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <div className="mb-6">
-        <Tabs value={statusFilter} onValueChange={handleStatusChange}>
-          <TabsList>
+      <div className="mb-6 overflow-x-auto">
+        <Tabs value={statusFilter} onValueChange={onStatusChange}>
+          <TabsList className="inline-flex w-max">
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="draft">Abertos</TabsTrigger>
             <TabsTrigger value="submitted">Enviados</TabsTrigger>
@@ -163,7 +279,7 @@ export default function Reports() {
         </Tabs>
       </div>
 
-      {/* Table */}
+      {/* Content */}
       {isLoading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -176,13 +292,21 @@ export default function Reports() {
           title="Nenhum relatório encontrado"
           description="Crie seu primeiro relatório para agrupar despesas e enviar para aprovação."
           action={
-            <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+            <Button onClick={onCreateNew} className="gap-2">
               <Plus className="h-4 w-4" />
               Novo Relatório
             </Button>
           }
         />
+      ) : isMobile ? (
+        // Mobile: Card view
+        <div className="space-y-3">
+          {reports?.map((report) => (
+            <ReportCard key={report.id} report={report} />
+          ))}
+        </div>
       ) : (
+        // Desktop: Table view
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
@@ -237,7 +361,7 @@ export default function Reports() {
                         </DropdownMenuItem>
                         {report.status === 'draft' && (
                           <DropdownMenuItem
-                            onClick={() => handleDelete(report)}
+                            onClick={() => onDelete(report)}
                             className="text-destructive"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -253,20 +377,6 @@ export default function Reports() {
           </Table>
         </div>
       )}
-
-      {/* Dialogs */}
-      <ReportFormDialog open={isFormOpen} onOpenChange={setIsFormOpen} />
-
-      <ConfirmDialog
-        open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        title="Excluir relatório"
-        description="Tem certeza que deseja excluir este relatório? As despesas não serão excluídas."
-        confirmLabel="Excluir"
-        variant="destructive"
-        onConfirm={confirmDelete}
-        isLoading={deleteReport.isPending}
-      />
-    </AppShell>
+    </>
   );
 }
