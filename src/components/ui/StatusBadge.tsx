@@ -1,17 +1,35 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { EXPENSE_STATUS_LABELS, REPORT_STATUS_LABELS } from '@/lib/constants';
+import { AlertTriangle } from 'lucide-react';
 
 type Status = 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
 
 interface StatusBadgeProps {
   status: Status;
   type?: 'expense' | 'report';
+  isOutOfPolicy?: boolean;
   className?: string;
 }
 
-export function StatusBadge({ status, type = 'expense', className }: StatusBadgeProps) {
+export function StatusBadge({ status, type = 'expense', isOutOfPolicy, className }: StatusBadgeProps) {
   const labels = type === 'expense' ? EXPENSE_STATUS_LABELS : REPORT_STATUS_LABELS;
+  
+  // If out of policy, show warning badge
+  if (isOutOfPolicy) {
+    return (
+      <Badge
+        className={cn(
+          'font-medium status-out-of-policy gap-1',
+          className
+        )}
+        variant="secondary"
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Fora da política
+      </Badge>
+    );
+  }
   
   return (
     <Badge

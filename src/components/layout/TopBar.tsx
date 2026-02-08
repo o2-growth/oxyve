@@ -43,7 +43,7 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex h-14 md:h-16 items-center justify-between border-b bg-card px-4 md:px-6">
+    <header className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       <div className="flex items-center gap-3">
         {/* Sidebar trigger - always visible */}
         <SidebarTrigger className="h-8 w-8" />
@@ -59,7 +59,7 @@ export function TopBar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-9 w-9 md:h-10 md:w-10 rounded-full">
               <Avatar className="h-9 w-9 md:h-10 md:w-10">
-                <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
                   {getInitials()}
                 </AvatarFallback>
               </Avatar>
