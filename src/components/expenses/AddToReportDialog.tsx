@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useReports, useCreateReport, useAddExpenseToReport } from '@/hooks/useReports';
+import { useReports, useCreateReport, useAddExpenseToReport, useAddExpensesToReport } from '@/hooks/useReports';
 import { Expense } from '@/hooks/useExpenses';
 import { Loader2, Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/constants';
@@ -18,13 +18,15 @@ import { formatCurrency } from '@/lib/constants';
 interface AddToReportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  expense: Expense | null;
+  expense?: Expense | null;
+  expenseIds?: string[];
 }
 
 export function AddToReportDialog({
   open,
   onOpenChange,
   expense,
+  expenseIds,
 }: AddToReportDialogProps) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedReportId, setSelectedReportId] = useState<string>('');
@@ -33,11 +35,16 @@ export function AddToReportDialog({
   const { data: reports, isLoading: reportsLoading } = useReports({ status: 'draft' });
   const createReport = useCreateReport();
   const addExpenseToReport = useAddExpenseToReport();
+  const addExpensesToReport = useAddExpensesToReport();
 
-  const isLoading = createReport.isPending || addExpenseToReport.isPending;
+  const isLoading = createReport.isPending || addExpenseToReport.isPending || addExpensesToReport.isPending;
+
+  // Determine which expense IDs to use
+  const idsToAdd = expenseIds && expenseIds.length > 0 ? expenseIds : expense ? [expense.id] : [];
+  const count = idsToAdd.length;
 
   const handleSubmit = async () => {
-    if (!expense) return;
+    if (idsToAdd.length === 0) return;
 
     let reportId = selectedReportId;
 
@@ -49,10 +56,18 @@ export function AddToReportDialog({
 
     if (!reportId) return;
 
-    await addExpenseToReport.mutateAsync({
-      reportId,
-      expenseId: expense.id,
-    });
+    // Add single or multiple expenses
+    if (idsToAdd.length === 1) {
+      await addExpenseToReport.mutateAsync({
+        reportId,
+        expenseId: idsToAdd[0],
+      });
+    } else {
+      await addExpensesToReport.mutateAsync({
+        reportId,
+        expenseIds: idsToAdd,
+      });
+    }
 
     onOpenChange(false);
     setMode('existing');
@@ -66,7 +81,9 @@ export function AddToReportDialog({
         <DialogHeader>
           <DialogTitle>Adicionar a Relatório</DialogTitle>
           <DialogDescription>
-            Escolha um relatório existente ou crie um novo para adicionar esta despesa.
+            {count > 1
+              ? `Escolha um relatório para adicionar ${count} despesas.`
+              : 'Escolha um relatório existente ou crie um novo para adicionar esta despesa.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,6 +158,7 @@ export function AddToReportDialog({
               onClick={handleSubmit}
               disabled={
                 isLoading ||
+                idsToAdd.length === 0 ||
                 (mode === 'existing' && !selectedReportId) ||
                 (mode === 'new' && !newReportTitle.trim())
               }
@@ -152,7 +170,7 @@ export function AddToReportDialog({
                   Criar e Adicionar
                 </>
               ) : (
-                'Adicionar'
+                `Adicionar${count > 1 ? ` (${count})` : ''}`
               )}
             </Button>
           </div>
