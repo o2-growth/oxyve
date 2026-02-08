@@ -101,10 +101,10 @@ export default function Support() {
                 ou envie email para
                 <br />
                 <a
-                  href="mailto:suporte@expensehub.com"
+                  href="mailto:suporte@oxyve.com"
                   className="font-medium text-primary hover:underline"
                 >
-                  suporte@expensehub.com
+                  suporte@oxyve.com
                 </a>
               </p>
             </CardContent>

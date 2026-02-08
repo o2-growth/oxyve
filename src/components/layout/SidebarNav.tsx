@@ -63,7 +63,7 @@ export function SidebarNav() {
           </div>
           {!isCollapsed && (
             <span className="text-lg font-semibold text-sidebar-foreground">
-              ExpenseHub
+              Oxy VE
             </span>
           )}
         </div>
@@ -122,7 +122,7 @@ export function SidebarNav() {
         )}>
           {!isCollapsed && (
             <p className="text-xs text-sidebar-foreground/50">
-              © 2024 ExpenseHub
+              © 2024 Oxy VE
             </p>
           )}
           <Tooltip>

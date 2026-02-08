@@ -1,6 +1,6 @@
 {
-  "name": "ExpenseHub - Gestão de Despesas",
-  "short_name": "ExpenseHub",
+  "name": "Oxy VE - Gestão de Despesas",
+  "short_name": "Oxy VE",
   "description": "Aplicativo de gestão de despesas corporativas",
   "start_url": "/app/dashboard",
   "display": "standalone",
