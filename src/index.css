@@ -4,101 +4,104 @@
 
 @layer base {
   :root {
-    /* Corporate Blue Theme */
-    --background: 210 20% 98%;
-    --foreground: 215 25% 15%;
+    /* O2 Brand Identity - Light Mode (Default) */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 25% 15%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 15%;
+    --popover-foreground: 222 47% 11%;
 
-    /* Deep corporate blue */
-    --primary: 215 70% 25%;
+    /* Brand Green - Primary */
+    --primary: 120 50% 50%;
     --primary-foreground: 0 0% 100%;
 
-    /* Light blue-gray */
-    --secondary: 210 30% 95%;
-    --secondary-foreground: 215 25% 20%;
+    /* Light gray for secondary */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 20% 94%;
-    --muted-foreground: 215 15% 45%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
 
-    --accent: 210 40% 92%;
-    --accent-foreground: 215 70% 25%;
+    --accent: 120 50% 95%;
+    --accent-foreground: 120 50% 30%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 215 70% 25%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 120 50% 50%;
 
     --radius: 0.5rem;
 
     /* Status colors */
-    --status-draft: 215 15% 55%;
-    --status-submitted: 38 92% 50%;
-    --status-approved: 142 71% 45%;
-    --status-rejected: 0 72% 51%;
-    --status-paid: 142 76% 36%;
+    --status-draft: 215 16% 47%;
+    --status-submitted: 213 94% 68%;
+    --status-approved: 120 50% 50%;
+    --status-rejected: 0 84% 60%;
+    --status-paid: 120 60% 40%;
 
-    /* Sidebar - Dark blue */
-    --sidebar-background: 215 70% 20%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 210 100% 70%;
+    /* Sidebar - Graphite */
+    --sidebar-background: 340 6% 7%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 120 50% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 60% 28%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 215 50% 30%;
-    --sidebar-ring: 210 100% 70%;
+    --sidebar-accent: 340 4% 11%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 340 4% 15%;
+    --sidebar-ring: 120 50% 50%;
 
     /* Chart colors */
-    --chart-1: 215 70% 45%;
-    --chart-2: 142 71% 45%;
+    --chart-1: 120 50% 50%;
+    --chart-2: 213 94% 68%;
     --chart-3: 38 92% 50%;
     --chart-4: 280 65% 60%;
-    --chart-5: 0 72% 51%;
+    --chart-5: 0 84% 60%;
   }
 
   .dark {
-    --background: 215 30% 10%;
-    --foreground: 210 20% 95%;
+    /* O2 Brand Identity - Dark Mode */
+    --background: 340 6% 7%;
+    --foreground: 210 40% 96%;
 
-    --card: 215 30% 13%;
-    --card-foreground: 210 20% 95%;
+    --card: 340 4% 11%;
+    --card-foreground: 210 40% 96%;
 
-    --popover: 215 30% 13%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 340 4% 11%;
+    --popover-foreground: 210 40% 96%;
 
-    --primary: 210 100% 65%;
-    --primary-foreground: 215 30% 10%;
+    /* Brand Green - slightly brighter for dark mode */
+    --primary: 120 50% 55%;
+    --primary-foreground: 340 6% 7%;
 
-    --secondary: 215 25% 20%;
-    --secondary-foreground: 210 20% 95%;
+    --secondary: 340 4% 15%;
+    --secondary-foreground: 210 40% 96%;
 
-    --muted: 215 25% 18%;
-    --muted-foreground: 215 15% 60%;
+    --muted: 340 4% 18%;
+    --muted-foreground: 215 16% 60%;
 
-    --accent: 215 30% 22%;
-    --accent-foreground: 210 20% 95%;
+    --accent: 120 40% 15%;
+    --accent-foreground: 120 50% 70%;
 
-    --destructive: 0 62% 45%;
+    --destructive: 0 72% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 25% 22%;
-    --input: 215 25% 22%;
-    --ring: 210 100% 65%;
+    --border: 340 4% 20%;
+    --input: 340 4% 20%;
+    --ring: 120 50% 55%;
 
-    --sidebar-background: 215 40% 8%;
-    --sidebar-foreground: 210 20% 95%;
-    --sidebar-primary: 210 100% 65%;
+    /* Sidebar in dark mode - same graphite */
+    --sidebar-background: 340 6% 5%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 120 50% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 30% 15%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 215 25% 18%;
-    --sidebar-ring: 210 100% 65%;
+    --sidebar-accent: 340 4% 10%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 340 4% 15%;
+    --sidebar-ring: 120 50% 55%;
   }
 }
 
@@ -136,5 +139,10 @@
   .status-paid {
     background-color: hsl(var(--status-paid) / 0.15);
     color: hsl(var(--status-paid));
+  }
+
+  .status-out-of-policy {
+    background-color: hsl(38 92% 50% / 0.15);
+    color: hsl(38 80% 40%);
   }
 }

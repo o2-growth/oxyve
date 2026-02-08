@@ -71,6 +71,13 @@ export default {
           "4": "hsl(var(--chart-4))",
           "5": "hsl(var(--chart-5))",
         },
+        // O2 Brand Colors (for direct usage when needed)
+        brand: {
+          green: "#3FBF3F",
+          "green-soft": "#7FCB7F",
+          graphite: "#131112",
+          "graphite-2": "#1B191A",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

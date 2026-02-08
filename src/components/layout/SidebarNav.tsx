@@ -58,8 +58,9 @@ export function SidebarNav() {
       {/* Logo */}
       <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
         <div className="flex h-10 items-center gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary">
-            <Receipt className="h-5 w-5 text-sidebar-primary-foreground" />
+          {/* O2 Logo Mark */}
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-sidebar-primary bg-sidebar-background">
+            <span className="text-sm font-bold text-sidebar-primary">O2</span>
           </div>
           {!isCollapsed && (
             <span className="text-lg font-semibold text-sidebar-foreground">
@@ -81,7 +82,13 @@ export function SidebarNav() {
                     isActive={isActive(item.to)}
                     tooltip={item.label}
                   >
-                    <NavLink to={item.to}>
+                    <NavLink 
+                      to={item.to}
+                      className={cn(
+                        "transition-colors",
+                        isActive(item.to) && "border-l-2 border-sidebar-primary"
+                      )}
+                    >
                       <item.icon className="h-5 w-5" />
                       <span>{item.label}</span>
                     </NavLink>
@@ -102,7 +109,13 @@ export function SidebarNav() {
                     isActive={isActive(item.to, item.matchPrefix)}
                     tooltip={item.label}
                   >
-                    <NavLink to={item.to}>
+                    <NavLink 
+                      to={item.to}
+                      className={cn(
+                        "transition-colors",
+                        isActive(item.to, item.matchPrefix) && "border-l-2 border-sidebar-primary"
+                      )}
+                    >
                       <item.icon className="h-5 w-5" />
                       <span>{item.label}</span>
                     </NavLink>

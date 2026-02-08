@@ -6,8 +6,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Receipt, Loader2, Mail } from 'lucide-react';
+import { Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+
+// O2 Logo Component
+function O2Logo({ size = 'md', inverted = false }: { size?: 'sm' | 'md' | 'lg', inverted?: boolean }) {
+  const sizes = {
+    sm: 'h-8 w-8 text-sm',
+    md: 'h-10 w-10 text-base',
+    lg: 'h-12 w-12 text-lg',
+  };
+  
+  return (
+    <div className={`flex ${sizes[size]} shrink-0 items-center justify-center rounded-full border-2 ${
+      inverted 
+        ? 'border-white bg-transparent' 
+        : 'border-primary bg-background'
+    }`}>
+      <span className={`font-bold ${inverted ? 'text-white' : 'text-primary'}`}>O2</span>
+    </div>
+  );
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -87,13 +106,11 @@ export default function Login() {
   if (showForgotPassword) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md shadow-lg">
           <CardHeader className="space-y-1 text-center">
             <div className="mb-4 flex items-center justify-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Receipt className="h-6 w-6 text-primary-foreground" />
-              </div>
-              <span className="text-2xl font-bold">Oxy VE</span>
+              <O2Logo />
+              <span className="text-2xl font-bold text-foreground">Oxy VE</span>
             </div>
             <CardTitle className="text-2xl">Recuperar senha</CardTitle>
             <CardDescription>
@@ -138,37 +155,33 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left side - Branding */}
-      <div className="hidden w-1/2 flex-col justify-between bg-primary p-12 lg:flex">
+      {/* Left side - Branding (Graphite background) */}
+      <div className="hidden w-1/2 flex-col justify-between bg-brand-graphite p-12 lg:flex">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-foreground">
-            <Receipt className="h-6 w-6 text-primary" />
-          </div>
-          <span className="text-2xl font-bold text-primary-foreground">Oxy VE</span>
+          <O2Logo inverted />
+          <span className="text-2xl font-bold text-white">Oxy VE</span>
         </div>
         
         <div className="space-y-6">
-          <h1 className="text-4xl font-bold leading-tight text-primary-foreground">
+          <h1 className="text-4xl font-bold leading-tight text-white">
             Gerencie suas despesas<br />de forma simples e eficiente
           </h1>
-          <p className="text-lg text-primary-foreground/80">
+          <p className="text-lg text-white/70">
             Lançe despesas, organize relatórios e acompanhe aprovações em um só lugar.
           </p>
         </div>
 
-        <p className="text-sm text-primary-foreground/60">
+        <p className="text-sm text-white/50">
           © 2024 Oxy VE. Todos os direitos reservados.
         </p>
       </div>
 
       {/* Right side - Form */}
-      <div className="flex w-full items-center justify-center p-8 lg:w-1/2">
+      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-1/2">
         <Card className="w-full max-w-md border-0 shadow-none lg:shadow-lg lg:border">
           <CardHeader className="space-y-1 text-center lg:text-left">
             <div className="mb-4 flex items-center justify-center gap-2 lg:hidden">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Receipt className="h-6 w-6 text-primary-foreground" />
-              </div>
+              <O2Logo />
               <span className="text-2xl font-bold">Oxy VE</span>
             </div>
             <CardTitle className="text-2xl">Bem-vindo!</CardTitle>
