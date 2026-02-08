@@ -93,7 +93,7 @@ export default function Login() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
                 <Receipt className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span className="text-2xl font-bold">ExpenseHub</span>
+              <span className="text-2xl font-bold">Oxy VE</span>
             </div>
             <CardTitle className="text-2xl">Recuperar senha</CardTitle>
             <CardDescription>
@@ -144,7 +144,7 @@ export default function Login() {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-foreground">
             <Receipt className="h-6 w-6 text-primary" />
           </div>
-          <span className="text-2xl font-bold text-primary-foreground">ExpenseHub</span>
+          <span className="text-2xl font-bold text-primary-foreground">Oxy VE</span>
         </div>
         
         <div className="space-y-6">
@@ -157,7 +157,7 @@ export default function Login() {
         </div>
 
         <p className="text-sm text-primary-foreground/60">
-          © 2024 ExpenseHub. Todos os direitos reservados.
+          © 2024 Oxy VE. Todos os direitos reservados.
         </p>
       </div>
 
@@ -169,7 +169,7 @@ export default function Login() {
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
                 <Receipt className="h-6 w-6 text-primary-foreground" />
               </div>
-              <span className="text-2xl font-bold">ExpenseHub</span>
+              <span className="text-2xl font-bold">Oxy VE</span>
             </div>
             <CardTitle className="text-2xl">Bem-vindo!</CardTitle>
             <CardDescription>
