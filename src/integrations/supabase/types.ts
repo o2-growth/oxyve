@@ -607,6 +607,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_decide_report: {
+        Args: { p_comment?: string; p_decision: string; p_report_id: string }
+        Returns: Json
+      }
       bootstrap_user: { Args: never; Returns: Json }
       create_expense_in_current_report: {
         Args: {
@@ -636,6 +640,7 @@ export type Database = {
         Returns: boolean
       }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      mark_report_paid: { Args: { p_report_id: string }; Returns: Json }
       submit_report: { Args: { p_report_id: string }; Returns: Json }
     }
     Enums: {
