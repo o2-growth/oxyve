@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -32,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon, Loader2, Upload, X, FileText, Image as ImageIcon } from 'lucide-react';
 import {
   useCreateExpense,
   useUpdateExpense,
@@ -57,11 +57,18 @@ export function ExpenseFormDialog({
   const updateExpense = useUpdateExpense();
   const { data: categories } = useCategories();
   const { data: policy } = useExpensePolicy();
-  const costCenters = useActiveCostCenters();
-  const projects = useActiveProjects();
+  const { data: costCenters = [] } = useActiveCostCenters();
+  const { data: projects = [] } = useActiveProjects();
+
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
+
+  // Check if receipt already exists for this expense
+  const hasExistingReceipt = expense?.receipt_path ? true : false;
+  const hasReceipt = receiptFile !== null || hasExistingReceipt;
 
   // Build dynamic schema based on policy
   const formSchema = z.object({
@@ -110,6 +117,8 @@ export function ExpenseFormDialog({
         cost_center_id: (expense as any).cost_center_id || '',
         project_id: (expense as any).project_id || '',
       });
+      setReceiptFile(null);
+      setReceiptPreview(null);
     } else {
       form.reset({
         date: new Date(),
@@ -122,10 +131,41 @@ export function ExpenseFormDialog({
         cost_center_id: '',
         project_id: '',
       });
+      setReceiptFile(null);
+      setReceiptPreview(null);
     }
-  }, [expense, form]);
+  }, [expense, form, open]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setReceiptFile(file);
+      
+      // Create preview for images
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setReceiptPreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setReceiptPreview(null);
+      }
+    }
+  };
+
+  const removeFile = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+  };
 
   const onSubmit = async (data: FormData) => {
+    // Check if receipt is required but not provided
+    if (policy?.require_receipt && !hasReceipt && !isEditing) {
+      form.setError('root', { message: 'Comprovante é obrigatório' });
+      return;
+    }
+
     const amountCents = Math.round(
       parseFloat(data.amount.replace(',', '.')) * 100
     );
@@ -142,6 +182,9 @@ export function ExpenseFormDialog({
       project_id: data.project_id || null,
     };
 
+    // TODO: Handle file upload to storage bucket when implementing receipt upload
+    // For now, just save the expense without the file
+
     if (isEditing && expense) {
       await updateExpense.mutateAsync({ id: expense.id, ...payload });
     } else {
@@ -152,6 +195,7 @@ export function ExpenseFormDialog({
   };
 
   const isLoading = createExpense.isPending || updateExpense.isPending;
+  const requireReceiptError = policy?.require_receipt && !hasReceipt && !isEditing;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -375,6 +419,88 @@ export function ExpenseFormDialog({
               />
             </div>
 
+            {/* Receipt Upload */}
+            <div className="space-y-2">
+              <FormLabel>
+                Comprovante
+                {policy?.require_receipt && <span className="text-destructive"> *</span>}
+              </FormLabel>
+              
+              {!isReadOnly && (
+                <>
+                  {receiptFile ? (
+                    <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+                      {receiptPreview ? (
+                        <img
+                          src={receiptPreview}
+                          alt="Preview"
+                          className="w-12 h-12 object-cover rounded"
+                        />
+                      ) : (
+                        <FileText className="w-12 h-12 text-muted-foreground" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{receiptFile.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(receiptFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={removeFile}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : hasExistingReceipt ? (
+                    <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+                      <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Comprovante já anexado
+                      </span>
+                    </div>
+                  ) : (
+                    <label
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg cursor-pointer hover:bg-muted/50 transition-colors",
+                        requireReceiptError && "border-destructive"
+                      )}
+                    >
+                      <Upload className="h-8 w-8 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        Clique para selecionar um arquivo
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        PNG, JPG ou PDF até 10MB
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
+                    </label>
+                  )}
+                  {requireReceiptError && (
+                    <p className="text-sm text-destructive">
+                      Comprovante é obrigatório conforme política da empresa
+                    </p>
+                  )}
+                </>
+              )}
+
+              {isReadOnly && hasExistingReceipt && (
+                <div className="flex items-center gap-3 p-3 border rounded-lg bg-muted/50">
+                  <ImageIcon className="w-8 h-8 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    Comprovante anexado
+                  </span>
+                </div>
+              )}
+            </div>
+
             <FormField
               control={form.control}
               name="notes"
@@ -411,6 +537,12 @@ export function ExpenseFormDialog({
                 </FormItem>
               )}
             />
+
+            {form.formState.errors.root && (
+              <p className="text-sm text-destructive">
+                {form.formState.errors.root.message}
+              </p>
+            )}
 
             {!isReadOnly && (
               <div className="flex justify-end gap-3 pt-4">

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { SettingsLayout } from '@/components/settings/SettingsLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,8 +13,10 @@ import { useExpensePolicy, useUpdateExpensePolicy } from '@/hooks/usePolicy';
 import { CostCentersList } from '@/components/settings/CostCentersList';
 import { ProjectsList } from '@/components/settings/ProjectsList';
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Save, Shield } from 'lucide-react';
+import { Loader2, Shield, ArrowLeft, Check } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const CURRENCIES = [
   { value: 'BRL', label: 'Real (BRL)' },
@@ -21,38 +24,55 @@ const CURRENCIES = [
   { value: 'EUR', label: 'Euro (EUR)' },
 ];
 
+const DEBOUNCE_DELAY = 600;
+
 export default function SettingsPolicy() {
+  const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const { data: policy, isLoading } = useExpensePolicy();
+  const { data: policy, isLoading, dataUpdatedAt } = useExpensePolicy();
   const updatePolicy = useUpdateExpensePolicy();
+  
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedRef = useRef<Date | null>(null);
 
-  const [localPolicy, setLocalPolicy] = useState<{
-    default_currency: string;
-    require_cost_center: boolean;
-    require_project: boolean;
-    require_receipt: boolean;
-  } | null>(null);
+  // Track if we just saved (for showing "Salvo" indicator)
+  const justSaved = updatePolicy.isSuccess && !updatePolicy.isPending;
 
-  // Initialize local state when policy loads
-  const currentPolicy = localPolicy || policy;
+  // Update last saved time when mutation succeeds
+  useEffect(() => {
+    if (updatePolicy.isSuccess) {
+      lastSavedRef.current = new Date();
+    }
+  }, [updatePolicy.isSuccess]);
 
-  const handleChange = (field: string, value: any) => {
-    setLocalPolicy((prev) => ({
-      default_currency: prev?.default_currency ?? policy?.default_currency ?? 'BRL',
-      require_cost_center: prev?.require_cost_center ?? policy?.require_cost_center ?? false,
-      require_project: prev?.require_project ?? policy?.require_project ?? false,
-      require_receipt: prev?.require_receipt ?? policy?.require_receipt ?? false,
-      [field]: value,
-    }));
-  };
+  const handleAutoSave = useCallback(
+    (field: string, value: any) => {
+      if (!policy?.id) return;
 
-  const handleSave = async () => {
-    if (!policy?.id || !localPolicy) return;
-    await updatePolicy.mutateAsync({ id: policy.id, ...localPolicy });
-    setLocalPolicy(null);
-  };
+      // Clear any pending debounce
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
 
-  const hasChanges = localPolicy !== null;
+      // Set new debounce
+      debounceRef.current = setTimeout(() => {
+        updatePolicy.mutate({
+          id: policy.id,
+          [field]: value,
+        });
+      }, DEBOUNCE_DELAY);
+    },
+    [policy?.id, updatePolicy]
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -75,9 +95,13 @@ export default function SettingsPolicy() {
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Shield className="mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-lg font-medium">Acesso restrito</p>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-6">
                 Apenas administradores podem gerenciar a política de despesas.
               </p>
+              <Button variant="outline" onClick={() => navigate('/app/settings/profile')}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Voltar
+              </Button>
             </CardContent>
           </Card>
         </SettingsLayout>
@@ -85,15 +109,36 @@ export default function SettingsPolicy() {
     );
   }
 
+  const lastUpdate = policy?.updated_at ? new Date(policy.updated_at) : null;
+
   return (
     <AppShell>
       <SettingsLayout>
         <div className="space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Política de Despesa da minha Empresa</h1>
-            <p className="text-muted-foreground">
-              Configure as regras de despesas da sua organização
-            </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Política de Despesa da minha Empresa</h1>
+              <p className="text-muted-foreground">
+                Configure as regras de despesas da sua organização
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {updatePolicy.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Salvando...</span>
+                </>
+              ) : justSaved ? (
+                <>
+                  <Check className="h-4 w-4 text-primary" />
+                  <span className="text-primary">Salvo</span>
+                </>
+              ) : lastUpdate ? (
+                <span>
+                  Última atualização: {format(lastUpdate, "HH:mm", { locale: ptBR })}
+                </span>
+              ) : null}
+            </div>
           </div>
 
           <Tabs defaultValue="policy" className="w-full">
@@ -115,8 +160,8 @@ export default function SettingsPolicy() {
                   <div className="space-y-2">
                     <Label htmlFor="currency">Moeda padrão</Label>
                     <Select
-                      value={currentPolicy?.default_currency || 'BRL'}
-                      onValueChange={(value) => handleChange('default_currency', value)}
+                      value={policy?.default_currency || 'BRL'}
+                      onValueChange={(value) => handleAutoSave('default_currency', value)}
                     >
                       <SelectTrigger id="currency" className="w-48">
                         <SelectValue />
@@ -144,9 +189,9 @@ export default function SettingsPolicy() {
                         </p>
                       </div>
                       <Switch
-                        checked={currentPolicy?.require_cost_center ?? false}
+                        checked={policy?.require_cost_center ?? false}
                         onCheckedChange={(checked) =>
-                          handleChange('require_cost_center', checked)
+                          handleAutoSave('require_cost_center', checked)
                         }
                       />
                     </div>
@@ -159,9 +204,9 @@ export default function SettingsPolicy() {
                         </p>
                       </div>
                       <Switch
-                        checked={currentPolicy?.require_project ?? false}
+                        checked={policy?.require_project ?? false}
                         onCheckedChange={(checked) =>
-                          handleChange('require_project', checked)
+                          handleAutoSave('require_project', checked)
                         }
                       />
                     </div>
@@ -174,30 +219,13 @@ export default function SettingsPolicy() {
                         </p>
                       </div>
                       <Switch
-                        checked={currentPolicy?.require_receipt ?? false}
+                        checked={policy?.require_receipt ?? false}
                         onCheckedChange={(checked) =>
-                          handleChange('require_receipt', checked)
+                          handleAutoSave('require_receipt', checked)
                         }
                       />
                     </div>
                   </div>
-
-                  {hasChanges && (
-                    <div className="flex justify-end pt-4">
-                      <Button
-                        onClick={handleSave}
-                        disabled={updatePolicy.isPending}
-                        className="gap-2"
-                      >
-                        {updatePolicy.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Save className="h-4 w-4" />
-                        )}
-                        Salvar alterações
-                      </Button>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </TabsContent>
