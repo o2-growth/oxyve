@@ -52,26 +52,83 @@ export type Database = {
           },
         ]
       }
-      expense_categories: {
+      departments: {
         Row: {
           created_at: string
           id: string
+          is_active: boolean
           name: string
           org_id: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
           id?: string
+          is_active?: boolean
           name: string
           org_id: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
+          is_active?: boolean
           name?: string
           org_id?: string
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "departments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expense_categories: {
+        Row: {
+          created_at: string
+          daily_limit_cents: number | null
+          department_id: string | null
+          id: string
+          is_active: boolean
+          name: string
+          org_id: string
+          requires_receipt: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          daily_limit_cents?: number | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          org_id: string
+          requires_receipt?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          daily_limit_cents?: number | null
+          department_id?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          org_id?: string
+          requires_receipt?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_categories_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expense_categories_org_id_fkey"
             columns: ["org_id"]
@@ -83,30 +140,39 @@ export type Database = {
       }
       expense_policies: {
         Row: {
+          cycle_cutoff_day: number
           default_currency: string
+          enforce_limits_mode: string
           id: string
           org_id: string
           require_cost_center: boolean
           require_project: boolean
           require_receipt: boolean
+          timezone: string
           updated_at: string
         }
         Insert: {
+          cycle_cutoff_day?: number
           default_currency?: string
+          enforce_limits_mode?: string
           id?: string
           org_id: string
           require_cost_center?: boolean
           require_project?: boolean
           require_receipt?: boolean
+          timezone?: string
           updated_at?: string
         }
         Update: {
+          cycle_cutoff_day?: number
           default_currency?: string
+          enforce_limits_mode?: string
           id?: string
           org_id?: string
           require_cost_center?: boolean
           require_project?: boolean
           require_receipt?: boolean
+          timezone?: string
           updated_at?: string
         }
         Relationships: [
@@ -129,6 +195,7 @@ export type Database = {
           date: string
           description: string
           id: string
+          is_out_of_policy: boolean
           is_reimbursable: boolean
           notes: string | null
           org_id: string
@@ -148,6 +215,7 @@ export type Database = {
           date: string
           description: string
           id?: string
+          is_out_of_policy?: boolean
           is_reimbursable?: boolean
           notes?: string | null
           org_id: string
@@ -167,6 +235,7 @@ export type Database = {
           date?: string
           description?: string
           id?: string
+          is_out_of_policy?: boolean
           is_reimbursable?: boolean
           notes?: string | null
           org_id?: string
@@ -307,6 +376,7 @@ export type Database = {
           avatar_url: string | null
           created_at: string
           currency: string | null
+          department_id: string | null
           full_name: string | null
           id: string
           org_id: string | null
@@ -316,6 +386,7 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           currency?: string | null
+          department_id?: string | null
           full_name?: string | null
           id: string
           org_id?: string | null
@@ -325,12 +396,20 @@ export type Database = {
           avatar_url?: string | null
           created_at?: string
           currency?: string | null
+          department_id?: string | null
           full_name?: string | null
           id?: string
           org_id?: string | null
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "profiles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "profiles_org_id_fkey"
             columns: ["org_id"]
@@ -452,6 +531,8 @@ export type Database = {
       reports: {
         Row: {
           created_at: string
+          cycle_key: string | null
+          due_date: string | null
           end_date: string | null
           id: string
           org_id: string
@@ -463,6 +544,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          cycle_key?: string | null
+          due_date?: string | null
           end_date?: string | null
           id?: string
           org_id: string
@@ -474,6 +557,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          cycle_key?: string | null
+          due_date?: string | null
           end_date?: string | null
           id?: string
           org_id?: string
@@ -517,6 +602,23 @@ export type Database = {
     }
     Functions: {
       bootstrap_user: { Args: never; Returns: Json }
+      create_expense_in_current_report: {
+        Args: {
+          p_amount_cents: number
+          p_category_id?: string
+          p_cost_center_id?: string
+          p_currency?: string
+          p_date: string
+          p_description: string
+          p_is_reimbursable?: boolean
+          p_notes?: string
+          p_payment_method?: string
+          p_project_id?: string
+          p_receipt_path?: string
+        }
+        Returns: Json
+      }
+      get_or_create_current_report: { Args: never; Returns: Json }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {

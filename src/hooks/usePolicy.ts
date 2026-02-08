@@ -10,6 +10,9 @@ export interface ExpensePolicy {
   require_cost_center: boolean;
   require_project: boolean;
   require_receipt: boolean;
+  cycle_cutoff_day: number;
+  timezone: string;
+  enforce_limits_mode: 'warn' | 'block';
   updated_at: string;
 }
 
