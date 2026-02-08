@@ -13,6 +13,7 @@ import { LogOut, User, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function TopBar() {
   const { user, profile, signOut, isAdmin, isManager } = useAuth();
@@ -49,6 +50,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        <ThemeToggle />
         <div className="hidden sm:block">
           {getRoleBadge()}
         </div>
