@@ -98,7 +98,7 @@ export function ReceiptUpload({
       <input
         ref={cameraInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,image/heic,image/heif"
         capture="environment"
         className="hidden"
         onChange={handleFileSelect}
@@ -106,14 +106,14 @@ export function ReceiptUpload({
       <input
         ref={photoInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,image/heic,image/heif"
         className="hidden"
         onChange={handleFileSelect}
       />
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,image/*"
+        accept="application/pdf,image/*,image/heic,image/heif"
         className="hidden"
         onChange={handleFileSelect}
       />
