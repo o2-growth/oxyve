@@ -17,6 +17,7 @@ import { useSubmitReportRpc } from '@/hooks/useCurrentReport';
 import { useApproveReportRpc, useMarkReportPaidRpc } from '@/hooks/useReportActions';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
+import { toast } from 'sonner';
 import { 
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet, 
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip, ExternalLink 
@@ -77,9 +78,16 @@ export default function ReportDetail() {
     await removeExpense.mutateAsync({ reportId: id!, expenseId });
   };
 
-  const getReceiptUrl = (receiptPath: string) => {
-    const { data } = supabase.storage.from('receipts').getPublicUrl(receiptPath);
-    return data.publicUrl;
+  const openReceipt = async (receiptPath: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('receipts')
+        .createSignedUrl(receiptPath, 3600);
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank');
+    } catch {
+      toast.error('Erro ao abrir comprovante');
+    }
   };
 
   if (isLoading) {
@@ -282,7 +290,7 @@ export default function ReportDetail() {
                               variant="ghost" 
                               size="sm" 
                               className="h-8 gap-1"
-                              onClick={() => window.open(getReceiptUrl(item.expense.receipt_path), '_blank')}
+                              onClick={() => openReceipt(item.expense.receipt_path)}
                             >
                               <Paperclip className="h-4 w-4" />
                               <ExternalLink className="h-3 w-3" />

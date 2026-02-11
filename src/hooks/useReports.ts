@@ -28,6 +28,8 @@ export interface ReportWithItems extends Report {
       description: string;
       amount_cents: number;
       currency: string;
+      receipt_path: string | null;
+      is_out_of_policy: boolean;
       category: { name: string } | null;
     };
   }>;
@@ -122,7 +124,7 @@ export function useReport(id: string) {
 
       const { data: items } = await supabase
         .from('report_items')
-        .select('id, expense:expenses(id, date, description, amount_cents, currency, category:expense_categories(name))')
+        .select('id, expense:expenses(id, date, description, amount_cents, currency, receipt_path, is_out_of_policy, category:expense_categories(name))')
         .eq('report_id', id);
 
       const { data: approvals } = await supabase
