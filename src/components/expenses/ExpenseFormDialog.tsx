@@ -56,6 +56,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useValidateReceipt } from '@/hooks/useValidateReceipt';
+import { convertHeicToJpeg } from '@/lib/convertHeic';
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -87,6 +88,7 @@ export function ExpenseFormDialog({
   const [selectedCategory, setSelectedCategory] = useState<ExpenseType | null>(null);
   const [currentReportForDate, setCurrentReportForDate] = useState<CurrentReport | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
   const receiptValidation = useValidateReceipt();
 
   const isEditing = !!expense;
@@ -200,17 +202,36 @@ export function ExpenseFormDialog({
     receiptValidation.validate(file, formDate, formAmountCents);
   }, [form, receiptValidation]);
 
-  const handleFileChange = (file: File | null) => {
-    setReceiptFile(file);
+  const handleFileChange = async (file: File | null) => {
+    if (!file) {
+      setReceiptFile(null);
+      setReceiptPreview(null);
+      receiptValidation.reset();
+      return;
+    }
+
+    // Convert HEIC to JPEG if needed
+    let processedFile = file;
+    try {
+      setIsConverting(true);
+      processedFile = await convertHeicToJpeg(file);
+    } catch (err) {
+      console.error('HEIC conversion failed:', err);
+      toast.error('Não foi possível converter a imagem. Tente outro formato.');
+      setIsConverting(false);
+      return;
+    }
+    setIsConverting(false);
+
+    setReceiptFile(processedFile);
     
-    if (file && file.type.startsWith('image/')) {
+    if (processedFile.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
         setReceiptPreview(reader.result as string);
       };
-      reader.readAsDataURL(file);
-      // Trigger AI validation
-      triggerValidation(file);
+      reader.readAsDataURL(processedFile);
+      triggerValidation(processedFile);
     } else {
       setReceiptPreview(null);
       receiptValidation.reset();
@@ -548,15 +569,22 @@ export function ExpenseFormDialog({
             Comprovante
             {requiresReceipt && <span className="text-destructive"> *</span>}
           </FormLabel>
-          <ReceiptUpload
-            file={receiptFile}
-            preview={receiptPreview}
-            hasExistingReceipt={hasExistingReceipt}
-            required={requiresReceipt}
-            disabled={isReadOnly}
-            error={requireReceiptError}
-            onFileChange={handleFileChange}
-          />
+          {isConverting ? (
+            <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Convertendo imagem...</span>
+            </div>
+          ) : (
+            <ReceiptUpload
+              file={receiptFile}
+              preview={receiptPreview}
+              hasExistingReceipt={hasExistingReceipt}
+              required={requiresReceipt}
+              disabled={isReadOnly}
+              error={requireReceiptError}
+              onFileChange={handleFileChange}
+            />
+          )}
           <ReceiptValidation
             status={receiptValidation.status}
             divergences={receiptValidation.divergences}
