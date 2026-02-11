@@ -1,72 +1,61 @@
 
 
-# Validacao de Comprovantes via OpenAI Vision
+# Conversao Automatica de HEIC para JPEG
 
-## Resumo
+## Problema
 
-Ao anexar um comprovante, o sistema envia a imagem para a API da OpenAI (GPT-4o / GPT-4o-mini com vision) via edge function para extrair data e valor, comparando com o formulario. Divergencias geram aviso visual.
+Fotos tiradas no iPhone sao salvas em formato HEIC, que nao e suportado nativamente pelos navegadores nem pela API da OpenAI Vision. Isso impede a validacao automatica de comprovantes.
 
-## Passo 1: Configurar a chave da OpenAI
+## Solucao
 
-Antes de implementar, vou solicitar sua chave da OpenAI via ferramenta segura de secrets. Ela ficara armazenada como `OPENAI_API_KEY` no backend, nunca exposta no frontend.
+Instalar a biblioteca `heic2any` para converter HEIC/HEIF para JPEG no frontend antes de enviar para validacao e upload.
 
-## Passo 2: Edge Function `validate-receipt`
+## Implementacao
 
-**Arquivo:** `supabase/functions/validate-receipt/index.ts`
+### 1. Instalar dependencia
 
-- Recebe imagem em base64 + tipo MIME do frontend
-- Chama `https://api.openai.com/v1/chat/completions` com modelo `gpt-4o-mini` (vision, rapido, barato)
-- Usa **tool calling** para extrair dados estruturados:
-  - `extracted_date` (YYYY-MM-DD)
-  - `extracted_amount_cents` (inteiro)
-  - `confidence` (high/medium/low)
-- Retorna JSON ao frontend
-- Trata erros (401, 429, 500)
+- `heic2any` - biblioteca leve que converte HEIC para JPEG/PNG no browser usando WebAssembly
 
-**Config:** Adicionar `[functions.validate-receipt]` com `verify_jwt = false` no `supabase/config.toml`
+### 2. Criar utilitario de conversao
 
-## Passo 3: Hook `useValidateReceipt`
+**Arquivo:** `src/lib/convertHeic.ts`
 
-**Arquivo:** `src/hooks/useValidateReceipt.ts`
+- Funcao `convertHeicToJpeg(file: File): Promise<File>` que:
+  - Detecta se o arquivo e HEIC/HEIF (pelo MIME type ou extensao .heic/.heif)
+  - Se for, converte para JPEG usando `heic2any`
+  - Retorna o arquivo convertido como `File` com tipo `image/jpeg`
+  - Se nao for HEIC, retorna o arquivo original sem alteracao
 
-- Converte File para base64
-- Chama edge function via `supabase.functions.invoke('validate-receipt', ...)`
-- Retorna estado: `idle | validating | success | warning | error`
-- Compara data e valor extraidos com os do formulario
-
-## Passo 4: Componente `ReceiptValidation`
-
-**Arquivo:** `src/components/expenses/ReceiptValidation.tsx`
-
-- Spinner durante analise
-- Verde: "Comprovante validado"
-- Amarelo: "Divergencia encontrada" com detalhes (data/valor)
-- Cinza: "Nao foi possivel validar"
-
-## Passo 5: Integrar no `ExpenseFormDialog`
+### 3. Integrar no `ExpenseFormDialog`
 
 **Arquivo:** `src/components/expenses/ExpenseFormDialog.tsx`
 
-- Dispara validacao ao anexar arquivo
-- Exibe `ReceiptValidation` abaixo do upload
-- Revalida se usuario alterar data/valor
-- Nao bloqueia envio (apenas warning)
+- No `handleFileChange`, antes de gerar preview e disparar validacao:
+  - Chamar `convertHeicToJpeg(file)` 
+  - Usar o arquivo convertido para preview, validacao e upload
+  - Mostrar um estado de "convertendo..." enquanto processa
+
+### 4. Atualizar `ReceiptUpload`
+
+**Arquivo:** `src/components/expenses/ReceiptUpload.tsx`
+
+- Adicionar `image/heic,image/heif` nos `accept` dos inputs de camera e galeria para que o seletor de arquivos aceite HEIC
 
 ## Arquivos
 
 | Arquivo | Acao |
 |---------|------|
-| `supabase/functions/validate-receipt/index.ts` | Criar |
-| `supabase/config.toml` | Editar |
-| `src/hooks/useValidateReceipt.ts` | Criar |
-| `src/components/expenses/ReceiptValidation.tsx` | Criar |
-| `src/components/expenses/ExpenseFormDialog.tsx` | Editar |
+| `src/lib/convertHeic.ts` | Criar |
+| `src/components/expenses/ExpenseFormDialog.tsx` | Editar (handleFileChange) |
+| `src/components/expenses/ReceiptUpload.tsx` | Editar (accept attributes) |
+| `package.json` | Adicionar `heic2any` |
 
-## Ordem de execucao
+## Fluxo
 
-1. Solicitar e salvar `OPENAI_API_KEY` como secret
-2. Criar edge function
-3. Criar hook + componente
-4. Integrar no formulario
-5. Testar
+1. Usuario seleciona foto HEIC do iPhone
+2. Frontend detecta formato HEIC
+3. `heic2any` converte para JPEG automaticamente
+4. Preview e exibido normalmente
+5. Validacao via OpenAI Vision funciona com o JPEG convertido
+6. Upload salva o arquivo ja convertido em JPEG
 
