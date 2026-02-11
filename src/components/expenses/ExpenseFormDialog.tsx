@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -51,9 +51,11 @@ import { useDashboardContext, useCreateExpenseInReport, useReportForDate, Curren
 import { PAYMENT_METHOD_LABELS, formatCurrency } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
+import { ReceiptValidation } from './ReceiptValidation';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useValidateReceipt } from '@/hooks/useValidateReceipt';
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -85,6 +87,7 @@ export function ExpenseFormDialog({
   const [selectedCategory, setSelectedCategory] = useState<ExpenseType | null>(null);
   const [currentReportForDate, setCurrentReportForDate] = useState<CurrentReport | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const receiptValidation = useValidateReceipt();
 
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
@@ -130,6 +133,7 @@ export function ExpenseFormDialog({
   // Watch category changes
   const watchedCategoryId = form.watch('category_id');
   const watchedDate = form.watch('date');
+  const watchedAmount = form.watch('amount');
   
   useEffect(() => {
     if (watchedCategoryId && categories) {
@@ -187,6 +191,15 @@ export function ExpenseFormDialog({
     }
   }, [expense, form, open, dashboardContext]);
 
+  const triggerValidation = useCallback((file: File) => {
+    const dateVal = form.getValues('date');
+    const amountStr = form.getValues('amount');
+    if (!dateVal || !amountStr) return;
+    const formDate = format(dateVal, 'yyyy-MM-dd');
+    const formAmountCents = Math.round(parseFloat(amountStr.replace(',', '.') || '0') * 100);
+    receiptValidation.validate(file, formDate, formAmountCents);
+  }, [form, receiptValidation]);
+
   const handleFileChange = (file: File | null) => {
     setReceiptFile(file);
     
@@ -196,10 +209,20 @@ export function ExpenseFormDialog({
         setReceiptPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
+      // Trigger AI validation
+      triggerValidation(file);
     } else {
       setReceiptPreview(null);
+      receiptValidation.reset();
     }
   };
+
+  // Re-validate when date or amount changes after file is attached
+  useEffect(() => {
+    if (receiptFile && receiptFile.type.startsWith('image/') && receiptValidation.status !== 'idle' && receiptValidation.status !== 'validating') {
+      triggerValidation(receiptFile);
+    }
+  }, [watchedDate, watchedAmount]);
 
   const uploadReceipt = async (expenseId: string): Promise<string | null> => {
     if (!receiptFile || !profile?.org_id) return null;
@@ -533,6 +556,11 @@ export function ExpenseFormDialog({
             disabled={isReadOnly}
             error={requireReceiptError}
             onFileChange={handleFileChange}
+          />
+          <ReceiptValidation
+            status={receiptValidation.status}
+            divergences={receiptValidation.divergences}
+            errorMessage={receiptValidation.errorMessage}
           />
         </div>
 
