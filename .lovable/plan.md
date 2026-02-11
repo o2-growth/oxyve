@@ -1,111 +1,72 @@
 
-# Relatorio: Sistema de Midias/Comprovantes na Area de Aprovacoes
 
-## Diagnostico
+# Validacao de Comprovantes via OpenAI Vision
 
-Foram identificados **3 problemas criticos** que impedem a visualizacao de comprovantes na area de aprovacao:
+## Resumo
 
----
+Ao anexar um comprovante, o sistema envia a imagem para a API da OpenAI (GPT-4o / GPT-4o-mini com vision) via edge function para extrair data e valor, comparando com o formulario. Divergencias geram aviso visual.
 
-### Problema 1: Query do Relatorio NAO busca dados de comprovante
+## Passo 1: Configurar a chave da OpenAI
 
-O hook `useReport` (usado no `ReportDetail.tsx`) busca as despesas do relatorio com este select:
+Antes de implementar, vou solicitar sua chave da OpenAI via ferramenta segura de secrets. Ela ficara armazenada como `OPENAI_API_KEY` no backend, nunca exposta no frontend.
 
-```text
-id, date, description, amount_cents, currency, category:expense_categories(name)
-```
+## Passo 2: Edge Function `validate-receipt`
 
-Os campos `receipt_path` e `is_out_of_policy` **NAO estao incluidos** na query. Mesmo que existam comprovantes no banco, eles nunca chegam ao frontend.
+**Arquivo:** `supabase/functions/validate-receipt/index.ts`
 
-**Correcao:** Adicionar `receipt_path` e `is_out_of_policy` no select de `report_items` dentro do `useReport` em `src/hooks/useReports.ts` (linha 124).
+- Recebe imagem em base64 + tipo MIME do frontend
+- Chama `https://api.openai.com/v1/chat/completions` com modelo `gpt-4o-mini` (vision, rapido, barato)
+- Usa **tool calling** para extrair dados estruturados:
+  - `extracted_date` (YYYY-MM-DD)
+  - `extracted_amount_cents` (inteiro)
+  - `confidence` (high/medium/low)
+- Retorna JSON ao frontend
+- Trata erros (401, 429, 500)
 
----
+**Config:** Adicionar `[functions.validate-receipt]` com `verify_jwt = false` no `supabase/config.toml`
 
-### Problema 2: Bucket privado com metodo publico de URL
+## Passo 3: Hook `useValidateReceipt`
 
-O `ReportDetail.tsx` usa `getPublicUrl` para gerar o link do comprovante:
+**Arquivo:** `src/hooks/useValidateReceipt.ts`
 
-```typescript
-const getReceiptUrl = (receiptPath: string) => {
-  const { data } = supabase.storage.from('receipts').getPublicUrl(receiptPath);
-  return data.publicUrl;
-};
-```
+- Converte File para base64
+- Chama edge function via `supabase.functions.invoke('validate-receipt', ...)`
+- Retorna estado: `idle | validating | success | warning | error`
+- Compara data e valor extraidos com os do formulario
 
-Porem o bucket `receipts` e **privado** (`is_public: false`). URLs publicas nao funcionam em buckets privados -- retornam 400 ou imagem vazia.
+## Passo 4: Componente `ReceiptValidation`
 
-**Correcao:** Trocar `getPublicUrl` por `createSignedUrl` com tempo de expiracao (ex: 1 hora).
+**Arquivo:** `src/components/expenses/ReceiptValidation.tsx`
 
----
+- Spinner durante analise
+- Verde: "Comprovante validado"
+- Amarelo: "Divergencia encontrada" com detalhes (data/valor)
+- Cinza: "Nao foi possivel validar"
 
-### Problema 3: Nenhum comprovante foi enviado ainda
+## Passo 5: Integrar no `ExpenseFormDialog`
 
-A tabela `storage.objects` para o bucket `receipts` esta **vazia** -- nenhum arquivo foi de fato uploadeado. Isso pode indicar que o upload em `ExpenseFormDialog` esta falhando silenciosamente, ou simplesmente ninguem anexou comprovantes ainda.
-
-O codigo de upload em `ExpenseFormDialog` esta implementado corretamente (linhas 203-217), mas os erros podem nao estar sendo exibidos ao usuario se o upload falhar.
-
----
-
-## O que JA funciona
-
-| Item | Status |
-|------|--------|
-| Bucket `receipts` criado | OK |
-| Politicas RLS do bucket (upload, leitura propria, leitura por gestor) | OK |
-| Componente `ReceiptUpload` (camera, galeria, arquivo) | OK |
-| Logica de upload no `ExpenseFormDialog` | OK (mas sem feedback de erro visivel) |
-| Funcao RPC `admin_decide_report` (aprovar/reprovar) | OK |
-| Funcao RPC `mark_report_paid` | OK |
-| ApprovalQueue com fila de aprovacao | OK |
-
----
-
-## Plano de Correcao
-
-### 1. Corrigir a query do `useReport` 
-**Arquivo:** `src/hooks/useReports.ts`
-- Alterar o select de report_items para incluir `receipt_path` e `is_out_of_policy`:
-```
-id, expense:expenses(id, date, description, amount_cents, currency, receipt_path, is_out_of_policy, category:expense_categories(name))
-```
-
-### 2. Corrigir geracao de URL no ReportDetail
-**Arquivo:** `src/pages/app/ReportDetail.tsx`
-- Trocar `getPublicUrl` por `createSignedUrl` com expiracao de 3600 segundos
-- A funcao passa a ser assincrona, entao ajustar para gerar URLs assinadas ao carregar a pagina ou ao clicar em "ver comprovante"
-
-### 3. Melhorar feedback de erro no upload
 **Arquivo:** `src/components/expenses/ExpenseFormDialog.tsx`
-- Adicionar `toast.error` caso o upload falhe, para que o usuario saiba que o comprovante nao foi salvo
 
-### 4. Exibir comprovantes na ApprovalQueue (mobile e desktop)
-**Arquivo:** `src/components/reports/ApprovalQueue.tsx`
-- Ao clicar em "Ver" um relatorio, o usuario ja e redirecionado para `ReportDetail` que mostrara os comprovantes apos a correcao acima
+- Dispara validacao ao anexar arquivo
+- Exibe `ReceiptValidation` abaixo do upload
+- Revalida se usuario alterar data/valor
+- Nao bloqueia envio (apenas warning)
 
----
+## Arquivos
 
-## Secao Tecnica
+| Arquivo | Acao |
+|---------|------|
+| `supabase/functions/validate-receipt/index.ts` | Criar |
+| `supabase/config.toml` | Editar |
+| `src/hooks/useValidateReceipt.ts` | Criar |
+| `src/components/expenses/ReceiptValidation.tsx` | Criar |
+| `src/components/expenses/ExpenseFormDialog.tsx` | Editar |
 
-### Mudancas em arquivos:
+## Ordem de execucao
 
-1. **`src/hooks/useReports.ts`** (linha ~124)
-   - Select atual: `id, expense:expenses(id, date, description, amount_cents, currency, category:expense_categories(name))`
-   - Select corrigido: `id, expense:expenses(id, date, description, amount_cents, currency, receipt_path, is_out_of_policy, category:expense_categories(name))`
+1. Solicitar e salvar `OPENAI_API_KEY` como secret
+2. Criar edge function
+3. Criar hook + componente
+4. Integrar no formulario
+5. Testar
 
-2. **`src/pages/app/ReportDetail.tsx`** (linha ~80-83)
-   - Trocar `getPublicUrl` por `createSignedUrl`:
-   ```typescript
-   const getReceiptUrl = async (receiptPath: string) => {
-     const { data, error } = await supabase.storage
-       .from('receipts')
-       .createSignedUrl(receiptPath, 3600);
-     if (error) throw error;
-     return data.signedUrl;
-   };
-   ```
-   - Ajustar os handlers de clique para usar URLs assinadas (abrir em nova aba apos gerar a URL)
-
-3. **`src/components/expenses/ExpenseFormDialog.tsx`** (~linha 256)
-   - Adicionar tratamento de erro com toast no bloco de upload de comprovante
-
-Nenhuma mudanca de banco de dados e necessaria -- bucket e politicas RLS ja estao corretos.
