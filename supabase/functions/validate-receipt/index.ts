@@ -68,7 +68,7 @@ serve(async (req) => {
               },
               {
                 type: "image_url",
-                image_url: { url: dataUrl, detail: "low" },
+                image_url: { url: dataUrl, detail: "high" },
               },
             ],
           },
