@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -267,6 +268,8 @@ export function ExpenseFormDialog({
       }
 
       onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao salvar despesa. Verifique o comprovante.');
     } finally {
       setIsUploading(false);
     }
