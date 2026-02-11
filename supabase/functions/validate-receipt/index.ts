@@ -29,6 +29,20 @@ serve(async (req) => {
       );
     }
 
+    // Validate supported formats
+    const supportedTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
+    if (!supportedTypes.includes(mime_type)) {
+      return new Response(
+        JSON.stringify({
+          extracted_date: null,
+          extracted_amount_cents: null,
+          confidence: "low",
+          error: "Formato não suportado. Use PNG, JPEG, GIF ou WebP.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const dataUrl = `data:${mime_type};base64,${image_base64}`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
