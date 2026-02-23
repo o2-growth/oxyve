@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import { useReport, useRemoveExpenseFromReport } from '@/hooks/useReports';
 import { useSubmitReportRpc } from '@/hooks/useCurrentReport';
 import { useApproveReportRpc, useMarkReportPaidRpc } from '@/hooks/useReportActions';
@@ -20,7 +22,8 @@ import { formatCurrency, formatDate } from '@/lib/constants';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet, 
-  MessageSquare, Clock, AlertTriangle, Loader2, Paperclip, ExternalLink 
+  MessageSquare, Clock, AlertTriangle, Loader2, Paperclip, ExternalLink,
+  ListChecks
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -45,11 +48,32 @@ export default function ReportDetail() {
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isPaidOpen, setIsPaidOpen] = useState(false);
   const [comment, setComment] = useState('');
+  const [reviewedExpenses, setReviewedExpenses] = useState<Set<string>>(new Set());
 
   const isOwner = report?.user_id === user?.id;
   const canEdit = isOwner && report?.status === 'draft';
   const canApprove = isManager && !isOwner && report?.status === 'submitted';
   const canMarkPaid = isAdmin && report?.status === 'approved';
+
+  const totalExpenses = report?.items?.length || 0;
+  const reviewedCount = reviewedExpenses.size;
+  const allReviewed = totalExpenses > 0 && reviewedCount >= totalExpenses;
+  const reviewProgress = totalExpenses > 0 ? (reviewedCount / totalExpenses) * 100 : 0;
+
+  const toggleReviewed = (expenseId: string) => {
+    setReviewedExpenses(prev => {
+      const next = new Set(prev);
+      if (next.has(expenseId)) next.delete(expenseId);
+      else next.add(expenseId);
+      return next;
+    });
+  };
+
+  const markAllReviewed = () => {
+    if (report?.items) {
+      setReviewedExpenses(new Set(report.items.map((item: any) => item.expense.id)));
+    }
+  };
 
   const handleSubmit = async () => {
     await submitReport.mutateAsync(id!);
@@ -162,6 +186,8 @@ export default function ReportDetail() {
                 onClick={() => setIsRejectOpen(true)} 
                 className="gap-2"
                 size={isMobile ? "default" : "sm"}
+                disabled={!allReviewed}
+                title={!allReviewed ? `Revise todas as ${totalExpenses} despesas antes` : undefined}
               >
                 <XCircle className="h-4 w-4 text-destructive" />
                 Reprovar
@@ -170,6 +196,8 @@ export default function ReportDetail() {
                 onClick={() => setIsApproveOpen(true)} 
                 className="gap-2"
                 size={isMobile ? "default" : "sm"}
+                disabled={!allReviewed}
+                title={!allReviewed ? `Revise todas as ${totalExpenses} despesas antes` : undefined}
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Aprovar
@@ -211,9 +239,16 @@ export default function ReportDetail() {
                   {report.items.map((item: any) => (
                     <div 
                       key={item.id} 
-                      className="rounded-lg border p-3 space-y-2"
+                      className={`rounded-lg border p-3 space-y-2 transition-colors ${canApprove && reviewedExpenses.has(item.expense.id) ? 'border-primary/40 bg-primary/5' : ''}`}
                     >
                       <div className="flex items-start justify-between gap-2">
+                        {canApprove && (
+                          <Checkbox
+                            checked={reviewedExpenses.has(item.expense.id)}
+                            onCheckedChange={() => toggleReviewed(item.expense.id)}
+                            className="mt-1 shrink-0"
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <p className="font-medium truncate">{item.expense.description}</p>
                           <p className="text-sm text-muted-foreground">
@@ -259,6 +294,7 @@ export default function ReportDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {canApprove && <TableHead className="w-12">Revisada</TableHead>}
                       <TableHead>Data</TableHead>
                       <TableHead>Descrição</TableHead>
                       <TableHead>Categoria</TableHead>
@@ -269,7 +305,15 @@ export default function ReportDetail() {
                   </TableHeader>
                   <TableBody>
                     {report.items.map((item: any) => (
-                      <TableRow key={item.id}>
+                      <TableRow key={item.id} className={canApprove && reviewedExpenses.has(item.expense.id) ? 'bg-primary/5' : ''}>
+                        {canApprove && (
+                          <TableCell>
+                            <Checkbox
+                              checked={reviewedExpenses.has(item.expense.id)}
+                              onCheckedChange={() => toggleReviewed(item.expense.id)}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>{formatDate(item.expense.date)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -374,6 +418,34 @@ export default function ReportDetail() {
               <StatusBadge status={report.status} type="report" />
             </div>
             <Separator />
+            {canApprove && totalExpenses > 0 && (
+              <>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <ListChecks className="h-4 w-4" />
+                      Revisão
+                    </span>
+                    <span className={allReviewed ? 'text-primary font-medium' : ''}>
+                      {reviewedCount} de {totalExpenses}
+                    </span>
+                  </div>
+                  <Progress value={reviewProgress} className="h-2" />
+                  {!allReviewed && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 text-xs"
+                      onClick={markAllReviewed}
+                    >
+                      <CheckCircle2 className="h-3 w-3" />
+                      Marcar todas como revisadas
+                    </Button>
+                  )}
+                </div>
+                <Separator />
+              </>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Despesas</span>
               <span>{report.expense_count || 0}</span>
