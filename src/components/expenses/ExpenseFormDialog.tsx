@@ -107,9 +107,7 @@ export function ExpenseFormDialog({
     payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
     is_reimbursable: z.boolean(),
     notes: z.string().optional(),
-    cost_center_id: policy?.require_cost_center 
-      ? z.string().min(1, 'Centro de custo é obrigatório') 
-      : z.string().optional(),
+    cost_center_id: z.string().optional(),
     project_id: policy?.require_project 
       ? z.string().min(1, 'Projeto é obrigatório') 
       : z.string().optional(),
@@ -496,40 +494,8 @@ export function ExpenseFormDialog({
           />
         </div>
 
-        {/* Cost Center and Project */}
+        {/* Project */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="cost_center_id"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Centro de Custo
-                  {policy?.require_cost_center && <span className="text-destructive"> *</span>}
-                </FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={isReadOnly}
-                >
-                  <FormControl>
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {costCenters.map((cc) => (
-                      <SelectItem key={cc.id} value={cc.id}>
-                        {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           <FormField
             control={form.control}
             name="project_id"

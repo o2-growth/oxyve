@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
 import { Filter, X } from 'lucide-react';
-import { useCategories, useCostCenters, useProjects } from '@/hooks/useExpenses';
+import { useCategories, useProjects } from '@/hooks/useExpenses';
 import { PAYMENT_METHOD_LABELS } from '@/lib/constants';
 
 export interface AdvancedFilters {
@@ -39,7 +39,6 @@ export function ExpenseFiltersPopover({
 }: ExpenseFiltersPopoverProps) {
   const [open, setOpen] = useState(false);
   const { data: categories } = useCategories();
-  const { data: costCenters } = useCostCenters();
   const { data: projects } = useProjects();
 
   const handleClear = () => {
@@ -128,31 +127,6 @@ export function ExpenseFiltersPopover({
                 </SelectContent>
               </Select>
             </div>
-
-            {/* Cost Center */}
-            {costCenters && costCenters.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Centro de custo</Label>
-                <Select
-                  value={filters.costCenterId || 'all'}
-                  onValueChange={(v) =>
-                    onChange({ ...filters, costCenterId: v === 'all' ? undefined : v })
-                  }
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    {costCenters.map((cc) => (
-                      <SelectItem key={cc.id} value={cc.id}>
-                        {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Project */}
             {projects && projects.length > 0 && (
