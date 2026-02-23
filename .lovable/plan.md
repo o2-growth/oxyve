@@ -1,35 +1,43 @@
 
+# Atualizar Formas de Pagamento
 
-# Criar conta admin para telma.feijo@o2inc.com.br
+## O que muda
 
-## Situacao atual
+As formas de pagamento serao atualizadas para corresponder exatamente ao que esta na imagem de referencia:
 
-- Existe uma organizacao "Minha Empresa" (id: `21b53d25-aa01-45dc-a64a-9f239a32d4f7`)
-- O usuario "andrey lopes" ja e admin dessa org
-- Nao existe convite pendente para telma.feijo@o2inc.com.br
+| Valor no banco | Label atual | Novo label |
+|---|---|---|
+| corporate_card | Cartao Corporativo | Cartao Corporativo |
+| personal_card | Cartao Pessoal | Cartao Pessoal (reembolsavel) |
+| cash | Dinheiro | Dinheiro (reembolsavel) |
+| other | Outro | **Removido** |
 
-## O que sera feito
+## Alteracoes
 
-1. **Inserir um convite na tabela `org_invites`** com:
-   - email: `telma.feijo@o2inc.com.br`
-   - org_id: `21b53d25-aa01-45dc-a64a-9f239a32d4f7`
-   - role: `admin`
-   - invited_by: usuario atual (andrey)
-   - expires_at: 30 dias a partir de agora (para dar tempo)
+### 1. Banco de dados - Remover valor "other" do enum
 
-2. **Registrar o dominio `o2inc.com.br`** na tabela `org_domains` para que futuros usuarios desse dominio entrem automaticamente na org
+- Migrar despesas existentes com `payment_method = 'other'` para `'cash'` (se houver)
+- Remover o valor `other` do enum `payment_method`
 
-## Fluxo para a Telma
+### 2. Labels - `src/lib/constants.ts`
 
-1. Telma acessa o app e clica em "Criar conta"
-2. Preenche email `telma.feijo@o2inc.com.br`, senha e nome
-3. O sistema `bootstrap_user` detecta o convite pendente
-4. Perfil e criado automaticamente com role `admin`
-5. Telma tera acesso a aprovacao de relatorios, politica de despesas e gestao de equipe
+- Atualizar `PAYMENT_METHOD_LABELS` para os novos textos com "(reembolsavel)"
+- Remover a entrada `other`
+
+### 3. Formulario - `src/components/expenses/ExpenseFormDialog.tsx`
+
+- Atualizar o schema Zod para aceitar apenas 3 valores: `personal_card`, `corporate_card`, `cash`
+
+### 4. Hook - `src/hooks/useExpenses.ts`
+
+- Atualizar o type `ExpenseInput.payment_method` removendo `'other'`
+- Atualizar o type `Expense.payment_method` removendo `'other'`
+
+### 5. Tabela e filtros
+
+- Verificar se `ExpensesTable` e filtros referenciam `other` e remover
 
 ## Detalhes tecnicos
 
-- Nenhuma alteracao de codigo necessaria
-- Apenas operacoes de dados (INSERT) nas tabelas `org_invites` e `org_domains`
-- O bootstrap_user ja trata convites pendentes corretamente
-
+- A migracao SQL recria o enum sem `other` usando a tecnica de: criar novo enum, alterar coluna, dropar antigo, renomear
+- Nenhuma logica de negocio depende especificamente de `other`, entao a remocao e segura
