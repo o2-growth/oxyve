@@ -133,6 +133,12 @@ export function useReport(id: string) {
         .eq('report_id', id)
         .order('decided_at', { ascending: false });
 
+      // Fetch expense reviews for this report
+      const { data: expenseReviews } = await supabase
+        .from('expense_reviews' as any)
+        .select('*')
+        .eq('report_id', id);
+
       const approvalsWithProfiles = await Promise.all(
         (approvals || []).map(async (approval) => {
           const { data: approverData } = await supabase
@@ -144,18 +150,34 @@ export function useReport(id: string) {
         })
       );
 
-      const total_cents = items?.reduce(
-        (sum, item: any) => sum + (item.expense?.amount_cents || 0),
+      // Map expense reviews by expense_id for quick lookup
+      const reviewsByExpenseId: Record<string, any> = {};
+      (expenseReviews || []).forEach((review: any) => {
+        reviewsByExpenseId[review.expense_id] = review;
+      });
+
+      // Attach review info to each item
+      const itemsWithReviews = (items || []).map((item: any) => {
+        const review = reviewsByExpenseId[item.expense?.id];
+        return {
+          ...item,
+          review_decision: review?.decision || null,
+          review_comment: review?.comment || null,
+        };
+      });
+
+      const total_cents = itemsWithReviews.reduce(
+        (sum: number, item: any) => sum + (item.expense?.amount_cents || 0),
         0
       ) || 0;
 
       return {
         ...report,
         user: profileData,
-        items: items || [],
+        items: itemsWithReviews,
         approvals: approvalsWithProfiles || [],
         total_cents,
-        expense_count: items?.length || 0,
+        expense_count: itemsWithReviews.length,
       } as ReportWithItems;
     },
     enabled: !!id,
