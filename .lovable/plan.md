@@ -1,43 +1,27 @@
 
-# Atualizar Formas de Pagamento
 
-## O que muda
+# Remover Centro de Custo do formulario de despesas
 
-As formas de pagamento serao atualizadas para corresponder exatamente ao que esta na imagem de referencia:
+## O que sera feito
 
-| Valor no banco | Label atual | Novo label |
-|---|---|---|
-| corporate_card | Cartao Corporativo | Cartao Corporativo |
-| personal_card | Cartao Pessoal | Cartao Pessoal (reembolsavel) |
-| cash | Dinheiro | Dinheiro (reembolsavel) |
-| other | Outro | **Removido** |
+Remover o campo "Centro de Custo" do formulario de criacao/edicao de despesas (`ExpenseFormDialog`). O campo continuara existindo no banco de dados mas nao sera exibido no formulario.
 
 ## Alteracoes
 
-### 1. Banco de dados - Remover valor "other" do enum
+### 1. `src/components/expenses/ExpenseFormDialog.tsx`
 
-- Migrar despesas existentes com `payment_method = 'other'` para `'cash'` (se houver)
-- Remover o valor `other` do enum `payment_method`
+- Remover o campo `cost_center_id` do schema Zod de validacao
+- Remover o valor default `cost_center_id` do formulario
+- Remover o bloco de `FormField` que renderiza o select de Centro de Custo (linhas ~501-535)
+- Remover a referencia a `cost_center_id` no reset do formulario ao carregar/limpar
+- Manter `cost_center_id: null` no submit para nao quebrar o tipo
 
-### 2. Labels - `src/lib/constants.ts`
+### 2. `src/components/expenses/ExpenseFiltersPopover.tsx`
 
-- Atualizar `PAYMENT_METHOD_LABELS` para os novos textos com "(reembolsavel)"
-- Remover a entrada `other`
+- Remover o filtro de Centro de Custo do popover de filtros avancados
+- Remover o import de `useCostCenters`
 
-### 3. Formulario - `src/components/expenses/ExpenseFormDialog.tsx`
+### 3. Sem alteracao no banco
 
-- Atualizar o schema Zod para aceitar apenas 3 valores: `personal_card`, `corporate_card`, `cash`
+- A coluna `cost_center_id` permanece na tabela (nullable), apenas nao sera mais preenchida pelo formulario
 
-### 4. Hook - `src/hooks/useExpenses.ts`
-
-- Atualizar o type `ExpenseInput.payment_method` removendo `'other'`
-- Atualizar o type `Expense.payment_method` removendo `'other'`
-
-### 5. Tabela e filtros
-
-- Verificar se `ExpensesTable` e filtros referenciam `other` e remover
-
-## Detalhes tecnicos
-
-- A migracao SQL recria o enum sem `other` usando a tecnica de: criar novo enum, alterar coluna, dropar antigo, renomear
-- Nenhuma logica de negocio depende especificamente de `other`, entao a remocao e segura
