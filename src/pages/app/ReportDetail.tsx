@@ -57,7 +57,7 @@ export default function ReportDetail() {
 
   const isOwner = report?.user_id === user?.id;
   const canEdit = isOwner && report?.status === 'draft';
-  const canApprove = isManager && !isOwner && report?.status === 'submitted';
+  const canApprove = isManager && (!isOwner || isAdmin) && report?.status === 'submitted';
   const canMarkPaid = isAdmin && report?.status === 'approved';
   const showReviewStatus = report?.status === 'rejected' || report?.status === 'approved' || report?.status === 'submitted';
 
