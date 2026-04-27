@@ -28,11 +28,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useUnreadDecisions } from '@/hooks/useUnreadDecisions';
 
 const mainNavItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Início' },
   { to: '/app/expenses', icon: Receipt, label: 'Despesas' },
-  { to: '/app/reports', icon: FileText, label: 'Relatórios' },
+  { to: '/app/reports', icon: FileText, label: 'Relatórios', badgeKey: 'unreadDecisions' as const },
   { to: '/app/advances', icon: Wallet, label: 'Adiantamentos' },
 ];
 
@@ -45,6 +46,8 @@ export function SidebarNav() {
   const location = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === 'collapsed';
+  const { data: unreadDecisions } = useUnreadDecisions();
+  const unreadCount = unreadDecisions?.length ?? 0;
 
   const isActive = (to: string, matchPrefix?: string) => {
     if (matchPrefix) {
@@ -75,26 +78,37 @@ export function SidebarNav() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.to)}
-                    tooltip={item.label}
-                  >
-                    <NavLink 
-                      to={item.to}
-                      className={cn(
-                        "transition-colors",
-                        isActive(item.to) && "border-l-2 border-sidebar-primary"
-                      )}
+              {mainNavItems.map((item) => {
+                const showBadge = item.badgeKey === 'unreadDecisions' && unreadCount > 0;
+                return (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.to)}
+                      tooltip={item.label}
                     >
-                      <item.icon className="h-5 w-5" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                      <NavLink
+                        to={item.to}
+                        className={cn(
+                          "transition-colors",
+                          isActive(item.to) && "border-l-2 border-sidebar-primary"
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        <span className="flex-1">{item.label}</span>
+                        {showBadge && (
+                          <span
+                            aria-label={`${unreadCount} decisão${unreadCount === 1 ? '' : 'ões'} não vista${unreadCount === 1 ? '' : 's'}`}
+                            className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground"
+                          >
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                        )}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
