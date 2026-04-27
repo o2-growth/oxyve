@@ -42,6 +42,17 @@ export function ReceiptValidation({ status, divergences, errorMessage }: Receipt
     );
   }
 
+  if (status === 'unavailable') {
+    return (
+      <div className="rounded-md border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 p-3">
+        <div className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
+          <Info className="h-4 w-4 shrink-0" />
+          <span>{errorMessage || 'OCR indisponível no momento. Preencha os dados manualmente.'}</span>
+        </div>
+      </div>
+    );
+  }
+
   if (status === 'error') {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
