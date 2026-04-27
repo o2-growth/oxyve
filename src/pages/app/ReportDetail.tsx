@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -18,6 +18,7 @@ import { useReport, useRemoveExpenseFromReport } from '@/hooks/useReports';
 import { useSubmitReportRpc } from '@/hooks/useCurrentReport';
 import { useApproveReportRpc, useMarkReportPaidRpc } from '@/hooks/useReportActions';
 import { useReviewExpense } from '@/hooks/useReviewExpense';
+import { useMarkReportDecisionsRead } from '@/hooks/useUnreadDecisions';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { toast } from 'sonner';
@@ -44,6 +45,16 @@ export default function ReportDetail() {
   const markAsPaid = useMarkReportPaidRpc();
   const removeExpense = useRemoveExpenseFromReport();
   const reviewExpense = useReviewExpense();
+  const markDecisionsRead = useMarkReportDecisionsRead();
+
+  // Quando o owner abre o próprio relatório, marca decisões como lidas
+  // (alimenta o badge de "decisões não vistas" no menu).
+  useEffect(() => {
+    if (!report || !user || report.user_id !== user.id || !id) return;
+    markDecisionsRead.mutate(id);
+    // markDecisionsRead é estável (useMutation); excluído do array para evitar loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report?.id, report?.user_id, user?.id, id]);
 
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);

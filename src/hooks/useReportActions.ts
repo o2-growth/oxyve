@@ -23,11 +23,23 @@ export function useApproveReportRpc() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, { decision }) => {
+    onSuccess: async (_, { reportId, decision, comment }) => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
+      queryClient.invalidateQueries({ queryKey: ['unread-decisions'] });
       toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
+
+      // Disparar notificação por email — não-bloqueante (falha de email não
+      // impede o fluxo de aprovação). Edge function já trata auto-aprovação,
+      // RESEND_API_KEY ausente (503), e owner sem email.
+      try {
+        await supabase.functions.invoke('send-report-decision-email', {
+          body: { report_id: reportId, decision, comment: comment ?? null },
+        });
+      } catch (err) {
+        console.warn('send-report-decision-email failed:', err);
+      }
     },
     onError: (error) => {
       toast.error('Erro ao processar: ' + error.message);
