@@ -12,8 +12,10 @@ import { FileText, TrendingUp, Clock, CheckCircle2, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
+import { MonthlyTotalsCard } from '@/components/dashboard/MonthlyTotalsCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
 import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
+import { useMonthlyTotals } from '@/hooks/useMonthlyTotals';
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
@@ -22,6 +24,7 @@ export default function Dashboard() {
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: reports, isLoading: reportsLoading } = useReports();
   const { data: dashboardContext, isLoading: contextLoading } = useDashboardContext();
+  const monthlyTotals = useMonthlyTotals();
 
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
 
@@ -54,11 +57,39 @@ export default function Dashboard() {
 
       {/* Current Period Report Card */}
       <div className="mb-6 md:mb-8">
-        <CurrentReportCard 
+        <CurrentReportCard
           onAddExpense={() => setExpenseDialogOpen(true)}
           reportExpenses={currentReportExpenses}
         />
       </div>
+
+      {/* Visão Mensal - total consolidado vs. mês anterior */}
+      <section className="mb-6 md:mb-8">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Visão Mensal
+        </h2>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+          <MonthlyTotalsCard
+            title="Total este mês"
+            description={isManager ? 'Despesas da organização' : 'Suas despesas'}
+            totalCents={monthlyTotals.data?.current_month_cents ?? 0}
+            count={monthlyTotals.data?.current_month_count ?? 0}
+            percentChange={monthlyTotals.data?.percent_change ?? null}
+            isLoading={monthlyTotals.isLoading}
+            isError={monthlyTotals.isError}
+            onRetry={() => monthlyTotals.refetch()}
+          />
+          <MonthlyTotalsCard
+            title="Total mês anterior"
+            description={isManager ? 'Despesas da organização' : 'Suas despesas'}
+            totalCents={monthlyTotals.data?.previous_month_cents ?? 0}
+            count={monthlyTotals.data?.previous_month_count ?? 0}
+            isLoading={monthlyTotals.isLoading}
+            isError={monthlyTotals.isError}
+            onRetry={() => monthlyTotals.refetch()}
+          />
+        </div>
+      </section>
 
       {/* Stats Cards - 2 cols on mobile, 4 on desktop */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
