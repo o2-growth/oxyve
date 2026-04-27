@@ -12,10 +12,30 @@
 | [1.3](./1.3-notificacoes-aprovacao.md) | Notificações ao funcionário em aprovação/rejeição | M | Approved | `/agents:dev` |
 | [1.4](./1.4-mobile-foundation.md) | Quick wins mobile foundation | S | Approved | `/agents:dev` |
 
-## Próximos Sprints
+## Sprint 2 — Aprovação BEM FEITA (Epic 2)
 
-- **Sprint 2 — Aprovação BEM FEITA** (Epic 2, 6 stories): a detalhar após Sprint 1.
-- **Sprint 3 — Polish dos Fluxos Core** (Epic 3, 5 stories): a detalhar após Sprint 2.
+| Story | Título | Esforço | Status | Agente sugerido |
+|-------|--------|---------|--------|-----------------|
+| [2.1](./2.1-touch-targets-fila-aprovacao.md) | Touch targets ≥44px na fila | XS | Approved | `/agents:dev` |
+| [2.2](./2.2-fila-destaca-fora-politica.md) | Fila destaca despesas fora da política | S | Approved | `/agents:dev` |
+| [2.3](./2.3-aprovacao-parcial-despesa.md) | Aprovação parcial — rejeitar despesa individual | M | Approved | `/agents:dev` |
+| [2.4](./2.4-historico-aprovacao.md) | Histórico de aprovação visível ao funcionário | S | Approved | `/agents:dev` |
+| [2.5](./2.5-mensagens-claras-aprovacao.md) | Mensagens claras + error state | XS | Approved | `/agents:dev` |
+| [2.6](./2.6-confirmacao-destrutiva-rejeicao.md) | Confirmação destrutiva ao rejeitar — drawer + 10 chars | S | Approved | `/agents:dev` |
+
+### Ordem sugerida (Sprint 2)
+1. **2.1** Touch targets (XS, depende de 1.4)
+2. **2.5** Toasts e error states (XS, paralelizável)
+3. **2.2** Sinalização out-of-policy (S)
+4. **2.6** Confirmação destrutiva (S, depende de 1.4 e 2.5)
+5. **2.4** Histórico de aprovação (S)
+6. **2.3** Aprovação parcial (M, soft de 2.4 e 2.5)
+
+> **Nota de coordenação:** as stories 2.1, 2.2, 2.5 e 2.6 tocam `ApprovalQueue.tsx`. Sugestão: agrupar 2.5+2.6 em 1 PR ou serializar para evitar conflitos. As stories 2.3, 2.4 e parte de 2.6 tocam `ReportDetail.tsx` — mesma sugestão.
+
+## Sprint 3 — Polish dos Fluxos Core (Epic 3)
+
+A detalhar após Sprint 2.
 
 ## Fluxo de cada story
 
