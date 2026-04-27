@@ -117,8 +117,11 @@ serve(async (req) => {
     const ownerName = ownerProfileRes.data?.full_name || "Colaborador";
     const approverName = approverProfileRes.data?.full_name || "Gestor";
 
+    // Sanitiza o título antes de usar em header (subject) — defesa contra
+    // header injection via \r\n. HTML body usa escapeHtml separadamente.
+    const safeTitle = report.title.replace(/[\r\n]+/g, " ").trim();
     const decisionLabel = payload.decision === "approved" ? "aprovado" : "rejeitado";
-    const subject = `Seu relatório "${report.title}" foi ${decisionLabel}`;
+    const subject = `Seu relatório "${safeTitle}" foi ${decisionLabel}`;
     const totalFormatted = new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency: "BRL",
@@ -128,7 +131,7 @@ serve(async (req) => {
     const html = renderEmailHtml({
       ownerName,
       approverName,
-      reportTitle: report.title,
+      reportTitle: safeTitle,
       decision: payload.decision,
       comment: payload.comment ?? null,
       total: totalFormatted,
