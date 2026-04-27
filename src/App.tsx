@@ -81,7 +81,7 @@ const App = () => (
     <ThemeProvider>
       <TooltipProvider>
         <Toaster />
-        <Sonner />
+        <Sonner position="top-center" richColors closeButton />
         <BrowserRouter>
           <AuthProvider>
             <AppRoutes />

@@ -16,7 +16,7 @@ export function AppShell({ children }: AppShellProps) {
       <SidebarNav />
       <SidebarInset>
         <TopBar />
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-24 md:pb-6">
+        <main className="main-padding flex-1 overflow-y-auto bg-background">
           {children}
         </main>
       </SidebarInset>

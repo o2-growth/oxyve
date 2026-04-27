@@ -64,7 +64,11 @@ export function ExpenseFiltersPopover({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="start">
+      <PopoverContent
+        className="w-[calc(100vw-2rem)] max-w-sm sm:w-80"
+        align="end"
+        collisionPadding={16}
+      >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="font-medium">Filtros avançados</h4>

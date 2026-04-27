@@ -114,6 +114,21 @@
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  html,
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @layer utilities {
@@ -144,5 +159,18 @@
   .status-out-of-policy {
     background-color: hsl(38 92% 50% / 0.15);
     color: hsl(38 80% 40%);
+  }
+
+  .main-padding {
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: max(6rem, calc(env(safe-area-inset-bottom) + 1.5rem));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  @media (min-width: 768px) {
+    .main-padding {
+      padding: 1.5rem;
+    }
   }
 }
