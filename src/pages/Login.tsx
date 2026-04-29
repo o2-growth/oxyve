@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { lovable } from '@/integrations/lovable';
 
 // O2 Logo Component
 function O2Logo({ size = 'md', inverted = false }: { size?: 'sm' | 'md' | 'lg', inverted?: boolean }) {
