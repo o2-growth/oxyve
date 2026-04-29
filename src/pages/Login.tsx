@@ -104,6 +104,21 @@ export default function Login() {
     setIsLoading(false);
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    const result = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
+    });
+    if (result.redirected) return;
+    if (result.error) {
+      toast.error('Erro ao entrar com Google: ' + result.error.message);
+      setIsLoading(false);
+      return;
+    }
+    navigate('/app/dashboard');
+    setIsLoading(false);
+  };
+
   if (showForgotPassword) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
