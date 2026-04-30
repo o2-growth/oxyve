@@ -228,7 +228,7 @@ export function useReport(id: string) {
         approvals: approvalsWithProfiles || [],
         total_cents,
         expense_count: itemsWithReviews.length,
-      } as ReportWithItems;
+      } as unknown as ReportWithItems;
     },
     enabled: !!id,
   });
