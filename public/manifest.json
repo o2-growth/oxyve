@@ -1,18 +1,35 @@
 {
-  "name": "Oxy VE - Gestão de Despesas",
+  "name": "Oxy VE — Gestão de Despesas",
   "short_name": "Oxy VE",
-  "description": "Aplicativo de gestão de despesas corporativas",
+  "description": "Lance despesas corporativas, fotografe recibos e acompanhe aprovações",
+  "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "/app/dashboard",
+  "scope": "/",
+  "id": "oxyve",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "background_color": "#0f172a",
   "theme_color": "#3b82f6",
-  "orientation": "portrait-primary",
+  "orientation": "any",
+  "categories": ["business", "finance", "productivity"],
   "icons": [
-    {
-      "src": "/favicon.ico",
-      "sizes": "64x64",
-      "type": "image/x-icon"
-    }
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
-  "categories": ["business", "finance", "productivity"]
+  "shortcuts": [
+    {
+      "name": "Nova despesa",
+      "short_name": "Despesa",
+      "description": "Cadastrar nova despesa",
+      "url": "/app/expenses?new=1",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Meus relatórios",
+      "url": "/app/reports",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }

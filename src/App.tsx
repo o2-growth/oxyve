@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { UpdatePrompt } from "@/components/pwa/UpdatePrompt";
 
 // Aria-3: bundle splitting via React.lazy.
 // Cada página vira chunk próprio; o Suspense fallback abaixo cobre o gap
@@ -131,6 +132,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <UpdatePrompt />
           <BrowserRouter>
             {/* Sprint 3: ErrorBoundary já reporta ao Sentry via captureException
                 no componentDidCatch (DEC-006). Sentry.ErrorBoundary fica disponível

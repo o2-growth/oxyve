@@ -3,6 +3,8 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { SidebarNav } from './SidebarNav';
 import { TopBar } from './TopBar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { OfflineBanner } from '@/components/pwa/OfflineBanner';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 
 interface AppShellProps {
   children: ReactNode;
@@ -15,10 +17,12 @@ export function AppShell({ children }: AppShellProps) {
     <SidebarProvider defaultOpen={!isMobile}>
       <SidebarNav />
       <SidebarInset>
+        <OfflineBanner />
         <TopBar />
         <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-24 md:pb-6">
           {children}
         </main>
+        <InstallPrompt />
       </SidebarInset>
     </SidebarProvider>
   );
