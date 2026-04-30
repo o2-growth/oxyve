@@ -56,7 +56,19 @@ export default function Reports() {
   const isMobile = useIsMobile();
   const { data: reports, isLoading } = useReports({ status: statusFilter });
   const { data: pendingReports } = useReports({ status: 'submitted' });
+  // Carrega TUDO uma vez pra calcular contadores nas tabs (GAP-G016).
+  // Custo é baixo: o useReports já tem cache 1×.
+  const { data: allReports } = useReports({ status: 'all' });
   const deleteReport = useDeleteReport();
+
+  const tabCounts = useMemo(() => {
+    const c = { all: 0, draft: 0, submitted: 0, approved: 0, rejected: 0, paid: 0 };
+    (allReports || []).forEach((r) => {
+      c.all += 1;
+      if (r.status in c) c[r.status as keyof typeof c] += 1;
+    });
+    return c;
+  }, [allReports]);
 
   // Calculate summary stats
   const stats = useMemo(() => {
@@ -142,6 +154,7 @@ export default function Reports() {
               isLoading={isLoading}
               stats={stats}
               statusFilter={statusFilter}
+              tabCounts={tabCounts}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}
               onCreateNew={() => setIsFormOpen(true)}
@@ -161,6 +174,7 @@ export default function Reports() {
             isLoading={isLoading}
             stats={stats}
             statusFilter={statusFilter}
+            tabCounts={tabCounts}
             onStatusChange={handleStatusChange}
             onDelete={handleDelete}
             onCreateNew={() => setIsFormOpen(true)}
@@ -192,6 +206,7 @@ interface ReportsContentProps {
   isLoading: boolean;
   stats: { total: number; reimbursable: number; nonReimbursable: number; average: number };
   statusFilter: string;
+  tabCounts: { all: number; draft: number; submitted: number; approved: number; rejected: number; paid: number };
   onStatusChange: (status: string) => void;
   onDelete: (report: Report) => void;
   onCreateNew: () => void;
@@ -204,6 +219,7 @@ function ReportsContent({
   isLoading,
   stats,
   statusFilter,
+  tabCounts,
   onStatusChange,
   onDelete,
   onCreateNew,
@@ -269,12 +285,32 @@ function ReportsContent({
       <div className="mb-6 overflow-x-auto">
         <Tabs value={statusFilter} onValueChange={onStatusChange}>
           <TabsList className="inline-flex w-max">
-            <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="draft">Abertos</TabsTrigger>
-            <TabsTrigger value="submitted">Enviados</TabsTrigger>
-            <TabsTrigger value="approved">Aprovados</TabsTrigger>
-            <TabsTrigger value="rejected">Reprovados</TabsTrigger>
-            <TabsTrigger value="paid">Pagos</TabsTrigger>
+            {[
+              { value: 'all', label: 'Todos' },
+              { value: 'draft', label: 'Abertos' },
+              { value: 'submitted', label: 'Enviados' },
+              { value: 'approved', label: 'Aprovados' },
+              { value: 'rejected', label: 'Reprovados' },
+              { value: 'paid', label: 'Pagos' },
+            ].map((t) => {
+              const count = tabCounts[t.value as keyof typeof tabCounts] ?? 0;
+              const active = statusFilter === t.value;
+              return (
+                <TabsTrigger key={t.value} value={t.value} className="gap-1.5">
+                  {t.label}
+                  <span
+                    className={
+                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-medium ' +
+                      (active
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground')
+                    }
+                  >
+                    {count}
+                  </span>
+                </TabsTrigger>
+              );
+            })}
           </TabsList>
         </Tabs>
       </div>

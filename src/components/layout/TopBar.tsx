@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { NotificationsBell } from '@/components/notifications/NotificationsBell';
 
 export function TopBar() {
   const { user, profile, signOut, isAdmin, isManager } = useAuth();
@@ -50,6 +51,7 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        <NotificationsBell />
         <ThemeToggle />
         <div className="hidden sm:block">
           {getRoleBadge()}

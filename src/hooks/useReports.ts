@@ -161,7 +161,16 @@ export function useReport(id: string) {
 
       const { data: items } = await supabase
         .from('report_items')
-        .select('id, expense:expenses(id, date, description, amount_cents, currency, receipt_path, is_out_of_policy, category:expense_categories(name))')
+        .select(
+          `id,
+           expense:expenses(
+             id, date, description, amount_cents, currency, receipt_path,
+             is_out_of_policy, is_reimbursable, payment_method,
+             category:expense_categories(name),
+             cost_center:cost_centers(name, code),
+             project:projects(name, code)
+           )`
+        )
         .eq('report_id', id);
 
       const { data: approvals } = await supabase
