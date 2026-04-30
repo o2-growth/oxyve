@@ -107,7 +107,7 @@ export function NotificationsBell() {
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-9 w-9"
+          className="relative h-11 w-11 lg:h-9 lg:w-9"
           aria-label="Notificações"
         >
           <Bell className="h-5 w-5" />

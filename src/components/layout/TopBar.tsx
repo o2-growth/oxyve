@@ -46,8 +46,8 @@ export function TopBar() {
   return (
     <header className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       <div className="flex items-center gap-3">
-        {/* Sidebar trigger - always visible */}
-        <SidebarTrigger className="h-8 w-8" />
+        {/* Sidebar trigger - desktop only (mobile usa BottomNav) */}
+        <SidebarTrigger className="hidden lg:flex h-8 w-8" />
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
