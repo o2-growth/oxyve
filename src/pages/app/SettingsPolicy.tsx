@@ -52,7 +52,7 @@ export default function SettingsPolicy() {
   }, [updatePolicy.isSuccess]);
 
   const handleAutoSave = useCallback(
-    (field: string, value: any) => {
+    (field: string, value: string | number | boolean) => {
       if (!policy?.id) return;
 
       // Clear any pending debounce
@@ -179,7 +179,7 @@ export default function SettingsPolicy() {
                     <div className="space-y-2">
                       <Label htmlFor="cutoff-day">Dia de corte mensal</Label>
                       <Select
-                        value={String((policy as any)?.cycle_cutoff_day ?? 24)}
+                        value={String(policy?.cycle_cutoff_day ?? 24)}
                         onValueChange={(value) => handleAutoSave('cycle_cutoff_day', parseInt(value))}
                       >
                         <SelectTrigger id="cutoff-day" className="w-32">
@@ -201,7 +201,7 @@ export default function SettingsPolicy() {
                     <div className="space-y-2">
                       <Label htmlFor="enforce-mode">Modo de limites</Label>
                       <Select
-                        value={(policy as any)?.enforce_limits_mode ?? 'warn'}
+                        value={policy?.enforce_limits_mode ?? 'warn'}
                         onValueChange={(value) => handleAutoSave('enforce_limits_mode', value)}
                       >
                         <SelectTrigger id="enforce-mode" className="w-48">

@@ -130,6 +130,9 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            {/* Sprint 3: ErrorBoundary já reporta ao Sentry via captureException
+                no componentDidCatch (DEC-006). Sentry.ErrorBoundary fica disponível
+                via @/lib/sentry para casos pontuais que queiram fallback custom. */}
             <ErrorBoundary>
               <Suspense fallback={<LoadingScreen />}>
                 <AuthProvider>

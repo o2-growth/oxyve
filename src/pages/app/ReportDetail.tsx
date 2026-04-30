@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet,
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip, ExternalLink,
-  ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, History
+  ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, FileText, History
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -41,6 +41,41 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import type { ExportableReport } from '@/lib/exportReport';
 import { ReportHistory } from '@/components/reports/ReportHistory';
+
+// Sprint 3 — tipagem dos itens do relatório (consumidos via select com joins).
+// Os hooks devolvem `unknown[]` por causa dos relacionamentos dinâmicos do
+// PostgREST; centralizamos a interpretação aqui.
+interface ReportExpense {
+  id: string;
+  date: string;
+  description: string;
+  amount_cents: number;
+  currency?: string | null;
+  payment_method?: string;
+  is_reimbursable?: boolean | null;
+  is_out_of_policy?: boolean | null;
+  receipt_path?: string | null;
+  category?: { name: string } | null;
+  cost_center?: { name: string } | null;
+}
+interface ReportItem {
+  id: string;
+  expense: ReportExpense;
+  review_decision?: 'approved' | 'rejected' | null;
+  review_comment?: string | null;
+}
+interface ReportApproval {
+  id: string;
+  decision: 'approved' | 'rejected';
+  decided_at: string;
+  comment?: string | null;
+  approver?: { full_name?: string | null } | null;
+}
+interface ReportExtras {
+  start_date?: string | null;
+  end_date?: string | null;
+  submitted_late?: boolean | null;
+}
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -75,12 +110,12 @@ export default function ReportDetail() {
   // Count reviewed expenses (those with a decision from expense_reviews)
   const totalExpenses = report?.items?.length || 0;
   const reviewedItems = useMemo(() => {
-    return (report?.items || []).filter((item: any) => item.review_decision);
+    return ((report?.items as ReportItem[] | undefined) ?? []).filter((item) => item.review_decision);
   }, [report?.items]);
   const reviewedCount = reviewedItems.length;
   const allReviewed = totalExpenses > 0 && reviewedCount >= totalExpenses;
   const reviewProgress = totalExpenses > 0 ? (reviewedCount / totalExpenses) * 100 : 0;
-  const hasRejected = reviewedItems.some((item: any) => item.review_decision === 'rejected');
+  const hasRejected = reviewedItems.some((item) => item.review_decision === 'rejected');
 
   const handleApproveExpense = async (expenseId: string) => {
     await reviewExpense.mutateAsync({
@@ -209,6 +244,20 @@ export default function ReportDetail() {
     }
   };
 
+  const handleExportPdf = async () => {
+    const exportable = buildExportable();
+    if (!exportable) return;
+    try {
+      // Sprint 3 — dynamic import: jsPDF é pesado (~200KB), não entra no chunk inicial.
+      const mod = await import('@/lib/exportReportPdf');
+      mod.downloadReportPdf(exportable);
+      toast.success('PDF gerado!');
+    } catch (err) {
+      console.error('[exportReportPdf] erro', err);
+      toast.error('Erro ao gerar PDF');
+    }
+  };
+
   // Review badge for individual expense
   const ExpenseReviewBadge = ({ decision, comment: reviewComment }: { decision: string | null; comment: string | null }) => {
     if (!decision) return null;
@@ -258,22 +307,23 @@ export default function ReportDetail() {
         </Button>
       </div>
 
-      <PageHeader 
-        title={report.title} 
-        description={
-          report.user?.full_name 
-            ? `Por ${report.user.full_name}${(report as any).start_date && (report as any).end_date 
-                ? ` • ${format(parseISO((report as any).start_date), "dd MMM", { locale: ptBR })} - ${format(parseISO((report as any).end_date), "dd MMM yyyy", { locale: ptBR })}` 
-                : ''}`
-            : undefined
-        }
+      <PageHeader
+        title={report.title}
+        description={(() => {
+          const r = report as typeof report & ReportExtras;
+          if (!report.user?.full_name) return undefined;
+          const range = r.start_date && r.end_date
+            ? ` • ${format(parseISO(r.start_date), "dd MMM", { locale: ptBR })} - ${format(parseISO(r.end_date), "dd MMM yyyy", { locale: ptBR })}`
+            : '';
+          return `Por ${report.user.full_name}${range}`;
+        })()}
       />
 
       {/* Status and Actions Bar */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
         <div className="flex items-center gap-3">
           <StatusBadge status={report.status} type="report" />
-          {(report as any).submitted_late && (
+          {(report as typeof report & ReportExtras).submitted_late && (
             <Badge variant="outline" className="border-amber-500 text-amber-600">
               <Clock className="mr-1 h-3 w-3" />
               Enviado com atraso
@@ -351,6 +401,10 @@ export default function ReportDetail() {
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Baixar em Excel (.xlsx)
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPdf}>
+                <FileText className="mr-2 h-4 w-4" />
+                Baixar em PDF
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setIsHistoryOpen(true)}>
                 <History className="mr-2 h-4 w-4" />
@@ -421,7 +475,7 @@ export default function ReportDetail() {
               ) : isMobile ? (
                 // Mobile: Card view
                 <div className="space-y-3">
-                  {report.items.map((item: any) => (
+                  {(report.items as ReportItem[]).map((item) => (
                     <div 
                       key={item.id} 
                       className={`rounded-lg border p-3 space-y-2 transition-colors ${
@@ -450,11 +504,11 @@ export default function ReportDetail() {
                             </Badge>
                           )}
                           {item.expense.receipt_path && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               className="h-7 text-xs gap-1"
-                              onClick={() => openReceipt(item.expense.receipt_path)}
+                              onClick={() => openReceipt(item.expense.receipt_path as string)}
                             >
                               <Paperclip className="h-3 w-3" />
                               Ver
@@ -550,7 +604,7 @@ export default function ReportDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {report.items.map((item: any) => (
+                      {(report.items as ReportItem[]).map((item) => (
                         <React.Fragment key={item.id}>
                           <TableRow
                             className={
@@ -574,11 +628,11 @@ export default function ReportDetail() {
                             </TableCell>
                             <TableCell>
                               {item.expense.receipt_path ? (
-                                <Button 
-                                  variant="ghost" 
-                                  size="sm" 
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   className="h-8 gap-1"
-                                  onClick={() => openReceipt(item.expense.receipt_path)}
+                                  onClick={() => openReceipt(item.expense.receipt_path as string)}
                                 >
                                   <Paperclip className="h-4 w-4" />
                                   <ExternalLink className="h-3 w-3" />
@@ -695,7 +749,7 @@ export default function ReportDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {report.approvals.map((approval: any) => (
+                {(report.approvals as ReportApproval[]).map((approval) => (
                   <div key={approval.id} className="flex gap-4">
                     <div className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
                       approval.decision === 'approved' 
