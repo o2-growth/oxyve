@@ -21,16 +21,26 @@ import { useReviewExpense } from '@/hooks/useReviewExpense';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { toast } from 'sonner';
-import { 
-  ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet, 
+import {
+  ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet,
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip, ExternalLink,
-  ListChecks, ThumbsUp, ThumbsDown
+  ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, History
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
+import type { ExportableReport } from '@/lib/exportReport';
+import { ReportHistory } from '@/components/reports/ReportHistory';
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +59,7 @@ export default function ReportDetail() {
   const [isApproveOpen, setIsApproveOpen] = useState(false);
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isPaidOpen, setIsPaidOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [comment, setComment] = useState('');
   
   // Individual expense rejection dialog
@@ -132,6 +143,69 @@ export default function ReportDetail() {
       window.open(data.signedUrl, '_blank');
     } catch {
       toast.error('Erro ao abrir comprovante');
+    }
+  };
+
+  const buildExportable = (): ExportableReport | null => {
+    if (!report) return null;
+    const items = (report.items || []) as unknown as Array<{
+      expense: {
+        date: string;
+        description: string;
+        amount_cents: number;
+        currency?: string | null;
+        payment_method?: string;
+        is_reimbursable?: boolean;
+        category?: { name: string } | null;
+        cost_center?: { name: string } | null;
+      };
+    }>;
+    const expenses = items.map((it) => ({
+      date: it.expense.date,
+      description: it.expense.description,
+      category: it.expense.category?.name ?? null,
+      costCenter: it.expense.cost_center?.name ?? null,
+      paymentMethod: it.expense.payment_method ?? 'other',
+      amountCents: it.expense.amount_cents ?? 0,
+      currency: it.expense.currency ?? 'BRL',
+    }));
+    const reimbursableCents = items.reduce(
+      (sum, it) => sum + (it.expense.is_reimbursable ? it.expense.amount_cents ?? 0 : 0),
+      0
+    );
+    return {
+      title: report.title,
+      authorName: report.user?.full_name ?? null,
+      status: report.status,
+      startDate: (report as { start_date?: string | null }).start_date ?? null,
+      endDate: (report as { end_date?: string | null }).end_date ?? null,
+      totalCents: report.total_cents || 0,
+      reimbursableCents,
+      expenses,
+    };
+  };
+
+  const handleExportCsv = async () => {
+    const exportable = buildExportable();
+    if (!exportable) return;
+    try {
+      const mod = await import('@/lib/exportReport');
+      mod.downloadReportCsv(exportable);
+      toast.success('CSV gerado!');
+    } catch {
+      toast.error('Erro ao gerar CSV');
+    }
+  };
+
+  const handleExportXlsx = async () => {
+    const exportable = buildExportable();
+    if (!exportable) return;
+    try {
+      const mod = await import('@/lib/exportReport');
+      mod.downloadReportXlsx(exportable);
+      toast.success('Excel gerado!');
+    } catch {
+      toast.error('Erro ao gerar Excel');
     }
   };
 
@@ -245,8 +319,8 @@ export default function ReportDetail() {
             </>
           )}
           {canMarkPaid && (
-            <Button 
-              onClick={() => setIsPaidOpen(true)} 
+            <Button
+              onClick={() => setIsPaidOpen(true)}
               className="gap-2"
               size={isMobile ? "default" : "sm"}
             >
@@ -254,8 +328,79 @@ export default function ReportDetail() {
               Marcar como Pago
             </Button>
           )}
+
+          {/* Sprint 2 — GAP-G009/G011: Mais ações (export + histórico) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size={isMobile ? 'default' : 'sm'}
+                className="gap-2"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+                <span className="hidden sm:inline">Mais ações</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Exportar</DropdownMenuLabel>
+              <DropdownMenuItem onClick={handleExportCsv}>
+                <Download className="mr-2 h-4 w-4" />
+                Baixar em CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportXlsx}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Baixar em Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setIsHistoryOpen(true)}>
+                <History className="mr-2 h-4 w-4" />
+                Exibir histórico
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      {/* KPIs (GAP-G014) */}
+      {(() => {
+        const items = (report.items || []) as unknown as Array<{
+          expense: { amount_cents?: number | null; is_reimbursable?: boolean | null };
+        }>;
+        const total = report.total_cents || 0;
+        const reimbursable = items.reduce(
+          (sum, it) => sum + (it.expense.is_reimbursable ? it.expense.amount_cents ?? 0 : 0),
+          0
+        );
+        const nonReimbursable = total - reimbursable;
+        return (
+          <div className="mb-6 grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-lg sm:text-xl font-bold">{formatCurrency(total)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Reembolsável</p>
+                <p className="text-lg sm:text-xl font-bold">{formatCurrency(reimbursable)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Não reembolsável</p>
+                <p className="text-lg sm:text-xl font-bold">{formatCurrency(nonReimbursable)}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Despesas</p>
+                <p className="text-lg sm:text-xl font-bold">{items.length}</p>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Expenses List */}
@@ -732,14 +877,21 @@ export default function ReportDetail() {
       </Dialog>
 
       {/* Mark Paid Confirmation */}
-      <ConfirmDialog 
-        open={isPaidOpen} 
-        onOpenChange={setIsPaidOpen} 
-        title="Marcar como Pago" 
-        description={`Confirmar pagamento de ${formatCurrency(report.total_cents || 0)}?`} 
-        confirmLabel="Confirmar Pagamento" 
-        onConfirm={handleMarkPaid} 
-        isLoading={markAsPaid.isPending} 
+      <ConfirmDialog
+        open={isPaidOpen}
+        onOpenChange={setIsPaidOpen}
+        title="Marcar como Pago"
+        description={`Confirmar pagamento de ${formatCurrency(report.total_cents || 0)}?`}
+        confirmLabel="Confirmar Pagamento"
+        onConfirm={handleMarkPaid}
+        isLoading={markAsPaid.isPending}
+      />
+
+      {/* Report History (GAP-G011) */}
+      <ReportHistory
+        reportId={id!}
+        open={isHistoryOpen}
+        onOpenChange={setIsHistoryOpen}
       />
     </AppShell>
   );
