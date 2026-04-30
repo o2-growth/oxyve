@@ -36,12 +36,14 @@ interface AuthContextType {
   isAdmin: boolean;
   isManager: boolean;
   bootstrapError: string | null;
+  isRecoveryMode: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string, inviteToken?: string | null) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   retryBootstrap: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  // Sprint 3.2: PASSWORD_RECOVERY do Supabase. Setado quando usuário chega via
+  // link de reset de senha. Faz Login.tsx mostrar form de nova senha em vez do
+  // form de login normal, e impede PublicRoute de redirecionar pra dashboard.
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   // Guarda contra duplicate bootstrap por usuário (B3 / Aria-1).
   const bootstrappedUserId = useRef<string | null>(null);
@@ -179,6 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
 
+      // Sprint 3.2: detectar fluxo de reset de senha. Quando user clica no link
+      // do email, Supabase JS popula a sessão e dispara PASSWORD_RECOVERY.
+      // Marcamos o flag pra UI renderizar form de nova senha em vez de redirecionar.
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
+
       if (nextSession?.user) {
         // Defer (setTimeout 0) evita reentrância dentro do handler do auth.
         setTimeout(() => {
@@ -189,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setRoles([]);
         setBootstrapError(null);
+        setIsRecoveryMode(false);
       }
 
       setIsLoading(false);
@@ -242,8 +256,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestPasswordReset = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login?reset=true`,
+      redirectTo: `${window.location.origin}/login`,
     });
+    return { error };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) {
+      // Reset do flag de recovery — login.tsx já vai redirecionar via PublicRoute.
+      setIsRecoveryMode(false);
+    }
     return { error };
   };
 
@@ -262,12 +285,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isManager,
         bootstrapError,
+        isRecoveryMode,
         signIn,
         signUp,
         signOut,
         refreshProfile,
         retryBootstrap,
         requestPasswordReset,
+        updatePassword,
       }}
     >
       {children}

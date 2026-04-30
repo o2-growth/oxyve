@@ -71,13 +71,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isRecoveryMode } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
   }
 
-  if (user) {
+  // Sprint 3.2: durante PASSWORD_RECOVERY, manter usuário em /login pra
+  // mostrar form de nova senha em vez de redirecionar pra dashboard.
+  if (user && !isRecoveryMode) {
     return <Navigate to="/app/dashboard" replace />;
   }
 
