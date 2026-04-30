@@ -6,6 +6,7 @@ import { BottomNav } from './BottomNav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { OfflineBanner } from '@/components/pwa/OfflineBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
+import { QuickExpenseFab } from '@/components/expenses/QuickExpenseFab';
 
 interface AppShellProps {
   children: ReactNode;
@@ -26,6 +27,7 @@ export function AppShell({ children }: AppShellProps) {
         <InstallPrompt />
       </SidebarInset>
       <BottomNav />
+      <QuickExpenseFab />
     </SidebarProvider>
   );
 }

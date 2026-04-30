@@ -8,12 +8,11 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
 import { formatCurrency } from '@/lib/constants';
-import { FileText, TrendingUp, Clock, CheckCircle2, Plus } from 'lucide-react';
+import { FileText, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
-import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
@@ -249,13 +248,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Floating Action Button - Mobile only */}
-      <FloatingActionButton
-        icon={Plus}
-        label="Nova despesa"
-        onClick={() => setExpenseDialogOpen(true)}
-      />
 
       {/* Expense Form Dialog */}
       <ExpenseFormDialog 
