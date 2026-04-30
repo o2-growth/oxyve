@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      _archive_org_70aa944f: {
+        Row: {
+          data: Json | null
+          src: string | null
+        }
+        Insert: {
+          data?: Json | null
+          src?: string | null
+        }
+        Update: {
+          data?: Json | null
+          src?: string | null
+        }
+        Relationships: []
+      }
       cost_centers: {
         Row: {
           code: string | null
