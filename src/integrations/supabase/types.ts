@@ -342,6 +342,7 @@ export type Database = {
           body: string | null
           category: Database["public"]["Enums"]["notification_category"]
           created_at: string
+          emailed_at: string | null
           id: string
           link: string | null
           org_id: string
@@ -353,6 +354,7 @@ export type Database = {
           body?: string | null
           category?: Database["public"]["Enums"]["notification_category"]
           created_at?: string
+          emailed_at?: string | null
           id?: string
           link?: string | null
           org_id: string
@@ -364,6 +366,7 @@ export type Database = {
           body?: string | null
           category?: Database["public"]["Enums"]["notification_category"]
           created_at?: string
+          emailed_at?: string | null
           id?: string
           link?: string | null
           org_id?: string
@@ -805,6 +808,7 @@ export type Database = {
         }
         Returns: string
       }
+      dispatch_pending_notification_emails: { Args: never; Returns: number }
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
       get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
