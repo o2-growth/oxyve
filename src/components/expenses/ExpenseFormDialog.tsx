@@ -94,7 +94,7 @@ export function ExpenseFormDialog({
   const readerRef = useRef<FileReader | null>(null);
 
   const isEditing = !!expense;
-  const isReadOnly = expense && expense.status !== 'draft';
+  const isReadOnly = !!(expense && expense.status !== 'draft');
   const hasExistingReceipt = expense?.receipt_path ? true : false;
   const hasReceipt = receiptFile !== null || hasExistingReceipt;
   const categoryRequiresReceipt = selectedCategory?.requires_receipt || false;

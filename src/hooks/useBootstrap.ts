@@ -15,8 +15,11 @@ export interface BootstrapResult {
  *   - 'not_authenticated'
  */
 export async function bootstrapUser(inviteToken: string | null): Promise<BootstrapResult> {
+  // O RPC trata string vazia como "sem invite" (mesmo comportamento de NULL),
+  // mas os types gerados marcam p_invite_token como `string` (não nullable),
+  // então normalizamos null → '' para casar.
   const { data, error } = await supabase.rpc('bootstrap_user', {
-    p_invite_token: inviteToken,
+    p_invite_token: inviteToken ?? '',
   });
 
   if (error) {

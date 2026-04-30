@@ -18,7 +18,7 @@ export function useApproveReportRpc() {
       const { data, error } = await supabase.rpc('admin_decide_report', {
         p_report_id: reportId,
         p_decision: decision,
-        p_comment: comment || null,
+        p_comment: comment || undefined,
       });
       if (error) throw error;
       return data;
