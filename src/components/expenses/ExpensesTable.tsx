@@ -94,6 +94,8 @@ export function ExpensesTable({
             <TableHead>Data</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Tipo</TableHead>
+            {/* GAP-G005: centro de custo na lista */}
+            <TableHead>Centro de Custo</TableHead>
             <TableHead>Relatório</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead>Status</TableHead>
@@ -133,7 +135,7 @@ export function ExpensesTable({
               <TableCell className="max-w-48">
                 <div className="flex items-center gap-2">
                   <span className="truncate">{expense.description}</span>
-                  {(expense as any).is_out_of_policy && (
+                  {expense.is_out_of_policy && (
                     <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
                       Fora da política
                     </span>
@@ -142,6 +144,13 @@ export function ExpensesTable({
               </TableCell>
               <TableCell className="text-muted-foreground">
                 {expense.category?.name || '-'}
+              </TableCell>
+              <TableCell className="text-muted-foreground whitespace-nowrap">
+                {expense.cost_center
+                  ? expense.cost_center.code
+                    ? `${expense.cost_center.code} - ${expense.cost_center.name}`
+                    : expense.cost_center.name
+                  : '-'}
               </TableCell>
               <TableCell>
                 {expense.report ? (

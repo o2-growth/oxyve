@@ -16,6 +16,8 @@ export interface Report {
   total_cents?: number;
   reimbursable_cents?: number;
   expense_count?: number;
+  submitted_at?: string | null;
+  submitted_late?: boolean;
   user?: { full_name: string | null } | null;
 }
 
@@ -48,6 +50,43 @@ export interface ReportInput {
   end_date?: string | null;
 }
 
+/**
+ * Aria-2: N+1 fix.
+ *
+ * Antes: 1 select em reports + N selects em report_items + N selects em
+ * profiles = 1 + 2N queries (~101 para 50 relatórios).
+ *
+ * Depois: 1 select com nested resources do PostgREST trazendo
+ * report_items.expense (amount_cents, is_reimbursable) e o user (profiles!user_id).
+ *
+ * Tipagem: o gerador do Supabase ainda não conhece a relação inversa
+ * profiles!user_id (depende de FK explícita), então mantemos um cast
+ * narrow no shape final. Após Aria-6 (regen types), revisitar.
+ */
+type ReportRow = {
+  id: string;
+  org_id: string;
+  user_id: string;
+  title: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: Report['status'];
+  created_at: string;
+  updated_at: string;
+  user: { full_name: string | null } | { full_name: string | null }[] | null;
+  items: Array<{
+    expense:
+      | { amount_cents: number | null; is_reimbursable: boolean | null }
+      | { amount_cents: number | null; is_reimbursable: boolean | null }[]
+      | null;
+  }>;
+};
+
+function pickFirst<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
 export function useReports(filters?: { status?: string }) {
   const { profile } = useAuth();
 
@@ -56,50 +95,48 @@ export function useReports(filters?: { status?: string }) {
     queryFn: async () => {
       let query = supabase
         .from('reports')
-        .select('*')
+        .select(
+          `*,
+          user:profiles!user_id(full_name),
+          items:report_items(expense:expenses(amount_cents, is_reimbursable))`
+        )
         .order('created_at', { ascending: false });
 
       if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status as any);
+        query = query.eq('status', filters.status as Report['status']);
       }
 
-      const { data: reports, error } = await query;
+      const { data, error } = await query;
       if (error) throw error;
 
-      const reportsWithTotals = await Promise.all(
-        (reports || []).map(async (report) => {
-          const { data: items } = await supabase
-            .from('report_items')
-            .select('expense:expenses(amount_cents, is_reimbursable)')
-            .eq('report_id', report.id);
+      const rows = (data ?? []) as unknown as ReportRow[];
 
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('full_name')
-            .eq('id', report.user_id)
-            .single();
-
-          const total_cents = items?.reduce(
-            (sum, item: any) => sum + (item.expense?.amount_cents || 0),
-            0
-          ) || 0;
-
-          const reimbursable_cents = items?.reduce(
-            (sum, item: any) => sum + (item.expense?.is_reimbursable ? (item.expense?.amount_cents || 0) : 0),
-            0
-          ) || 0;
-
-          return {
-            ...report,
-            total_cents,
-            reimbursable_cents,
-            expense_count: items?.length || 0,
-            user: profileData,
-          };
-        })
-      );
-
-      return reportsWithTotals as Report[];
+      return rows.map((row): Report => {
+        const items = row.items ?? [];
+        let total_cents = 0;
+        let reimbursable_cents = 0;
+        for (const item of items) {
+          const expense = pickFirst(item.expense);
+          const amount = expense?.amount_cents ?? 0;
+          total_cents += amount;
+          if (expense?.is_reimbursable) reimbursable_cents += amount;
+        }
+        return {
+          id: row.id,
+          org_id: row.org_id,
+          user_id: row.user_id,
+          title: row.title,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          status: row.status,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          total_cents,
+          reimbursable_cents,
+          expense_count: items.length,
+          user: pickFirst(row.user),
+        };
+      });
     },
     enabled: !!profile?.org_id,
   });
@@ -135,7 +172,7 @@ export function useReport(id: string) {
 
       // Fetch expense reviews for this report
       const { data: expenseReviews } = await supabase
-        .from('expense_reviews' as any)
+        .from('expense_reviews')
         .select('*')
         .eq('report_id', id);
 
@@ -150,15 +187,25 @@ export function useReport(id: string) {
         })
       );
 
-      // Map expense reviews by expense_id for quick lookup
-      const reviewsByExpenseId: Record<string, any> = {};
-      (expenseReviews || []).forEach((review: any) => {
-        reviewsByExpenseId[review.expense_id] = review;
+      // Map expense reviews by expense_id for quick lookup.
+      type ReviewRow = {
+        expense_id: string;
+        decision: 'approved' | 'rejected' | null;
+        comment: string | null;
+      };
+      const reviewsByExpenseId: Record<string, ReviewRow> = {};
+      (expenseReviews || []).forEach((review) => {
+        const r = review as ReviewRow;
+        reviewsByExpenseId[r.expense_id] = r;
       });
 
-      // Attach review info to each item
-      const itemsWithReviews = (items || []).map((item: any) => {
-        const review = reviewsByExpenseId[item.expense?.id];
+      // Attach review info to each item.
+      type ItemRow = {
+        id: string;
+        expense: { id: string; amount_cents?: number | null } | null;
+      };
+      const itemsWithReviews = ((items || []) as ItemRow[]).map((item) => {
+        const review = item.expense ? reviewsByExpenseId[item.expense.id] : undefined;
         return {
           ...item,
           review_decision: review?.decision || null,
@@ -167,7 +214,7 @@ export function useReport(id: string) {
       });
 
       const total_cents = itemsWithReviews.reduce(
-        (sum: number, item: any) => sum + (item.expense?.amount_cents || 0),
+        (sum, item) => sum + (item.expense?.amount_cents || 0),
         0
       ) || 0;
 
@@ -327,44 +374,13 @@ export function useRemoveExpenseFromReport() {
   });
 }
 
-export function useSubmitReport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reportId: string) => {
-      const { data: items } = await supabase
-        .from('report_items')
-        .select('expense_id')
-        .eq('report_id', reportId);
-
-      if (!items?.length) {
-        throw new Error('Adicione pelo menos uma despesa ao relatório');
-      }
-
-      const { error: reportError } = await supabase
-        .from('reports')
-        .update({ status: 'submitted' })
-        .eq('id', reportId);
-      if (reportError) throw reportError;
-
-      const expenseIds = items.map((i) => i.expense_id);
-      const { error: expenseError } = await supabase
-        .from('expenses')
-        .update({ status: 'submitted' })
-        .in('id', expenseIds);
-      if (expenseError) throw expenseError;
-    },
-    onSuccess: (_, reportId) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success('Relatório enviado para aprovação!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao enviar relatório: ' + error.message);
-    },
-  });
-}
+// B15: implementação manual de submitReport removida.
+// O fluxo oficial agora é o RPC `submit_report`, exposto em
+// `useSubmitReportRpc` (src/hooks/useCurrentReport.ts), que:
+//  - valida que o relatório tem ao menos uma despesa,
+//  - atualiza status do report + expenses atomicamente no banco,
+//  - retorna `submitted_late` para sinalizar atraso.
+// Mantemos só o RPC para evitar duas fontes de verdade divergentes.
 
 export function useApproveReport() {
   const queryClient = useQueryClient();

@@ -1,3 +1,4 @@
+import { lazy, Suspense, useState } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -5,20 +6,24 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import Login from "./pages/Login";
-import Dashboard from "./pages/app/Dashboard";
-import Expenses from "./pages/app/Expenses";
-import Reports from "./pages/app/Reports";
-import ReportDetail from "./pages/app/ReportDetail";
-import SettingsProfile from "./pages/app/SettingsProfile";
-import SettingsPassword from "./pages/app/SettingsPassword";
-import SettingsPolicy from "./pages/app/SettingsPolicy";
-import SettingsTeam from "./pages/app/SettingsTeam";
-import Advances from "./pages/app/Advances";
-import Support from "./pages/app/Support";
-import NotFound from "./pages/NotFound";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadingScreen } from "@/components/LoadingScreen";
 
-const queryClient = new QueryClient();
+// Aria-3: bundle splitting via React.lazy.
+// Cada página vira chunk próprio; o Suspense fallback abaixo cobre o gap
+// entre o clique e a chegada do JS da rota.
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/app/Dashboard"));
+const Expenses = lazy(() => import("./pages/app/Expenses"));
+const Reports = lazy(() => import("./pages/app/Reports"));
+const ReportDetail = lazy(() => import("./pages/app/ReportDetail"));
+const SettingsProfile = lazy(() => import("./pages/app/SettingsProfile"));
+const SettingsPassword = lazy(() => import("./pages/app/SettingsPassword"));
+const SettingsPolicy = lazy(() => import("./pages/app/SettingsPolicy"));
+const SettingsTeam = lazy(() => import("./pages/app/SettingsTeam"));
+const Advances = lazy(() => import("./pages/app/Advances"));
+const Support = lazy(() => import("./pages/app/Support"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 function BootstrapErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
@@ -44,11 +49,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading, isBootstrapping, bootstrapError, retryBootstrap } = useAuth();
 
   if (isLoading || isBootstrapping) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   if (!user) {
@@ -71,19 +72,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
-  
+
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
-  
+
   if (user) {
     return <Navigate to="/app/dashboard" replace />;
   }
-  
+
   return <>{children}</>;
 }
 
@@ -107,20 +104,44 @@ function AppRoutes() {
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  // Aria-7 / B21: instanciar QueryClient dentro do componente para evitar
+  // que múltiplas instâncias (HMR, testes) compartilhem cache global.
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60_000,
+            refetchOnWindowFocus: false,
+            retry: 1,
+          },
+          mutations: {
+            retry: 0,
+          },
+        },
+      })
+  );
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <ErrorBoundary>
+              <Suspense fallback={<LoadingScreen />}>
+                <AuthProvider>
+                  <AppRoutes />
+                </AuthProvider>
+              </Suspense>
+            </ErrorBoundary>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

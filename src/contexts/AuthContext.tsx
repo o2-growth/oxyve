@@ -3,12 +3,23 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { bootstrapUser } from '@/hooks/useBootstrap';
 
+// Sprint 1 — GAP-G021/G022: campos bancários + CPF/CNPJ adicionados ao profile.
+// Os types gerados pelo Supabase ainda não incluem essas colunas (regen
+// pendente — Aria-6). Mantemos opcionais para tolerar a defasagem temporária.
+export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random';
+
 interface Profile {
   id: string;
   org_id: string | null;
   full_name: string | null;
   avatar_url: string | null;
   currency: string | null;
+  bank_name?: string | null;
+  bank_branch?: string | null;
+  bank_account?: string | null;
+  pix_key?: string | null;
+  pix_key_type?: PixKeyType | null;
+  cpf_cnpj?: string | null;
 }
 
 interface UserRole {
@@ -80,7 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn('fetchProfile error:', profileError);
       }
       if (profileData) {
-        setProfile(profileData);
+        // Cast por causa de Sprint 1: novas colunas (bank_*, cpf_cnpj,
+        // pix_key*) ainda não estão nos types gerados (Aria-6 pendente).
+        // No runtime, select('*') já as traz quando a migration aplicar.
+        setProfile(profileData as unknown as Profile);
       }
 
       const { data: rolesData, error: rolesError } = await supabase
