@@ -354,6 +354,7 @@ export type Database = {
       org_invites: {
         Row: {
           accepted_at: string | null
+          accepted_by: string | null
           created_at: string
           email: string
           expires_at: string
@@ -365,6 +366,7 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          accepted_by?: string | null
           created_at?: string
           email: string
           expires_at?: string
@@ -376,6 +378,7 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          accepted_by?: string | null
           created_at?: string
           email?: string
           expires_at?: string
@@ -652,11 +655,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_assign_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       admin_decide_report: {
         Args: { p_comment?: string; p_decision: string; p_report_id: string }
         Returns: Json
       }
-      bootstrap_user: { Args: never; Returns: Json }
+      bootstrap_user: { Args: { p_invite_token: string }; Returns: Json }
       create_expense_in_current_report: {
         Args: {
           p_amount_cents: number
