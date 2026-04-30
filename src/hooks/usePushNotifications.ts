@@ -145,9 +145,11 @@ export function usePushNotifications(): UsePushNotificationsResult {
       // 3) Subscribe (ou reusa existente).
       let pushSub = await reg.pushManager.getSubscription();
       if (!pushSub) {
+        // Cast: PushManager.subscribe espera BufferSource com ArrayBuffer
+        // estrito; Uint8Array<ArrayBufferLike> conflita com TS lib.dom recente.
         pushSub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          applicationServerKey: urlBase64ToUint8Array(vapidKey) as unknown as BufferSource,
         });
       }
 
