@@ -346,6 +346,7 @@ export type Database = {
           id: string
           link: string | null
           org_id: string
+          pushed_at: string | null
           read_at: string | null
           title: string
           user_id: string
@@ -358,6 +359,7 @@ export type Database = {
           id?: string
           link?: string | null
           org_id: string
+          pushed_at?: string | null
           read_at?: string | null
           title: string
           user_id: string
@@ -370,6 +372,7 @@ export type Database = {
           id?: string
           link?: string | null
           org_id?: string
+          pushed_at?: string | null
           read_at?: string | null
           title?: string
           user_id?: string
@@ -845,6 +848,7 @@ export type Database = {
         Returns: string
       }
       dispatch_pending_notification_emails: { Args: never; Returns: number }
+      dispatch_pending_notification_pushes: { Args: never; Returns: number }
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
       get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
