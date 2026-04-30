@@ -55,14 +55,26 @@ const forgotSchema = z.object({
   email: z.string().email('Email inválido'),
 });
 
+// Sprint 3.2 — form de definir nova senha após PASSWORD_RECOVERY.
+const recoverySchema = z
+  .object({
+    password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'As senhas não coincidem',
+  });
+
 type LoginFormValues = z.infer<typeof loginSchema>;
 type SignupFormValues = z.infer<typeof signupSchema>;
 type ForgotFormValues = z.infer<typeof forgotSchema>;
+type RecoveryFormValues = z.infer<typeof recoverySchema>;
 
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signIn, signUp, requestPasswordReset } = useAuth();
+  const { signIn, signUp, requestPasswordReset, isRecoveryMode, updatePassword } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
@@ -83,6 +95,23 @@ export default function Login() {
     resolver: zodResolver(forgotSchema),
     defaultValues: { email: '' },
   });
+
+  const recoveryForm = useForm<RecoveryFormValues>({
+    resolver: zodResolver(recoverySchema),
+    defaultValues: { password: '', confirmPassword: '' },
+  });
+
+  const handleRecovery = async (values: RecoveryFormValues) => {
+    setIsLoading(true);
+    const { error } = await updatePassword(values.password);
+    setIsLoading(false);
+    if (error) {
+      toast.error('Erro ao definir nova senha: ' + error.message);
+      return;
+    }
+    toast.success('Senha alterada com sucesso!');
+    navigate('/app/dashboard');
+  };
 
   const handleLogin = async (values: LoginFormValues) => {
     setIsLoading(true);
@@ -175,6 +204,66 @@ export default function Login() {
     }
     setIsLoading(false);
   };
+
+  // Sprint 3.2 — fluxo de redefinição de senha após o usuário clicar no link
+  // do email de recovery. AuthContext setou isRecoveryMode true ao receber o
+  // evento PASSWORD_RECOVERY do Supabase JS.
+  if (isRecoveryMode) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mb-4 flex items-center justify-center gap-2">
+              <O2Logo />
+              <span className="text-2xl font-bold text-foreground">Oxy VE</span>
+            </div>
+            <CardTitle className="text-2xl">Definir nova senha</CardTitle>
+            <CardDescription>
+              Escolha uma senha nova para sua conta
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={recoveryForm.handleSubmit(handleRecovery)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="recovery-password">Nova senha</Label>
+                <Input
+                  id="recovery-password"
+                  type="password"
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  {...recoveryForm.register('password')}
+                />
+                {recoveryForm.formState.errors.password && (
+                  <p className="text-sm text-destructive">
+                    {recoveryForm.formState.errors.password.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="recovery-confirm">Confirmar nova senha</Label>
+                <Input
+                  id="recovery-confirm"
+                  type="password"
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  {...recoveryForm.register('confirmPassword')}
+                />
+                {recoveryForm.formState.errors.confirmPassword && (
+                  <p className="text-sm text-destructive">
+                    {recoveryForm.formState.errors.confirmPassword.message}
+                  </p>
+                )}
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Salvar nova senha
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (showForgotPassword) {
     return (
