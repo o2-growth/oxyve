@@ -111,7 +111,8 @@ test('B3 — KPIs no header de Reports', async ({ page }) => {
   const html = (await page.content()).toLowerCase();
   expect(html).toMatch(/total/);
   expect(html).toMatch(/reembols/);
-  expect(html).toMatch(/médio|medio/);
+  // Label real é "Média" (visível só em sm:block — desktop). Aceita ambas formas.
+  expect(html).toMatch(/média|media|médio|medio/);
 });
 
 test('C1 — sino de notificações no header', async ({ page }) => {
