@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -89,6 +89,10 @@ export function ExpenseFormDialog({
   const [isConverting, setIsConverting] = useState(false);
   const receiptValidation = useValidateReceipt();
 
+  // B16: ref para o FileReader em curso, permitindo abortar em unmount /
+  // troca de arquivo. Evita setState em componente desmontado.
+  const readerRef = useRef<FileReader | null>(null);
+
   const isEditing = !!expense;
   const isReadOnly = expense && expense.status !== 'draft';
   const hasExistingReceipt = expense?.receipt_path ? true : false;
@@ -96,20 +100,25 @@ export function ExpenseFormDialog({
   const categoryRequiresReceipt = selectedCategory?.requires_receipt || false;
   const requiresReceipt = policy?.require_receipt || categoryRequiresReceipt;
 
-  // Build dynamic schema based on policy
-  const formSchema = z.object({
-    date: z.date({ required_error: 'Selecione uma data' }),
-    description: z.string().min(1, 'Descrição é obrigatória'),
-    category_id: z.string().optional(),
-    amount: z.string().min(1, 'Valor é obrigatório'),
-    payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
-    is_reimbursable: z.boolean(),
-    notes: z.string().optional(),
-    cost_center_id: z.string().optional(),
-    project_id: policy?.require_project 
-      ? z.string().min(1, 'Projeto é obrigatório') 
-      : z.string().optional(),
-  });
+  // B17: schema é memoizado — antes era recriado a cada render, o que
+  // forçava o zodResolver a reidentar e quebrava referência estável.
+  const formSchema = useMemo(
+    () =>
+      z.object({
+        date: z.date({ required_error: 'Selecione uma data' }),
+        description: z.string().min(1, 'Descrição é obrigatória'),
+        category_id: z.string().optional(),
+        amount: z.string().min(1, 'Valor é obrigatório'),
+        payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
+        is_reimbursable: z.boolean(),
+        notes: z.string().optional(),
+        cost_center_id: z.string().optional(),
+        project_id: policy?.require_project
+          ? z.string().min(1, 'Projeto é obrigatório')
+          : z.string().optional(),
+      }),
+    [policy?.require_project]
+  );
 
   type FormData = z.infer<typeof formSchema>;
 
@@ -213,11 +222,19 @@ export function ExpenseFormDialog({
     setIsConverting(false);
 
     setReceiptFile(processedFile);
-    
+
     if (processedFile.type.startsWith('image/')) {
+      // B16: cancelar reader anterior (se houver) e guardar instância
+      // em ref para abortar em cleanup do useEffect / unmount.
+      if (readerRef.current) {
+        readerRef.current.abort();
+      }
       const reader = new FileReader();
+      readerRef.current = reader;
       reader.onloadend = () => {
-        setReceiptPreview(reader.result as string);
+        if (readerRef.current === reader) {
+          setReceiptPreview(reader.result as string);
+        }
       };
       reader.readAsDataURL(processedFile);
       triggerValidation(processedFile);
@@ -226,6 +243,16 @@ export function ExpenseFormDialog({
       receiptValidation.reset();
     }
   };
+
+  // B16: garantir abort em unmount.
+  useEffect(() => {
+    return () => {
+      if (readerRef.current) {
+        readerRef.current.abort();
+        readerRef.current = null;
+      }
+    };
+  }, []);
 
   // Re-validate when date or amount changes after file is attached.
   // B5: incluir todas as deps usadas internamente.
@@ -308,8 +335,9 @@ export function ExpenseFormDialog({
       }
 
       onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err?.message || 'Erro ao salvar despesa. Verifique o comprovante.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar despesa. Verifique o comprovante.';
+      toast.error(message);
     } finally {
       setIsUploading(false);
     }
@@ -492,7 +520,7 @@ export function ExpenseFormDialog({
           />
         </div>
 
-        {/* Project */}
+        {/* Project + Cost Center (GAP-G005) */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <FormField
             control={form.control}
@@ -517,6 +545,35 @@ export function ExpenseFormDialog({
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {p.code ? `${p.code} - ${p.name}` : p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="cost_center_id"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Centro de Custo</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                  disabled={isReadOnly}
+                >
+                  <FormControl>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {costCenters.map((cc) => (
+                      <SelectItem key={cc.id} value={cc.id}>
+                        {cc.code ? `${cc.code} - ${cc.name}` : cc.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

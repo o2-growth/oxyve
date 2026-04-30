@@ -129,7 +129,11 @@ export function useExpenses(filters?: ExpenseFilters) {
         query = query.eq('category_id', filters.categoryId);
       }
       if (filters?.paymentMethod) {
-        query = query.eq('payment_method', filters.paymentMethod as any);
+        // B9: tipar via union do schema gerado em vez de `as any`.
+        query = query.eq(
+          'payment_method',
+          filters.paymentMethod as Expense['payment_method']
+        );
       }
       if (filters?.isReimbursable !== null && filters?.isReimbursable !== undefined) {
         query = query.eq('is_reimbursable', filters.isReimbursable);

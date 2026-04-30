@@ -167,28 +167,6 @@ export function useSubmitReportRpc() {
   });
 }
 
-export function useSubmitReport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reportId: string) => {
-      const { data, error } = await supabase
-        .from('reports')
-        .update({ status: 'submitted' })
-        .eq('id', reportId)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['current-report'] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success('Relatório enviado para aprovação!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao enviar relatório: ' + error.message);
-    },
-  });
-}
+// B15: useSubmitReport (manual) removido. Use `useSubmitReportRpc` (acima).
+// A versão manual divergia do RPC `submit_report` que aplica regras de
+// late-submission e atualiza status do expenses dentro do banco.

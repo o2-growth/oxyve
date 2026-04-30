@@ -36,10 +36,10 @@ export default function Dashboard() {
   const currentReportId = dashboardContext?.current_report?.id;
   const currentReportExpenses = currentReportId ? {
     total_cents: expenses
-      ?.filter((e) => (e as any).report?.id === currentReportId)
+      ?.filter((e) => e.report?.id === currentReportId)
       .reduce((sum, e) => sum + e.amount_cents, 0) || 0,
     count: expenses
-      ?.filter((e) => (e as any).report?.id === currentReportId)
+      ?.filter((e) => e.report?.id === currentReportId)
       .length || 0,
   } : null;
 
@@ -179,7 +179,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-2">
                 {expenses
-                  ?.filter((e) => (e as any).report?.id === currentReportId)
+                  ?.filter((e) => e.report?.id === currentReportId)
                   .slice(0, 5)
                   .map((expense) => (
                     <div
@@ -189,7 +189,7 @@ export default function Dashboard() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-medium truncate text-sm">{expense.description}</p>
-                          {(expense as any).is_out_of_policy && (
+                          {expense.is_out_of_policy && (
                             <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
                               Fora da política
                             </span>

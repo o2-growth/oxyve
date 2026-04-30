@@ -20,8 +20,9 @@ export function useReviewExpense() {
       comment?: string;
     }) => {
       // Upsert: if review already exists for this expense+report, update it
+      // expense_reviews já existe nos types gerados; remover cast (B9).
       const { data, error } = await supabase
-        .from('expense_reviews' as any)
+        .from('expense_reviews')
         .upsert(
           {
             expense_id: expenseId,

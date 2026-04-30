@@ -39,7 +39,7 @@ export function ReportCard({ report }: ReportCardProps) {
                 </span>
               )}
               
-              {(report as any).submitted_late && (
+              {report.submitted_late && (
                 <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
                   <Clock className="mr-1 h-3 w-3" />
                   Atrasado

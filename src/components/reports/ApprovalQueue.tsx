@@ -117,7 +117,7 @@ export function ApprovalQueue() {
                   </div>
                 </div>
 
-                {(report as any).submitted_late && (
+                {report.submitted_late && (
                   <Badge variant="outline" className="mt-2 text-xs border-amber-500 text-amber-600">
                     <Clock className="mr-1 h-3 w-3" />
                     Enviado com atraso
@@ -223,7 +223,7 @@ export function ApprovalQueue() {
                 <TableCell>
                   <div className="flex items-center gap-2">
                     <span className="font-medium">{report.title}</span>
-                    {(report as any).submitted_late && (
+                    {report.submitted_late && (
                       <Badge variant="outline" className="text-xs border-amber-500 text-amber-600">
                         Atrasado
                       </Badge>
