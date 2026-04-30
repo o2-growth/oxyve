@@ -20,9 +20,29 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+function BootstrapErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
+      <div className="w-full max-w-md space-y-4 rounded-lg border border-destructive/50 bg-background p-6 shadow-lg">
+        <h2 className="text-lg font-semibold text-destructive">
+          Não foi possível inicializar sua conta
+        </h2>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isBootstrapping } = useAuth();
-  
+  const { user, isLoading, isBootstrapping, bootstrapError, retryBootstrap } = useAuth();
+
   if (isLoading || isBootstrapping) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -30,11 +50,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  
+
+  if (bootstrapError) {
+    return (
+      <BootstrapErrorBanner
+        message={bootstrapError}
+        onRetry={() => {
+          void retryBootstrap();
+        }}
+      />
+    );
+  }
+
   return <>{children}</>;
 }
 

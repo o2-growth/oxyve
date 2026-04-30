@@ -63,22 +63,26 @@ export function useDashboardContext() {
   });
 }
 
-export function useReportForDate() {
-  const queryClient = useQueryClient();
+/**
+ * B4 — Sprint 0: trocada de useMutation por useQuery para evitar race
+ * condition (resposta antiga sobrescrevendo nova). React Query dedupe por
+ * queryKey + cache resolve sem precisar de debounce explícito.
+ */
+export function useReportForDate(date: string | null) {
+  const { user } = useAuth();
 
-  return useMutation({
-    mutationFn: async (date: string) => {
+  return useQuery({
+    queryKey: ['report-for-date', date, user?.id],
+    queryFn: async () => {
+      if (!date) return null;
       const { data, error } = await supabase.rpc('get_or_create_report_for_date', {
         p_date: date,
       });
       if (error) throw error;
       return data as unknown as CurrentReport;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['current-report'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
-    },
+    enabled: !!date && !!user,
+    staleTime: 30_000,
   });
 }
 

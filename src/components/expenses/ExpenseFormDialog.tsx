@@ -76,7 +76,6 @@ export function ExpenseFormDialog({
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
   const createExpenseInReport = useCreateExpenseInReport();
-  const reportForDate = useReportForDate();
   const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
   const { data: costCenters = [] } = useActiveCostCenters();
@@ -86,7 +85,6 @@ export function ExpenseFormDialog({
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ExpenseType | null>(null);
-  const [currentReportForDate, setCurrentReportForDate] = useState<CurrentReport | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
   const receiptValidation = useValidateReceipt();
@@ -134,7 +132,7 @@ export function ExpenseFormDialog({
   const watchedCategoryId = form.watch('category_id');
   const watchedDate = form.watch('date');
   const watchedAmount = form.watch('amount');
-  
+
   useEffect(() => {
     if (watchedCategoryId && categories) {
       const cat = categories.find(c => c.id === watchedCategoryId);
@@ -144,17 +142,13 @@ export function ExpenseFormDialog({
     }
   }, [watchedCategoryId, categories]);
 
-  // Update report for selected date
-  useEffect(() => {
-    if (useCurrentReportFlow && watchedDate && !isEditing) {
-      const dateStr = format(watchedDate, 'yyyy-MM-dd');
-      reportForDate.mutate(dateStr, {
-        onSuccess: (report) => {
-          setCurrentReportForDate(report);
-        },
-      });
-    }
-  }, [watchedDate, useCurrentReportFlow, isEditing]);
+  // B4 — Buscar relatório para a data selecionada via useQuery (sem race).
+  const dateStrForQuery =
+    useCurrentReportFlow && watchedDate && !isEditing
+      ? format(watchedDate, 'yyyy-MM-dd')
+      : null;
+  const reportForDateQuery = useReportForDate(dateStrForQuery);
+  const currentReportForDate: CurrentReport | null = reportForDateQuery.data ?? null;
 
   useEffect(() => {
     if (expense) {
@@ -185,11 +179,8 @@ export function ExpenseFormDialog({
       });
       setReceiptFile(null);
       setReceiptPreview(null);
-      if (dashboardContext?.current_report) {
-        setCurrentReportForDate(dashboardContext.current_report);
-      }
     }
-  }, [expense, form, open, dashboardContext]);
+  }, [expense, form, open]);
 
   const triggerValidation = useCallback((file: File) => {
     const dateVal = form.getValues('date');
@@ -236,12 +227,19 @@ export function ExpenseFormDialog({
     }
   };
 
-  // Re-validate when date or amount changes after file is attached
+  // Re-validate when date or amount changes after file is attached.
+  // B5: incluir todas as deps usadas internamente.
   useEffect(() => {
-    if (receiptFile && receiptFile.type.startsWith('image/') && receiptValidation.status !== 'idle' && receiptValidation.status !== 'validating') {
+    if (
+      receiptFile &&
+      receiptFile.type.startsWith('image/') &&
+      receiptValidation.status !== 'idle' &&
+      receiptValidation.status !== 'validating'
+    ) {
       triggerValidation(receiptFile);
     }
-  }, [watchedDate, watchedAmount]);
+    // watchedDate / watchedAmount mantidos para reagir ao input do usuário.
+  }, [watchedDate, watchedAmount, receiptFile, receiptValidation.status, triggerValidation]);
 
   const uploadReceipt = async (expenseId: string): Promise<string | null> => {
     if (!receiptFile || !profile?.org_id) return null;

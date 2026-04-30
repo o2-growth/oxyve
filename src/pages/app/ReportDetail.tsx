@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -406,9 +406,8 @@ export default function ReportDetail() {
                     </TableHeader>
                     <TableBody>
                       {report.items.map((item: any) => (
-                        <>
-                          <TableRow 
-                            key={item.id} 
+                        <React.Fragment key={item.id}>
+                          <TableRow
                             className={
                               item.review_decision === 'approved' ? 'bg-green-500/5' : 
                               item.review_decision === 'rejected' ? 'bg-destructive/5' : ''
@@ -523,7 +522,7 @@ export default function ReportDetail() {
                           </TableRow>
                           {/* Show rejection reason below the row */}
                           {item.review_decision === 'rejected' && item.review_comment && (
-                            <TableRow key={`${item.id}-comment`} className="bg-destructive/5 hover:bg-destructive/5">
+                            <TableRow className="bg-destructive/5 hover:bg-destructive/5">
                               <TableCell colSpan={canEdit ? 7 : 6} className="py-2">
                                 <div className="flex items-start gap-2 text-sm text-destructive pl-2">
                                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -532,7 +531,7 @@ export default function ReportDetail() {
                               </TableCell>
                             </TableRow>
                           )}
-                        </>
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>
