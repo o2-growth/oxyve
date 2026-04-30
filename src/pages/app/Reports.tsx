@@ -256,7 +256,7 @@ function ReportsContent({
           </CardContent>
         </Card>
 
-        <Card className="hidden sm:block">
+        <Card>
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-muted">
               <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
@@ -268,7 +268,7 @@ function ReportsContent({
           </CardContent>
         </Card>
 
-        <Card className="hidden sm:block">
+        <Card>
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-primary/10">
               <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />

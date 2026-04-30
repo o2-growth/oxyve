@@ -204,7 +204,7 @@ export default function SettingsProfile() {
                       <FormItem>
                         <FormLabel>Nome completo</FormLabel>
                         <FormControl>
-                          <Input placeholder="Seu nome" {...field} />
+                          <Input placeholder="Seu nome" className="h-12 lg:h-10" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -218,7 +218,7 @@ export default function SettingsProfile() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input {...field} disabled />
+                          <Input className="h-12 lg:h-10" {...field} disabled />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -235,6 +235,7 @@ export default function SettingsProfile() {
                           <Input
                             placeholder="Apenas números"
                             inputMode="numeric"
+                            className="h-12 lg:h-10"
                             {...field}
                           />
                         </FormControl>
@@ -261,7 +262,7 @@ export default function SettingsProfile() {
                       <FormItem>
                         <FormLabel>Banco</FormLabel>
                         <FormControl>
-                          <Input placeholder="Ex.: Itaú" {...field} />
+                          <Input placeholder="Ex.: Itaú" className="h-12 lg:h-10" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -276,7 +277,7 @@ export default function SettingsProfile() {
                         <FormItem>
                           <FormLabel>Agência</FormLabel>
                           <FormControl>
-                            <Input placeholder="0000" {...field} />
+                            <Input placeholder="0000" className="h-12 lg:h-10" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -289,7 +290,7 @@ export default function SettingsProfile() {
                         <FormItem>
                           <FormLabel>Conta</FormLabel>
                           <FormControl>
-                            <Input placeholder="00000-0" {...field} />
+                            <Input placeholder="00000-0" className="h-12 lg:h-10" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -309,7 +310,7 @@ export default function SettingsProfile() {
                             value={field.value || ''}
                           >
                             <FormControl>
-                              <SelectTrigger>
+                              <SelectTrigger className="h-12 lg:h-10">
                                 <SelectValue placeholder="Selecione" />
                               </SelectTrigger>
                             </FormControl>
@@ -332,7 +333,7 @@ export default function SettingsProfile() {
                         <FormItem>
                           <FormLabel>Chave PIX</FormLabel>
                           <FormControl>
-                            <Input placeholder="Sua chave" {...field} />
+                            <Input placeholder="Sua chave" className="h-12 lg:h-10" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -343,7 +344,11 @@ export default function SettingsProfile() {
               </Card>
 
               <div className="max-w-2xl">
-                <Button type="submit" disabled={updateProfile.isPending}>
+                <Button
+                  type="submit"
+                  disabled={updateProfile.isPending}
+                  className="w-full h-12 lg:w-auto lg:h-10"
+                >
                   {updateProfile.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
