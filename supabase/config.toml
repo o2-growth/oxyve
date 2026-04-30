@@ -1,1 +1,10 @@
 project_id = "kulwornnpimjsbmexphd"
+
+[functions._admin_reset_password]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.validate-receipt]
+verify_jwt = true
