@@ -422,32 +422,50 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          bank_account: string | null
+          bank_branch: string | null
+          bank_name: string | null
+          cpf_cnpj: string | null
           created_at: string
           currency: string | null
           department_id: string | null
           full_name: string | null
           id: string
           org_id: string | null
+          pix_key: string | null
+          pix_key_type: Database["public"]["Enums"]["pix_key_type"] | null
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
+          bank_account?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
           currency?: string | null
           department_id?: string | null
           full_name?: string | null
           id: string
           org_id?: string | null
+          pix_key?: string | null
+          pix_key_type?: Database["public"]["Enums"]["pix_key_type"] | null
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
+          bank_account?: string | null
+          bank_branch?: string | null
+          bank_name?: string | null
+          cpf_cnpj?: string | null
           created_at?: string
           currency?: string | null
           department_id?: string | null
           full_name?: string | null
           id?: string
           org_id?: string | null
+          pix_key?: string | null
+          pix_key_type?: Database["public"]["Enums"]["pix_key_type"] | null
           updated_at?: string
         }
         Relationships: [
@@ -703,6 +721,7 @@ export type Database = {
       approval_decision: "approved" | "rejected"
       expense_status: "draft" | "submitted" | "approved" | "rejected" | "paid"
       payment_method: "personal_card" | "corporate_card" | "cash" | "other"
+      pix_key_type: "cpf" | "cnpj" | "email" | "phone" | "random"
       report_status: "draft" | "submitted" | "approved" | "rejected" | "paid"
     }
     CompositeTypes: {
@@ -835,6 +854,7 @@ export const Constants = {
       approval_decision: ["approved", "rejected"],
       expense_status: ["draft", "submitted", "approved", "rejected", "paid"],
       payment_method: ["personal_card", "corporate_card", "cash", "other"],
+      pix_key_type: ["cpf", "cnpj", "email", "phone", "random"],
       report_status: ["draft", "submitted", "approved", "rejected", "paid"],
     },
   },
