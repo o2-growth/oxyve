@@ -178,6 +178,9 @@ export function useReport(id: string) {
 
       const approvalsWithProfiles = await Promise.all(
         (approvals || []).map(async (approval) => {
+          if (!approval.approver_id) {
+            return { ...approval, approver: null };
+          }
           const { data: approverData } = await supabase
             .from('profiles')
             .select('full_name')
