@@ -14,7 +14,6 @@ import { AddToReportDialog } from '@/components/expenses/AddToReportDialog';
 import { ExpenseFiltersPopover, AdvancedFilters } from '@/components/expenses/ExpenseFiltersPopover';
 import { ExpensesTable } from '@/components/expenses/ExpensesTable';
 import { ExpenseCard } from '@/components/expenses/ExpenseCard';
-import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
 import {
   useExpenses,
   useExpenseCounts,
@@ -390,13 +389,6 @@ export default function Expenses() {
           onAddToReport={handleAddToReport}
         />
       )}
-
-      {/* Floating Action Button - Mobile only */}
-      <FloatingActionButton
-        icon={Plus}
-        label="Nova despesa"
-        onClick={() => setIsFormOpen(true)}
-      />
 
       {/* Dialogs */}
       <ExpenseFormDialog
