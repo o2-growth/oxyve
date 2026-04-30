@@ -123,7 +123,7 @@ export function generateReportPdf(report: ExtendedReport): Blob {
   kpis.forEach(([label, value], idx) => {
     const x = margin + idx * (cardW + 6);
     doc.setDrawColor(220);
-    doc.setFillColor(248);
+    doc.setFillColor(248, 248, 248);
     doc.roundedRect(x, cursorY, cardW, cardH, 4, 4, 'FD');
     doc.setFontSize(8);
     doc.setTextColor(120);
