@@ -36,6 +36,11 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,ico,webmanifest,woff2}"],
+        // Sprint 7 — handlers de push/notificationclick injetados via
+        // importScripts. Mantemos generateSW (default) em vez de migrar
+        // pra injectManifest pra não quebrar o runtime caching do Sprint 4.
+        // O arquivo `public/push-handler.js` é servido como /push-handler.js.
+        importScripts: ["/push-handler.js"],
         // SPA: rotas /app/* devem cair no index.html.
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [
