@@ -337,6 +337,50 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string | null
+          category: Database["public"]["Enums"]["notification_category"]
+          created_at: string
+          id: string
+          link: string | null
+          org_id: string
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          category?: Database["public"]["Enums"]["notification_category"]
+          created_at?: string
+          id?: string
+          link?: string | null
+          org_id: string
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          category?: Database["public"]["Enums"]["notification_category"]
+          created_at?: string
+          id?: string
+          link?: string | null
+          org_id?: string
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_domains: {
         Row: {
           created_at: string
@@ -573,6 +617,41 @@ export type Database = {
           },
         ]
       }
+      report_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          data: Json
+          event_type: string
+          id: string
+          report_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          data?: Json
+          event_type: string
+          id?: string
+          report_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          data?: Json
+          event_type?: string
+          id?: string
+          report_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_events_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_items: {
         Row: {
           created_at: string
@@ -716,6 +795,16 @@ export type Database = {
         }
         Returns: Json
       }
+      create_notification: {
+        Args: {
+          p_body?: string
+          p_category: string
+          p_link?: string
+          p_title: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
       get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
@@ -735,6 +824,11 @@ export type Database = {
       app_role: "employee" | "manager" | "admin"
       approval_decision: "approved" | "rejected"
       expense_status: "draft" | "submitted" | "approved" | "rejected" | "paid"
+      notification_category:
+        | "action_required"
+        | "my_expenses"
+        | "reports"
+        | "other"
       payment_method: "personal_card" | "corporate_card" | "cash" | "other"
       pix_key_type: "cpf" | "cnpj" | "email" | "phone" | "random"
       report_status: "draft" | "submitted" | "approved" | "rejected" | "paid"
@@ -868,6 +962,12 @@ export const Constants = {
       app_role: ["employee", "manager", "admin"],
       approval_decision: ["approved", "rejected"],
       expense_status: ["draft", "submitted", "approved", "rejected", "paid"],
+      notification_category: [
+        "action_required",
+        "my_expenses",
+        "reports",
+        "other",
+      ],
       payment_method: ["personal_card", "corporate_card", "cash", "other"],
       pix_key_type: ["cpf", "cnpj", "email", "phone", "random"],
       report_status: ["draft", "submitted", "approved", "rejected", "paid"],
