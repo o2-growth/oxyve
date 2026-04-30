@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
+import { PushPermissionPrompt } from '@/components/notifications/PushPermissionPrompt';
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
@@ -51,9 +52,14 @@ export default function Dashboard() {
         description="Veja o resumo das suas despesas e relatórios"
       />
 
+      {/* Sprint 7 — push permission prompt (aparece após 30s, no-op sem VAPID). */}
+      <div className="mb-4">
+        <PushPermissionPrompt />
+      </div>
+
       {/* Current Period Report Card */}
       <div className="mb-6 md:mb-8">
-        <CurrentReportCard 
+        <CurrentReportCard
           onAddExpense={() => setExpenseDialogOpen(true)}
           reportExpenses={currentReportExpenses}
         />
