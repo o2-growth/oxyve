@@ -107,14 +107,14 @@ export function useCreateExpenseInReport() {
         p_description: input.description,
         p_amount_cents: input.amount_cents,
         p_date: input.date,
-        p_category_id: input.category_id || null,
-        p_cost_center_id: input.cost_center_id || null,
-        p_project_id: input.project_id || null,
+        p_category_id: input.category_id || undefined,
+        p_cost_center_id: input.cost_center_id || undefined,
+        p_project_id: input.project_id || undefined,
         p_payment_method: input.payment_method || 'personal_card',
         p_currency: input.currency || 'BRL',
         p_is_reimbursable: input.is_reimbursable ?? true,
-        p_notes: input.notes || null,
-        p_receipt_path: input.receipt_path || null,
+        p_notes: input.notes || undefined,
+        p_receipt_path: input.receipt_path || undefined,
       });
       if (error) throw error;
       return data as unknown as CreateExpenseInReportResult;
