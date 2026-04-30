@@ -103,6 +103,25 @@ quebra nenhum build. Próxima virada (`strict: true`) prevista pra v1.1.
 **Justificativa:** simplifica modelo de dados; remove user "admin" duplicado; consolida operação.
 **Reversibilidade:** média — se houver dados (despesas, relatórios), backup antes.
 
+### DEC-009 (2026-04-30) — Mobile/Desktop "app": PWA via vite-plugin-pwa, não React Native
+**Contexto:** v1.1 — funcionários precisam usar Oxy VE como app no celular pra fotografar
+notas de comida/transporte e em desktop como app dedicado (UX tipo Slack).
+**Opções:** PWA, React Native + App Store/Play Store, WebView wrapper (Capacitor).
+**Decisão:** **PWA via `vite-plugin-pwa` (Workbox).**
+**Justificativa:** custo zero, deploy = update instantâneo, 100% reaproveita código React,
+câmera funciona via `<input capture>`, push notifications hoje são suportados (iOS 16.4+),
+ships em 1 sprint vs ~3 semanas pra encapsulamento nativo. App Store pode entrar em v1.2+
+via Capacitor encapsulando essa mesma PWA se houver demanda de marketing/distribuição.
+**Reversibilidade:** alta — Capacitor pode embrulhar a PWA depois sem reescrever nada.
+
+### DEC-010 (2026-04-30) — vite-plugin-pwa: `registerType: 'autoUpdate'` + UpdatePrompt explícito
+**Contexto:** trade-off entre UX silenciosa (auto-update) e controle do usuário (prompt).
+**Decisão:** `autoUpdate` com `clientsClaim: true` no SW + componente `UpdatePrompt` que mostra
+toast Sonner "Nova versão disponível — Atualizar agora" como gate explícito.
+**Justificativa:** atualizações ficam quase transparentes, mas o usuário tem 1 clique pra
+forçar reload sem perder estado de form não submetido.
+**Reversibilidade:** trivial — flip pra `'prompt'` se preferirmos sempre exigir confirmação.
+
 ## Escalation rules
 
 CTO escala pro founder com mensagem ≤200 palavras se:
