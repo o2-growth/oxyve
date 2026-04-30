@@ -259,7 +259,7 @@ export default function ReportDetail() {
   };
 
   // Review badge for individual expense
-  const ExpenseReviewBadge = ({ decision, comment: reviewComment }: { decision: string | null; comment: string | null }) => {
+  const ExpenseReviewBadge = ({ decision, comment: reviewComment }: { decision: string | null | undefined; comment: string | null | undefined }) => {
     if (!decision) return null;
     if (decision === 'approved') {
       return (
@@ -491,7 +491,7 @@ export default function ReportDetail() {
                           </p>
                         </div>
                         <p className="font-semibold shrink-0">
-                          {formatCurrency(item.expense.amount_cents, item.expense.currency)}
+                          {formatCurrency(item.expense.amount_cents, item.expense.currency ?? undefined)}
                         </p>
                       </div>
                       
@@ -642,7 +642,7 @@ export default function ReportDetail() {
                               )}
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(item.expense.amount_cents, item.expense.currency)}
+                              {formatCurrency(item.expense.amount_cents, item.expense.currency ?? undefined)}
                             </TableCell>
                             {(canApprove || showReviewStatus) && (
                               <TableCell>
