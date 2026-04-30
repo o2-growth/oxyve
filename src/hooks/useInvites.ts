@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { PostgrestError } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -55,8 +56,9 @@ export function useCreateInvite() {
       queryClient.invalidateQueries({ queryKey: ['invites'] });
       toast.success('Convite criado!');
     },
-    onError: (error: any) => {
-      if (error.code === '23505') {
+    onError: (error: PostgrestError | Error) => {
+      const code = (error as PostgrestError).code;
+      if (code === '23505') {
         toast.error('Já existe um convite para este email.');
       } else {
         toast.error('Erro ao criar convite: ' + error.message);

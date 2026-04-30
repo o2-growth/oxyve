@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import { captureException } from '@/lib/sentry';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -26,8 +27,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log mínimo para debug — futuramente conectar ao Sentry/Lovable.
+    // Sprint 3: log local + envio pro Sentry (no-op se DSN ausente).
     console.error('[ErrorBoundary]', error, errorInfo);
+    captureException(error, { componentStack: errorInfo.componentStack });
   }
 
   private handleReload = () => {
