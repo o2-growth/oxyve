@@ -102,6 +102,7 @@ export function useCreateExpenseInReport() {
       is_reimbursable?: boolean;
       notes?: string | null;
       receipt_path?: string | null;
+      is_event?: boolean;
     }) => {
       const { data, error } = await supabase.rpc('create_expense_in_current_report', {
         p_description: input.description,
@@ -115,6 +116,7 @@ export function useCreateExpenseInReport() {
         p_is_reimbursable: input.is_reimbursable ?? true,
         p_notes: input.notes || undefined,
         p_receipt_path: input.receipt_path || undefined,
+        p_is_event: input.is_event ?? false,
       });
       if (error) throw error;
       return data as unknown as CreateExpenseInReportResult;
@@ -127,13 +129,17 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       
       if (data.is_out_of_policy) {
-        toast.warning('Despesa criada, mas está fora da política de limite diário');
+        toast.warning('Despesa registrada como exceção — vai para revisão do aprovador.');
       } else {
         toast.success('Despesa criada!');
       }
     },
     onError: (error) => {
-      toast.error('Erro ao criar despesa: ' + error.message);
+      // Mensagens do motor de política (RAISE EXCEPTION) já são legíveis para o
+      // usuário — mostra direto, sem o prefixo genérico de erro.
+      const msg = error.message || 'Não foi possível criar a despesa.';
+      const isPolicyBlock = /limite|política|politica|período|periodo|relatório|relatorio/i.test(msg);
+      toast.error(isPolicyBlock ? msg : 'Erro ao criar despesa: ' + msg);
     },
   });
 }

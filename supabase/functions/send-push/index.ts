@@ -13,7 +13,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-// @ts-ignore — npm: specifier resolvido pelo Deno em runtime.
+// @ts-expect-error — npm: specifier resolvido pelo Deno em runtime.
 import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {

@@ -1,13 +1,14 @@
 /**
  * Sprint 6 — Camera-first quick expense capture.
+ * Onda 3a — passou a lançar pela RPC create_expense_in_current_report (motor de
+ * política): a despesa é validada (teto de alimentação, exceção de evento) e
+ * vinculada ao relatório do ciclo via report_items — antes ficava avulsa.
  *
  * Fluxo:
- * 1. `capture` — abre câmera (mobile via `capture="environment"`) ou
- *    file picker (desktop). Loader enquanto user escolhe arquivo.
- * 2. `review` — preview + OCR via `useValidateReceipt`. User salva como
- *    despesa avulsa OU vai pra `edit` pra refinar.
- * 3. `edit` — form mínimo (descrição, valor, data) com mesmas validations
- *    do ExpenseFormDialog (zod). Submit cria despesa.
+ * 1. `capture` — abre câmera (mobile via `capture="environment"`) ou file picker.
+ * 2. `review` — preview + OCR via `useValidateReceipt`. User escolhe categoria e
+ *    salva, ou vai pra `edit` pra refinar.
+ * 3. `edit` — form (descrição, valor, data, categoria, evento).
  *
  * HEIC é convertido pra JPEG via `convertHeicToJpeg` antes do preview/OCR.
  */
@@ -38,14 +39,26 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Camera, Loader2, RotateCcw } from 'lucide-react';
+import { CalendarIcon, Camera, Loader2, RotateCcw, PartyPopper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useCreateExpense } from '@/hooks/useExpenses';
+import { useCreateExpenseInReport } from '@/hooks/useCurrentReport';
+import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
 import { useValidateReceipt } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency } from '@/lib/constants';
@@ -71,6 +84,27 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
+const KIND_LABEL: Record<string, string> = {
+  food: 'Alimentação',
+  transport: 'Transporte',
+  other: 'Outros',
+};
+const KIND_ORDER = ['food', 'transport', 'other'];
+
+function groupByKind(types: ExpenseType[]) {
+  const groups = new Map<string, ExpenseType[]>();
+  for (const t of types) {
+    const k = t.kind ?? 'other';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(t);
+  }
+  return KIND_ORDER.filter((k) => groups.has(k)).map((k) => ({
+    kind: k,
+    label: KIND_LABEL[k] ?? k,
+    items: groups.get(k)!,
+  }));
+}
+
 function parseAmountToCents(amount: string): number {
   return Math.round(parseFloat(amount.replace(',', '.') || '0') * 100);
 }
@@ -95,9 +129,16 @@ export function QuickExpenseSheet({
   const [preview, setPreview] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [waitingForCamera, setWaitingForCamera] = useState(false);
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [isEvent, setIsEvent] = useState(false);
 
   const validation = useValidateReceipt();
-  const createExpense = useCreateExpense();
+  const createExpense = useCreateExpenseInReport();
+  const { data: categories = [] } = useActiveExpenseTypes();
+
+  const grouped = useMemo(() => groupByKind(categories), [categories]);
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const isFood = selectedCategory?.kind === 'food';
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -115,6 +156,8 @@ export function QuickExpenseSheet({
       setFile(null);
       setPreview(null);
       setWaitingForCamera(false);
+      setCategoryId('');
+      setIsEvent(false);
       autoOpenedRef.current = false;
       validation.reset();
       form.reset({ date: new Date(), description: '', amount: '' });
@@ -190,34 +233,46 @@ export function QuickExpenseSheet({
 
   const handleQuickSave = async () => {
     if (!file) return;
+    if (!categoryId) {
+      toast.error('Escolha a categoria da despesa.');
+      return;
+    }
     const extracted = validation.result;
     const description =
       extracted?.extracted_date
-        ? `Despesa avulsa ${format(new Date(extracted.extracted_date + 'T00:00:00'), 'dd/MM/yyyy')}`
-        : 'Despesa avulsa';
+        ? `Despesa ${format(new Date(extracted.extracted_date + 'T00:00:00'), 'dd/MM/yyyy')}`
+        : 'Despesa';
 
     try {
       await createExpense.mutateAsync({
         date: extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd'),
         description,
         amount_cents: extracted?.extracted_amount_cents ?? 0,
+        category_id: categoryId,
+        is_event: isEvent,
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
-      // toast já vem do useCreateExpense.onError
+      // toast já vem do useCreateExpenseInReport.onError
       console.error('quick save failed', err);
     }
   };
 
   const handleEditSubmit = async (data: FormData) => {
+    if (!categoryId) {
+      toast.error('Escolha a categoria da despesa.');
+      return;
+    }
     try {
       await createExpense.mutateAsync({
         date: format(data.date, 'yyyy-MM-dd'),
         description: data.description,
         amount_cents: parseAmountToCents(data.amount),
+        category_id: categoryId,
+        is_event: isEvent,
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
@@ -252,6 +307,52 @@ export function QuickExpenseSheet({
   }, [validation.result]);
 
   const isSaving = createExpense.isPending;
+
+  // Bloco reutilizável: categoria + toggle de evento.
+  const categoryAndEvent = (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="quick-category">Categoria</Label>
+        <Select value={categoryId} onValueChange={setCategoryId}>
+          <SelectTrigger id="quick-category" className="h-12" data-testid="quick-category-select">
+            <SelectValue placeholder="Escolha a categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            {grouped.map((g) => (
+              <SelectGroup key={g.kind}>
+                <SelectLabel>{g.label}</SelectLabel>
+                {g.items.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
+        <div className="space-y-0.5">
+          <Label htmlFor="quick-event" className="flex items-center gap-1.5">
+            <PartyPopper className="h-4 w-4 text-muted-foreground" />
+            Evento
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {isFood
+              ? 'Libera o teto de R$ 30/dia. Vai para revisão do aprovador.'
+              : 'Refeição/despesa de evento aprovado pela Diretoria.'}
+          </p>
+        </div>
+        <Switch
+          id="quick-event"
+          checked={isEvent}
+          onCheckedChange={setIsEvent}
+          data-testid="quick-event-switch"
+        />
+      </div>
+    </div>
+  );
 
   const content = (
     <div className="px-4 pb-6 space-y-4 overflow-y-auto" data-testid="quick-expense-content">
@@ -365,15 +466,17 @@ export function QuickExpenseSheet({
             )}
           </div>
 
+          {categoryAndEvent}
+
           <div className="flex flex-col gap-2">
             <Button
               onClick={handleQuickSave}
-              disabled={isSaving || validation.status === 'validating'}
+              disabled={isSaving || validation.status === 'validating' || !categoryId}
               className="h-12"
               data-testid="quick-save-btn"
             >
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Salvar como despesa avulsa
+              Salvar despesa
             </Button>
             <Button
               variant="outline"
@@ -494,6 +597,8 @@ export function QuickExpenseSheet({
                 )}
               />
             </div>
+
+            {categoryAndEvent}
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
               <Button

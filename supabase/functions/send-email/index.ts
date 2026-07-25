@@ -20,7 +20,7 @@ interface SendEmailPayload {
   subject: string;
   html?: string;
   text?: string;
-  from?: string;
+  // `from` NÃO é aceito do payload — é fixado server-side (anti-spoofing).
 }
 
 serve(async (req) => {
@@ -47,7 +47,8 @@ serve(async (req) => {
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
       return new Response(
         JSON.stringify({ error: "supabase_env_missing" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -55,16 +56,34 @@ serve(async (req) => {
     }
 
     const jwt = authHeader.slice("bearer ".length).trim();
-    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: `Bearer ${jwt}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userData, error: authError } = await supabaseAuth.auth.getUser(jwt);
-    if (authError || !userData?.user) {
-      return new Response(
-        JSON.stringify({ error: "unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+
+    // Autorização: send-email é canal de sistema. Só o dispatcher (service-role)
+    // ou um admin/manager pode disparar — nunca um employee comum. Sem esta trava,
+    // qualquer JWT válido viraria relay de phishing do domínio quando a
+    // RESEND_API_KEY for configurada. Mesmo padrão do send-push.
+    const isServiceRole = jwt === SUPABASE_SERVICE_ROLE_KEY;
+    if (!isServiceRole) {
+      const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: { headers: { Authorization: `Bearer ${jwt}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: userData, error: authError } = await supabaseAuth.auth.getUser(jwt);
+      if (authError || !userData?.user) {
+        return new Response(
+          JSON.stringify({ error: "unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const { data: roleCheck, error: roleError } = await supabaseAuth.rpc(
+        "is_manager_or_admin",
+        { _user_id: userData.user.id },
       );
+      if (roleError || roleCheck !== true) {
+        return new Response(
+          JSON.stringify({ error: "forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     const payload = (await req.json()) as SendEmailPayload;
@@ -76,7 +95,8 @@ serve(async (req) => {
     }
 
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    const FROM = payload.from || Deno.env.get("RESEND_FROM") || "OxyVE <noreply@o2inc.com.br>";
+    // 'from' sempre fixado server-side — nunca do payload (anti-spoofing do domínio).
+    const FROM = Deno.env.get("RESEND_FROM") || "OxyVE <noreply@o2inc.com.br>";
 
     if (!RESEND_API_KEY) {
       // Sem key: log + simulated (DEC-001 fallback).

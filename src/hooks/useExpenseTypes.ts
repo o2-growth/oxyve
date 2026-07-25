@@ -3,12 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+export type ExpenseKind = 'food' | 'transport' | 'other';
+
 export interface ExpenseType {
   id: string;
   org_id: string;
   name: string;
   department_id: string | null;
   daily_limit_cents: number | null;
+  kind: ExpenseKind;
   requires_receipt: boolean;
   is_active: boolean;
   created_at: string;

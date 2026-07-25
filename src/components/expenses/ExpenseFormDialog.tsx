@@ -111,6 +111,7 @@ export function ExpenseFormDialog({
         amount: z.string().min(1, 'Valor é obrigatório'),
         payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
         is_reimbursable: z.boolean(),
+        is_event: z.boolean(),
         notes: z.string().optional(),
         cost_center_id: z.string().optional(),
         project_id: policy?.require_project
@@ -131,6 +132,7 @@ export function ExpenseFormDialog({
       amount: '',
       payment_method: 'personal_card',
       is_reimbursable: true,
+      is_event: false,
       notes: '',
       cost_center_id: '',
       project_id: '',
@@ -168,6 +170,7 @@ export function ExpenseFormDialog({
         amount: (expense.amount_cents / 100).toFixed(2).replace('.', ','),
         payment_method: expense.payment_method,
         is_reimbursable: expense.is_reimbursable,
+        is_event: expense.is_event ?? false,
         notes: expense.notes || '',
         cost_center_id: expense.cost_center_id || '',
         project_id: expense.project_id || '',
@@ -304,6 +307,7 @@ export function ExpenseFormDialog({
         amount_cents: amountCents,
         payment_method: data.payment_method,
         is_reimbursable: data.is_reimbursable,
+        is_event: data.is_event,
         notes: data.notes || null,
         cost_center_id: data.cost_center_id || null,
         project_id: data.project_id || null,
@@ -646,6 +650,29 @@ export function ExpenseFormDialog({
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>Reembolsável</FormLabel>
+              </div>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="is_event"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 py-2">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={isReadOnly}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>Evento</FormLabel>
+                <p className="text-xs text-muted-foreground">
+                  Exceção aprovada pela Diretoria (refeição/despesa de evento). Libera o
+                  teto diário e envia a despesa para revisão do aprovador.
+                </p>
               </div>
             </FormItem>
           )}
