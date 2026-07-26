@@ -109,6 +109,7 @@ export type Database = {
           department_id: string | null
           id: string
           is_active: boolean
+          kind: string
           name: string
           org_id: string
           requires_receipt: boolean
@@ -120,6 +121,7 @@ export type Database = {
           department_id?: string | null
           id?: string
           is_active?: boolean
+          kind?: string
           name: string
           org_id: string
           requires_receipt?: boolean
@@ -131,6 +133,7 @@ export type Database = {
           department_id?: string | null
           id?: string
           is_active?: boolean
+          kind?: string
           name?: string
           org_id?: string
           requires_receipt?: boolean
@@ -158,36 +161,45 @@ export type Database = {
           cycle_cutoff_day: number
           default_currency: string
           enforce_limits_mode: string
+          food_daily_limit_cents: number
           id: string
+          km_rate_cents: number
           org_id: string
           require_cost_center: boolean
           require_project: boolean
           require_receipt: boolean
           timezone: string
+          transport_daily_limit_cents: number | null
           updated_at: string
         }
         Insert: {
           cycle_cutoff_day?: number
           default_currency?: string
           enforce_limits_mode?: string
+          food_daily_limit_cents?: number
           id?: string
+          km_rate_cents?: number
           org_id: string
           require_cost_center?: boolean
           require_project?: boolean
           require_receipt?: boolean
           timezone?: string
+          transport_daily_limit_cents?: number | null
           updated_at?: string
         }
         Update: {
           cycle_cutoff_day?: number
           default_currency?: string
           enforce_limits_mode?: string
+          food_daily_limit_cents?: number
           id?: string
+          km_rate_cents?: number
           org_id?: string
           require_cost_center?: boolean
           require_project?: boolean
           require_receipt?: boolean
           timezone?: string
+          transport_daily_limit_cents?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -254,7 +266,9 @@ export type Database = {
           currency: string | null
           date: string
           description: string
+          distance_km: number | null
           id: string
+          is_event: boolean
           is_out_of_policy: boolean
           is_reimbursable: boolean
           notes: string | null
@@ -274,7 +288,9 @@ export type Database = {
           currency?: string | null
           date: string
           description: string
+          distance_km?: number | null
           id?: string
+          is_event?: boolean
           is_out_of_policy?: boolean
           is_reimbursable?: boolean
           notes?: string | null
@@ -294,7 +310,9 @@ export type Database = {
           currency?: string | null
           date?: string
           description?: string
+          distance_km?: number | null
           id?: string
+          is_event?: boolean
           is_out_of_policy?: boolean
           is_reimbursable?: boolean
           notes?: string | null
@@ -829,6 +847,8 @@ export type Database = {
           p_currency?: string
           p_date: string
           p_description: string
+          p_distance_km?: number
+          p_is_event?: boolean
           p_is_reimbursable?: boolean
           p_notes?: string
           p_payment_method?: string
