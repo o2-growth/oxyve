@@ -63,9 +63,14 @@ export function ExpenseCard({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-medium truncate">{expense.description}</p>
+                  {expense.is_event && (
+                    <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">
+                      Evento
+                    </span>
+                  )}
                   {expense.is_out_of_policy && (
                     <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
-                      Fora da política
+                      Revisar
                     </span>
                   )}
                 </div>
