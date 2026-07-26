@@ -112,6 +112,8 @@ export function ExpenseFormDialog({
         payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
         is_reimbursable: z.boolean(),
         is_event: z.boolean(),
+        by_km: z.boolean(),
+        distance_km: z.string().optional(),
         notes: z.string().optional(),
         cost_center_id: z.string().optional(),
         project_id: policy?.require_project
@@ -133,6 +135,8 @@ export function ExpenseFormDialog({
       payment_method: 'personal_card',
       is_reimbursable: true,
       is_event: false,
+      by_km: false,
+      distance_km: '',
       notes: '',
       cost_center_id: '',
       project_id: '',
@@ -143,6 +147,32 @@ export function ExpenseFormDialog({
   const watchedCategoryId = form.watch('category_id');
   const watchedDate = form.watch('date');
   const watchedAmount = form.watch('amount');
+  const watchedByKm = form.watch('by_km');
+  const watchedDistanceKm = form.watch('distance_km');
+  const isTransport = selectedCategory?.kind === 'transport';
+  const kmRateCents = policy?.km_rate_cents ?? 120;
+
+  // Fora de categoria de transporte, o modo km não se aplica.
+  useEffect(() => {
+    if (!isTransport && form.getValues('by_km')) {
+      form.setValue('by_km', false);
+      form.setValue('distance_km', '');
+    }
+  }, [isTransport, form]);
+
+  // Veículo próprio (Política 4.4.6): valor = km × tarifa (R$ 1,20), travado —
+  // o usuário informa a distância, o sistema calcula o reembolso.
+  useEffect(() => {
+    if (isTransport && watchedByKm && watchedDistanceKm) {
+      const km = parseFloat(watchedDistanceKm.replace(',', '.'));
+      if (!Number.isNaN(km) && km > 0) {
+        const value = ((km * kmRateCents) / 100).toFixed(2).replace('.', ',');
+        if (form.getValues('amount') !== value) {
+          form.setValue('amount', value, { shouldValidate: true });
+        }
+      }
+    }
+  }, [isTransport, watchedByKm, watchedDistanceKm, kmRateCents, form]);
 
   useEffect(() => {
     if (watchedCategoryId && categories) {
@@ -171,6 +201,8 @@ export function ExpenseFormDialog({
         payment_method: expense.payment_method,
         is_reimbursable: expense.is_reimbursable,
         is_event: expense.is_event ?? false,
+        by_km: expense.distance_km != null,
+        distance_km: expense.distance_km != null ? String(expense.distance_km) : '',
         notes: expense.notes || '',
         cost_center_id: expense.cost_center_id || '',
         project_id: expense.project_id || '',
@@ -293,6 +325,14 @@ export function ExpenseFormDialog({
       return;
     }
 
+    if (data.by_km) {
+      const km = parseFloat((data.distance_km || '').replace(',', '.'));
+      if (Number.isNaN(km) || km <= 0) {
+        form.setError('distance_km', { message: 'Informe a distância em km' });
+        return;
+      }
+    }
+
     setIsUploading(true);
 
     try {
@@ -308,6 +348,10 @@ export function ExpenseFormDialog({
         payment_method: data.payment_method,
         is_reimbursable: data.is_reimbursable,
         is_event: data.is_event,
+        distance_km:
+          data.by_km && data.distance_km
+            ? parseFloat(data.distance_km.replace(',', '.'))
+            : null,
         notes: data.notes || null,
         cost_center_id: data.cost_center_id || null,
         project_id: data.project_id || null,
@@ -423,10 +467,16 @@ export function ExpenseFormDialog({
                     placeholder="0,00"
                     {...field}
                     disabled={isReadOnly}
-                    className="h-12"
+                    readOnly={watchedByKm}
+                    className={cn('h-12', watchedByKm && 'bg-muted')}
                     inputMode="decimal"
                   />
                 </FormControl>
+                {watchedByKm && (
+                  <p className="text-xs text-muted-foreground">
+                    Calculado: km × {formatCurrency(kmRateCents)}
+                  </p>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -523,6 +573,50 @@ export function ExpenseFormDialog({
             )}
           />
         </div>
+
+        {/* Veículo próprio — reembolso por km (Política 4.4.6) */}
+        {isTransport && !isReadOnly && (
+          <div className="rounded-lg border p-3 space-y-3">
+            <FormField
+              control={form.control}
+              name="by_km"
+              render={({ field }) => (
+                <FormItem className="flex flex-row items-center justify-between space-y-0">
+                  <div className="space-y-0.5 pr-3">
+                    <FormLabel>Reembolso por quilometragem</FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Veículo próprio: {formatCurrency(kmRateCents)}/km. Informe a
+                      distância e o percurso; o valor é calculado automaticamente.
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            {watchedByKm && (
+              <FormField
+                control={form.control}
+                name="distance_km"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Distância (km)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ex: 24"
+                        {...field}
+                        className="h-12"
+                        inputMode="decimal"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+        )}
 
         {/* Project + Cost Center (GAP-G005) */}
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">

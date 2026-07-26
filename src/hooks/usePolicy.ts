@@ -13,6 +13,9 @@ export interface ExpensePolicy {
   cycle_cutoff_day: number;
   timezone: string;
   enforce_limits_mode: 'warn' | 'block';
+  food_daily_limit_cents: number;
+  transport_daily_limit_cents: number | null;
+  km_rate_cents: number;
   updated_at: string;
 }
 

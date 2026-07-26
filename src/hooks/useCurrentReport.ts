@@ -103,6 +103,7 @@ export function useCreateExpenseInReport() {
       notes?: string | null;
       receipt_path?: string | null;
       is_event?: boolean;
+      distance_km?: number | null;
     }) => {
       const { data, error } = await supabase.rpc('create_expense_in_current_report', {
         p_description: input.description,
@@ -117,6 +118,7 @@ export function useCreateExpenseInReport() {
         p_notes: input.notes || undefined,
         p_receipt_path: input.receipt_path || undefined,
         p_is_event: input.is_event ?? false,
+        p_distance_km: input.distance_km ?? undefined,
       });
       if (error) throw error;
       return data as unknown as CreateExpenseInReportResult;

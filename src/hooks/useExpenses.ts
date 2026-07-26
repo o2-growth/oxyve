@@ -27,6 +27,7 @@ export interface Expense {
   project_id: string | null;
   is_out_of_policy: boolean;
   is_event: boolean;
+  distance_km: number | null;
   created_at: string;
   updated_at: string;
   category?: { name: string } | null;
@@ -48,6 +49,7 @@ export interface ExpenseInput {
   cost_center_id?: string | null;
   project_id?: string | null;
   is_event?: boolean;
+  distance_km?: number | null;
 }
 
 export type ExpenseTab = 'all' | 'loose' | 'open' | 'submitted' | 'approved' | 'rejected' | 'paid';
