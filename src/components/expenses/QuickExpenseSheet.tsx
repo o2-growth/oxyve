@@ -62,6 +62,7 @@ import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency } from '@/lib/constants';
+import { O2Rings } from '@/components/brand/O2Rings';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -131,6 +132,8 @@ export function QuickExpenseSheet({
   const [waitingForCamera, setWaitingForCamera] = useState(false);
   const [categoryId, setCategoryId] = useState<string>('');
   const [isEvent, setIsEvent] = useState(false);
+  // Flash verde discreto quando o OCR entrega os dados (visual apenas).
+  const [dataFlash, setDataFlash] = useState(false);
 
   const validation = useValidateReceipt();
   const createExpense = useCreateExpenseInReport();
@@ -320,13 +323,22 @@ export function QuickExpenseSheet({
     };
   }, [validation.result]);
 
+  // Ao assentar em success/warning, dispara um flash verde de "capturado".
+  useEffect(() => {
+    if (validation.status === 'success' || validation.status === 'warning') {
+      setDataFlash(true);
+      const t = setTimeout(() => setDataFlash(false), 700);
+      return () => clearTimeout(t);
+    }
+  }, [validation.status]);
+
   const isSaving = createExpense.isPending;
 
   // Bloco reutilizável: categoria + toggle de evento.
   const categoryAndEvent = (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label htmlFor="quick-category">Categoria</Label>
+        <Label htmlFor="quick-category" className="o2-eyebrow">Categoria</Label>
         <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger id="quick-category" className="h-12" data-testid="quick-category-select">
             <SelectValue placeholder="Escolha a categoria" />
@@ -348,7 +360,7 @@ export function QuickExpenseSheet({
 
       <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
         <div className="space-y-0.5">
-          <Label htmlFor="quick-event" className="flex items-center gap-1.5">
+          <Label htmlFor="quick-event" className="o2-eyebrow flex items-center gap-1.5">
             <PartyPopper className="h-4 w-4 text-muted-foreground" />
             Evento
           </Label>
@@ -393,13 +405,13 @@ export function QuickExpenseSheet({
         >
           {isConverting ? (
             <>
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Convertendo foto...</p>
+              <O2Rings size={56} spinning fast />
+              <p className="o2-eyebrow">Convertendo foto...</p>
             </>
           ) : waitingForCamera ? (
             <>
-              <Loader2 className="h-10 w-10 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Aguardando câmera...</p>
+              <O2Rings size={56} spinning fast />
+              <p className="o2-eyebrow">Aguardando câmera...</p>
             </>
           ) : (
             <>
@@ -425,37 +437,50 @@ export function QuickExpenseSheet({
       {step === 'review' && (
         <div className="space-y-4" data-testid="step-review">
           {preview && (
-            <div className="rounded-lg overflow-hidden border bg-muted/30">
+            <div className="relative rounded-lg overflow-hidden border bg-muted/30">
               <img
                 src={preview}
                 alt="Preview da nota fiscal"
                 className="w-full max-h-64 object-contain"
               />
+              {/* Linha de scan verde varrendo o comprovante durante o OCR. */}
+              {validation.status === 'validating' && (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0"
+                  style={{ animation: 'o2-scan 1.2s cubic-bezier(0.4,0,0.2,1) infinite' }}
+                >
+                  <div className="h-0.5 w-full bg-primary shadow-[0_0_12px_2px_hsl(var(--primary)/0.7)]" />
+                </div>
+              )}
             </div>
           )}
 
-          <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Dados detectados
-            </p>
+          <div
+            className={cn(
+              'rounded-lg border p-3 space-y-2 bg-muted/20 transition-shadow duration-500',
+              dataFlash && 'ring-1 ring-primary/60',
+            )}
+          >
+            <p className="o2-eyebrow">Dados detectados</p>
             {validation.status === 'validating' || isConverting ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analisando comprovante...
+                <span className="o2-eyebrow">Analisando comprovante...</span>
               </div>
             ) : extractedSummary ? (
-              <div className="space-y-1 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Valor: </span>
-                  <span className="font-medium">
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="o2-eyebrow">Valor</span>
+                  <span className="o2-num font-medium">
                     {extractedSummary.amount != null
                       ? formatCurrency(extractedSummary.amount)
                       : 'não detectado'}
                   </span>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Data: </span>
-                  <span className="font-medium">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="o2-eyebrow">Data</span>
+                  <span className="o2-num font-medium">
                     {extractedSummary.date
                       ? format(
                           new Date(extractedSummary.date + 'T00:00:00'),
@@ -465,9 +490,9 @@ export function QuickExpenseSheet({
                       : 'não detectada'}
                   </span>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Confiança: </span>
-                  <span className="font-medium capitalize">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="o2-eyebrow">Confiança</span>
+                  <span className="font-mono text-sm font-medium capitalize">
                     {extractedSummary.confidence}
                   </span>
                 </div>
@@ -537,11 +562,11 @@ export function QuickExpenseSheet({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descrição</FormLabel>
+                  <FormLabel className="o2-eyebrow">Descrição</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Ex: Almoço com cliente"
-                      className="h-12"
+                      className="h-12 font-sans"
                       {...field}
                     />
                   </FormControl>
@@ -556,11 +581,11 @@ export function QuickExpenseSheet({
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor (R$)</FormLabel>
+                    <FormLabel className="o2-eyebrow">Valor (R$)</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="0,00"
-                        className="h-12"
+                        className="h-12 o2-num"
                         inputMode="decimal"
                         {...field}
                       />
@@ -575,14 +600,14 @@ export function QuickExpenseSheet({
                 name="date"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Data</FormLabel>
+                    <FormLabel className="o2-eyebrow">Data</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
                             variant="outline"
                             className={cn(
-                              'h-12 pl-3 text-left font-normal',
+                              'h-12 pl-3 text-left font-normal o2-num',
                               !field.value && 'text-muted-foreground'
                             )}
                           >

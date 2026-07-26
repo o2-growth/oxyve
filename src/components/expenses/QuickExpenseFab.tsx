@@ -77,6 +77,12 @@ export function QuickExpenseFab() {
         onClick={() => setOpen(true)}
         pulse={showHint}
         responsive
+        // Breathe verde-lima MUITO sutil — o único pulso do viewport.
+        // Durante o hint inicial cede a vez pro pulse; reduced-motion é global.
+        className={cn(
+          !showHint &&
+            '[animation:o2-breathe_6s_cubic-bezier(0.2,0.8,0.2,1)_infinite]'
+        )}
       />
       <QuickExpenseSheet open={open} onOpenChange={setOpen} />
     </>

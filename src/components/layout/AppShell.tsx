@@ -50,13 +50,14 @@ export function AppShell({ children }: AppShellProps) {
         <OfflineBanner />
         <TopBar />
         <CycleRibbon />
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-24 lg:pb-6">
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
           {children}
         </main>
         <InstallPrompt />
       </SidebarInset>
       <BottomNav />
-      <QuickExpenseFab />
+      {/* FAB flutuante é desktop-only; no mobile a BottomNav tem o FAB docado */}
+      {!isMobile && <QuickExpenseFab />}
     </SidebarProvider>
   );
 }

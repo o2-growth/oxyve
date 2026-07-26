@@ -239,7 +239,7 @@ function ReportsContent({
             </div>
             <div>
               <p className="text-xs sm:text-sm text-muted-foreground">Total</p>
-              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.total)}</p>
+              <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.total)}</p>
             </div>
           </CardContent>
         </Card>
@@ -251,7 +251,7 @@ function ReportsContent({
             </div>
             <div>
               <p className="text-xs sm:text-sm text-muted-foreground">Reembolsável</p>
-              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.reimbursable)}</p>
+              <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.reimbursable)}</p>
             </div>
           </CardContent>
         </Card>
@@ -263,7 +263,7 @@ function ReportsContent({
             </div>
             <div>
               <p className="text-xs sm:text-sm text-muted-foreground">Não Reembolsável</p>
-              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
+              <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
             </div>
           </CardContent>
         </Card>
@@ -275,7 +275,7 @@ function ReportsContent({
             </div>
             <div>
               <p className="text-xs sm:text-sm text-muted-foreground">Média</p>
-              <p className="text-lg sm:text-xl font-bold">{formatCurrency(stats.average)}</p>
+              <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.average)}</p>
             </div>
           </CardContent>
         </Card>
@@ -300,7 +300,7 @@ function ReportsContent({
                   {t.label}
                   <span
                     className={
-                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-medium ' +
+                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 o2-num text-xs font-medium ' +
                       (active
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground')
@@ -347,12 +347,12 @@ function ReportsContent({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Título</TableHead>
-                {isManager && <TableHead>Colaborador</TableHead>}
-                <TableHead>Período</TableHead>
-                <TableHead>Despesas</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="font-mono text-[11px] uppercase tracking-wider">Título</TableHead>
+                {isManager && <TableHead className="font-mono text-[11px] uppercase tracking-wider">Colaborador</TableHead>}
+                <TableHead className="font-mono text-[11px] uppercase tracking-wider">Período</TableHead>
+                <TableHead className="font-mono text-[11px] uppercase tracking-wider">Despesas</TableHead>
+                <TableHead className="font-mono text-[11px] uppercase tracking-wider">Status</TableHead>
+                <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Total</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
@@ -360,25 +360,25 @@ function ReportsContent({
               {reports?.map((report) => (
                 <TableRow
                   key={report.id}
-                  className="cursor-pointer"
+                  className="cursor-pointer transition-colors duration-150 hover:bg-muted/50"
                   onClick={() => navigate(`/app/reports/${report.id}`)}
                 >
-                  <TableCell className="font-medium">{report.title}</TableCell>
+                  <TableCell className="font-mono font-medium text-foreground">{report.title}</TableCell>
                   {isManager && (
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="font-sans text-muted-foreground">
                       {report.user?.full_name || '-'}
                     </TableCell>
                   )}
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="o2-num text-muted-foreground">
                     {report.start_date && report.end_date
                       ? `${formatDate(report.start_date)} - ${formatDate(report.end_date)}`
                       : '-'}
                   </TableCell>
-                  <TableCell>{report.expense_count}</TableCell>
+                  <TableCell className="o2-num">{report.expense_count}</TableCell>
                   <TableCell>
                     <StatusBadge status={report.status} type="report" />
                   </TableCell>
-                  <TableCell className="text-right font-semibold">
+                  <TableCell className="text-right font-semibold o2-num">
                     {formatCurrency(report.total_cents || 0)}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>

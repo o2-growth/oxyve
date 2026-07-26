@@ -196,7 +196,7 @@ function CategoryFormDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Nome</FormLabel>
+                  <FormLabel className="o2-eyebrow">Nome</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Ex: Alimentação"
@@ -215,7 +215,7 @@ function CategoryFormDialog({
                 name="kind"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tipo</FormLabel>
+                    <FormLabel className="o2-eyebrow">Tipo</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="h-11">
@@ -240,7 +240,7 @@ function CategoryFormDialog({
                 name="sector"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Setor</FormLabel>
+                    <FormLabel className="o2-eyebrow">Setor</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="Opcional"
@@ -259,7 +259,7 @@ function CategoryFormDialog({
               name="daily_limit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Limite diário (R$)</FormLabel>
+                  <FormLabel className="o2-eyebrow">Limite diário (R$)</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Opcional — ex: 50,00"
@@ -285,7 +285,7 @@ function CategoryFormDialog({
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel>Exige comprovante</FormLabel>
+                    <FormLabel className="o2-eyebrow">Exige comprovante</FormLabel>
                   </div>
                 </FormItem>
               )}
@@ -303,7 +303,7 @@ function CategoryFormDialog({
                     />
                   </FormControl>
                   <div className="space-y-1 leading-none">
-                    <FormLabel>Ativa</FormLabel>
+                    <FormLabel className="o2-eyebrow">Ativa</FormLabel>
                   </div>
                 </FormItem>
               )}
@@ -400,27 +400,33 @@ export function GestaoCategorias() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Setor</TableHead>
-                  <TableHead className="text-right">Limite diário</TableHead>
-                  <TableHead>Ativo</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Nome</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Tipo</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Setor</TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Limite diário</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Ativo</TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {categories.map((cat) => (
-                  <TableRow key={cat.id}>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
+                  <TableRow key={cat.id} className="transition-colors duration-150">
+                    <TableCell className="font-sans font-medium">{cat.name}</TableCell>
                     <TableCell>
                       <Badge variant={KIND_BADGE_VARIANT[cat.kind]}>
                         {KIND_LABELS[cat.kind]}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {cat.sector || '—'}
+                    <TableCell>
+                      {cat.sector ? (
+                        <Badge variant="outline" className="font-normal">
+                          {cat.sector}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right o2-num">
                       {cat.daily_limit_cents != null
                         ? formatCurrency(cat.daily_limit_cents)
                         : '—'}

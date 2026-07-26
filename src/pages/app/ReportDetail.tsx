@@ -430,26 +430,28 @@ export default function ReportDetail() {
           <div className="mb-6 grid gap-3 grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Total</p>
-                <p className="text-lg sm:text-xl font-bold">{formatCurrency(total)}</p>
+                <p className="o2-eyebrow">Total</p>
+                <p className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
+                  {formatCurrency(total)}
+                </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Reembolsável</p>
-                <p className="text-lg sm:text-xl font-bold">{formatCurrency(reimbursable)}</p>
+                <p className="o2-eyebrow">Reembolsável</p>
+                <p className="o2-num text-lg sm:text-xl font-semibold">{formatCurrency(reimbursable)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Não reembolsável</p>
-                <p className="text-lg sm:text-xl font-bold">{formatCurrency(nonReimbursable)}</p>
+                <p className="o2-eyebrow">Não reembolsável</p>
+                <p className="o2-num text-lg sm:text-xl font-semibold">{formatCurrency(nonReimbursable)}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Despesas</p>
-                <p className="text-lg sm:text-xl font-bold">{items.length}</p>
+                <p className="o2-eyebrow">Despesas</p>
+                <p className="o2-num text-lg sm:text-xl font-semibold">{items.length}</p>
               </CardContent>
             </Card>
           </div>
@@ -485,12 +487,12 @@ export default function ReportDetail() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate">{item.expense.description}</p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="font-sans font-medium truncate">{item.expense.description}</p>
+                          <p className="o2-num text-[11px] text-muted-foreground">
                             {formatDate(item.expense.date)} • {item.expense.category?.name || 'Sem categoria'}
                           </p>
                         </div>
-                        <p className="font-semibold shrink-0">
+                        <p className="o2-num font-semibold shrink-0">
                           {formatCurrency(item.expense.amount_cents, item.expense.currency ?? undefined)}
                         </p>
                       </div>
@@ -498,7 +500,7 @@ export default function ReportDetail() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 flex-wrap">
                           {item.expense.is_out_of_policy && (
-                            <Badge variant="outline" className="text-xs border-destructive text-destructive">
+                            <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600">
                               <AlertTriangle className="mr-1 h-3 w-3" />
                               Fora da política
                             </Badge>
@@ -594,12 +596,12 @@ export default function ReportDetail() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead>Anexo</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        {(canApprove || showReviewStatus) && <TableHead className="text-center">Revisão</TableHead>}
+                        <TableHead className="font-mono text-[11px] uppercase tracking-wider">Data</TableHead>
+                        <TableHead className="font-mono text-[11px] uppercase tracking-wider">Descrição</TableHead>
+                        <TableHead className="font-mono text-[11px] uppercase tracking-wider">Categoria</TableHead>
+                        <TableHead className="font-mono text-[11px] uppercase tracking-wider">Anexo</TableHead>
+                        <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Valor</TableHead>
+                        {(canApprove || showReviewStatus) && <TableHead className="text-center font-mono text-[11px] uppercase tracking-wider">Revisão</TableHead>}
                         {canEdit && <TableHead className="w-12"></TableHead>}
                       </TableRow>
                     </TableHeader>
@@ -612,12 +614,12 @@ export default function ReportDetail() {
                               item.review_decision === 'rejected' ? 'bg-destructive/5' : ''
                             }
                           >
-                            <TableCell>{formatDate(item.expense.date)}</TableCell>
+                            <TableCell className="o2-num text-muted-foreground">{formatDate(item.expense.date)}</TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <span>{item.expense.description}</span>
+                                <span className="font-sans">{item.expense.description}</span>
                                 {item.expense.is_out_of_policy && (
-                                  <Badge variant="outline" className="text-xs border-destructive text-destructive">
+                                  <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-600">
                                     Fora da política
                                   </Badge>
                                 )}
@@ -641,7 +643,7 @@ export default function ReportDetail() {
                                 <span className="text-muted-foreground">-</span>
                               )}
                             </TableCell>
-                            <TableCell className="text-right font-medium">
+                            <TableCell className="text-right o2-num font-medium">
                               {formatCurrency(item.expense.amount_cents, item.expense.currency ?? undefined)}
                             </TableCell>
                             {(canApprove || showReviewStatus) && (
@@ -763,10 +765,10 @@ export default function ReportDetail() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium">
+                      <p className="font-sans font-medium">
                         {approval.decision === 'approved' ? 'Aprovado' : 'Reprovado'} por {approval.approver?.full_name || 'Gestor'}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="o2-num text-xs text-muted-foreground">
                         {new Date(approval.decided_at).toLocaleString('pt-BR')}
                       </p>
                       {approval.comment && (
@@ -799,7 +801,7 @@ export default function ReportDetail() {
                       <ListChecks className="h-4 w-4" />
                       Revisão
                     </span>
-                    <span className={allReviewed ? 'text-primary font-medium' : ''}>
+                    <span className={`o2-num ${allReviewed ? 'text-primary font-medium' : ''}`}>
                       {reviewedCount} de {totalExpenses}
                     </span>
                   </div>
@@ -816,12 +818,12 @@ export default function ReportDetail() {
             )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Despesas</span>
-              <span>{report.expense_count || 0}</span>
+              <span className="o2-num">{report.expense_count || 0}</span>
             </div>
             <Separator />
             <div className="flex justify-between text-lg font-semibold">
               <span>Total</span>
-              <span>{formatCurrency(report.total_cents || 0)}</span>
+              <span className="o2-num">{formatCurrency(report.total_cents || 0)}</span>
             </div>
           </CardContent>
         </Card>

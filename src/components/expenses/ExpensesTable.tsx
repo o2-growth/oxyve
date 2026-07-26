@@ -75,6 +75,10 @@ export function ExpensesTable({
     return <Paperclip className="h-4 w-4 text-muted-foreground" />;
   };
 
+  // Carimbo de auditoria — chip pill mono uppercase âmbar (mesmo padrão do ExpenseCard).
+  const STAMP =
+    'inline-flex shrink-0 items-center rounded-full font-mono font-medium uppercase text-[10px] leading-none tracking-[0.08em] px-1.5 py-1';
+
   return (
     <div className="rounded-lg border overflow-x-auto">
       <Table>
@@ -91,15 +95,15 @@ export function ExpensesTable({
             <TableHead className="w-10">
               <Paperclip className="h-4 w-4" />
             </TableHead>
-            <TableHead>Data</TableHead>
-            <TableHead>Descrição</TableHead>
-            <TableHead>Tipo</TableHead>
+            <TableHead className="o2-eyebrow">Data</TableHead>
+            <TableHead className="o2-eyebrow">Descrição</TableHead>
+            <TableHead className="o2-eyebrow">Tipo</TableHead>
             {/* GAP-G005: centro de custo na lista */}
-            <TableHead>Centro de Custo</TableHead>
-            <TableHead>Relatório</TableHead>
-            <TableHead className="text-right">Valor</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Pagamento</TableHead>
+            <TableHead className="o2-eyebrow">Centro de Custo</TableHead>
+            <TableHead className="o2-eyebrow">Relatório</TableHead>
+            <TableHead className="o2-eyebrow text-right">Valor</TableHead>
+            <TableHead className="o2-eyebrow">Status</TableHead>
+            <TableHead className="o2-eyebrow">Pagamento</TableHead>
             <TableHead className="w-12"></TableHead>
           </TableRow>
         </TableHeader>
@@ -129,15 +133,20 @@ export function ExpensesTable({
                   <div className="h-8 w-8" />
                 )}
               </TableCell>
-              <TableCell className="font-medium whitespace-nowrap">
+              <TableCell className="o2-num text-sm whitespace-nowrap">
                 {formatDate(expense.date)}
               </TableCell>
               <TableCell className="max-w-48">
                 <div className="flex items-center gap-2">
-                  <span className="truncate">{expense.description}</span>
+                  <span className="truncate font-sans">{expense.description}</span>
+                  {expense.is_event && (
+                    <span className={cn(STAMP, 'border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]')}>
+                      Evento
+                    </span>
+                  )}
                   {expense.is_out_of_policy && (
-                    <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
-                      Fora da política
+                    <span className={cn(STAMP, 'status-out-of-policy')}>
+                      Exc · Revisar
                     </span>
                   )}
                 </div>
@@ -154,20 +163,20 @@ export function ExpensesTable({
               </TableCell>
               <TableCell>
                 {expense.report ? (
-                  <Badge variant="outline" className="font-normal">
+                  <Badge variant="outline" className="font-mono font-normal text-[10px]">
                     {expense.report.title}
                   </Badge>
                 ) : (
                   <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
-              <TableCell className="text-right font-semibold whitespace-nowrap">
+              <TableCell className="o2-num text-right font-semibold whitespace-nowrap">
                 {formatCurrency(expense.amount_cents, expense.currency)}
               </TableCell>
               <TableCell>
                 <StatusBadge status={expense.status} />
               </TableCell>
-              <TableCell className="text-muted-foreground whitespace-nowrap">
+              <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
                 {PAYMENT_METHOD_LABELS[expense.payment_method]}
               </TableCell>
               <TableCell>

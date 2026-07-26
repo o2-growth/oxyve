@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { NotificationsBell } from '@/components/notifications/NotificationsBell';
+import { O2Rings } from '@/components/brand/O2Rings';
 
 export function TopBar() {
   const { user, profile, signOut, isAdmin, isManager } = useAuth();
@@ -44,22 +45,44 @@ export function TopBar() {
   };
 
   return (
-    <header className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
+    <header
+      className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6"
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
+    >
       <div className="flex items-center gap-3">
-        {/* Sidebar trigger - desktop only (mobile usa BottomNav) */}
+        {/* Sidebar trigger + sessão — desktop only (mobile usa BottomNav) */}
         <SidebarTrigger className="hidden lg:flex h-8 w-8" />
+        <div className="hidden lg:flex items-center gap-2">
+          <span className="o2-live-dot" aria-hidden="true" />
+          <span className="o2-eyebrow">Sessão ativa</span>
+        </div>
+        {/* Marca O2 — mobile only (herda a assinatura que vivia na sidebar) */}
+        <div className="flex lg:hidden items-center gap-2.5">
+          <O2Rings size={22} className="shrink-0" />
+          <span className="font-display text-lg uppercase leading-none tracking-wide">
+            Oxy VE
+          </span>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-4">
+      <div className="flex items-center gap-1 md:gap-2">
         <NotificationsBell />
-        <ThemeToggle />
-        <div className="hidden sm:block">
+        {/* Tema — desktop no TopBar; no mobile vive no rodapé do MoreSheet */}
+        <span className="hidden lg:inline-flex">
+          <ThemeToggle />
+        </span>
+        <div className="hidden sm:block ml-1">
           {getRoleBadge()}
         </div>
-        
+
+        <span className="hidden sm:block h-6 w-px bg-border mx-1" aria-hidden="true" />
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-9 w-9 md:h-10 md:w-10 rounded-full">
+            <Button
+              variant="ghost"
+              className="relative h-9 w-9 md:h-10 md:w-10 rounded-full transition-colors duration-150 hover:bg-muted"
+            >
               <Avatar className="h-9 w-9 md:h-10 md:w-10">
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
                   {getInitials()}
@@ -69,11 +92,11 @@ export function TopBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
+              <div className="flex flex-col space-y-1.5">
                 <p className="text-sm font-medium leading-none">
                   {profile?.full_name || 'Usuário'}
                 </p>
-                <p className="text-xs leading-none text-muted-foreground">
+                <p className="o2-num text-xs leading-none text-muted-foreground truncate">
                   {user?.email}
                 </p>
               </div>

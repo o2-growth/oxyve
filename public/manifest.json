@@ -9,8 +9,8 @@
   "id": "oxyve",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone"],
-  "background_color": "#0f172a",
-  "theme_color": "#3b82f6",
+  "background_color": "#252525",
+  "theme_color": "#3A3A3A",
   "orientation": "any",
   "categories": ["business", "finance", "productivity"],
   "icons": [

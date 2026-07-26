@@ -64,22 +64,24 @@ function LastSignIn({ value }: { value: string | null }) {
   if (!value) {
     return <span className="text-muted-foreground">Nunca acessou</span>;
   }
-  return <span className="tabular-nums">{format(new Date(value), 'dd/MM/yyyy')}</span>;
+  return <span className="o2-num">{format(new Date(value), 'dd/MM/yyyy')}</span>;
 }
 
 function MemberRow({ member }: { member: OrgMember }) {
   const setUserRole = useSetUserRole();
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">
+    <TableRow className="transition-colors duration-150">
+      <TableCell className="font-sans font-medium">
         {member.full_name || 'Sem nome'}
       </TableCell>
-      <TableCell className="text-muted-foreground">{member.email}</TableCell>
+      <TableCell className="font-mono text-[13px] text-muted-foreground">
+        {member.email}
+      </TableCell>
       <TableCell>
         <RoleBadge role={member.role} />
       </TableCell>
-      <TableCell>
+      <TableCell className="text-muted-foreground">
         <LastSignIn value={member.last_sign_in_at} />
       </TableCell>
       <TableCell>
@@ -93,7 +95,7 @@ function MemberRow({ member }: { member: OrgMember }) {
             })
           }
         >
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="h-9 w-[150px] text-muted-foreground">
             <SelectValue placeholder="Definir papel" />
           </SelectTrigger>
           <SelectContent>
@@ -144,11 +146,11 @@ export function GestaoUsuarios() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>E-mail</TableHead>
-                  <TableHead>Papel</TableHead>
-                  <TableHead>Último acesso</TableHead>
-                  <TableHead>Ação</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Nome</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">E-mail</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Papel</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Último acesso</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

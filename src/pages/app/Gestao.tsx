@@ -27,7 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -60,6 +59,10 @@ function formatIsoDate(iso: string): string {
   if (!y || !m || !d) return iso;
   return `${d}/${m}/${y}`;
 }
+
+// Carimbo de auditoria — chip pill mono uppercase (âmbar p/ exceção).
+const STAMP =
+  'inline-flex shrink-0 items-center gap-1 rounded-full font-mono font-medium uppercase text-[10px] leading-none tracking-[0.08em] px-1.5 py-1';
 
 interface DrillExpense {
   id: string;
@@ -127,7 +130,7 @@ function PersonExpensesDialog({
 
   return (
     <Dialog open={!!person} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto !animate-none">
         <DialogHeader>
           <DialogTitle>{person?.full_name || 'Colaborador'}</DialogTitle>
           <DialogDescription>
@@ -163,23 +166,25 @@ function PersonExpensesDialog({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium text-sm truncate">
+                    <p className="font-sans font-medium text-sm truncate">
                       {expense.description}
                     </p>
                     {expense.is_out_of_policy && (
-                      <Badge variant="destructive" className="gap-1">
+                      <span className={`${STAMP} status-out-of-policy`}>
                         <AlertTriangle className="h-3 w-3" />
-                        Revisar
-                      </Badge>
+                        Exc · Revisar
+                      </span>
                     )}
                     {expense.is_event && (
-                      <Badge variant="secondary" className="gap-1">
+                      <span
+                        className={`${STAMP} border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]`}
+                      >
                         <CalendarRange className="h-3 w-3" />
                         Evento
-                      </Badge>
+                      </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
+                  <p className="o2-num mt-0.5 text-[11px] text-muted-foreground">
                     {formatIsoDate(expense.date)}
                     {expense.category?.name ? ` • ${expense.category.name}` : ''}
                   </p>
@@ -187,7 +192,7 @@ function PersonExpensesDialog({
                     <StatusBadge status={expense.status} />
                   </div>
                 </div>
-                <p className="shrink-0 font-semibold text-sm">
+                <p className="o2-num shrink-0 font-semibold text-sm">
                   {formatCurrency(expense.amount_cents, expense.currency)}
                 </p>
               </div>
@@ -291,9 +296,15 @@ export default function Gestao() {
 
       <Tabs defaultValue="financeiro" className="w-full">
         <TabsList className="mb-4 md:mb-6">
-          <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
-          <TabsTrigger value="categorias">Categorias</TabsTrigger>
+          <TabsTrigger value="financeiro" className="font-mono text-[11px] uppercase tracking-wider">
+            Financeiro
+          </TabsTrigger>
+          <TabsTrigger value="usuarios" className="font-mono text-[11px] uppercase tracking-wider">
+            Usuários
+          </TabsTrigger>
+          <TabsTrigger value="categorias" className="font-mono text-[11px] uppercase tracking-wider">
+            Categorias
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="financeiro" className="mt-0">
@@ -305,61 +316,55 @@ export default function Gestao() {
         ) : (
           <span>
             Ciclo{' '}
-            <span className="font-medium text-foreground">{cycle.cycle_key}</span>
+            <span className="o2-num font-medium text-foreground">{cycle.cycle_key}</span>
             {' · '}
-            {formatIsoDate(cycle.start)} – {formatIsoDate(cycle.end)}
+            <span className="o2-num">
+              {formatIsoDate(cycle.start)} – {formatIsoDate(cycle.end)}
+            </span>
             {' · '}
-            {cycle.business_days} dias úteis
+            <span className="o2-num">{cycle.business_days}</span> dias úteis
           </span>
         )}
       </div>
 
       {/* KPIs */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        {kpis.map((kpi, i) => (
-          <Card
-            key={kpi.label}
-            className="animate-fade-in"
-            style={{ animationDelay: `${i * 0.1}s` }}
-          >
+        {kpis.map((kpi) => (
+          <Card key={kpi.label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-                {kpi.label}
-              </CardTitle>
+              <CardTitle className="o2-eyebrow">{kpi.label}</CardTitle>
               <kpi.icon className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <Skeleton className="h-7 w-24" />
+                <Skeleton className="h-8 w-24" />
               ) : (
-                <div className="text-xl sm:text-2xl font-bold">
+                <div className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
                   {formatCurrency(kpi.value)}
                 </div>
               )}
               {kpi.hint && (
-                <p className="text-xs text-muted-foreground">{kpi.hint}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{kpi.hint}</p>
               )}
             </CardContent>
           </Card>
         ))}
 
         {/* Colaboradores (contagem, não moeda) */}
-        <Card className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Colaboradores
-            </CardTitle>
+            <CardTitle className="o2-eyebrow">Colaboradores</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-7 w-12" />
+              <Skeleton className="h-8 w-12" />
             ) : (
-              <div className="text-xl sm:text-2xl font-bold">
+              <div className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
                 {org?.colaboradores ?? 0}
               </div>
             )}
-            <p className="text-xs text-muted-foreground">Ativos no ciclo</p>
+            <p className="mt-1 text-xs text-muted-foreground">Ativos no ciclo</p>
           </CardContent>
         </Card>
       </div>
@@ -389,47 +394,51 @@ export default function Gestao() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Colaborador</TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">
+                    Colaborador
+                  </TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
                     Alimentação (real. / proj.)
                   </TableHead>
-                  <TableHead className="text-right">
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
                     Transporte (real. / proj.)
                   </TableHead>
-                  <TableHead className="text-right">Total a pagar</TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
+                    Total a pagar
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {people.map((person) => (
                   <TableRow
                     key={person.user_id}
-                    className="cursor-pointer"
+                    className="cursor-pointer transition-colors duration-150"
                     onClick={() => setSelectedPerson(person)}
                   >
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium">{person.full_name}</span>
+                        <span className="font-sans font-medium">{person.full_name}</span>
                         {(person.recusados > 0 || person.excecoes > 0) && (
                           <div className="flex flex-wrap gap-1">
                             {person.recusados > 0 && (
-                              <Badge variant="destructive" className="gap-1">
+                              <span className={`${STAMP} status-out-of-policy`}>
                                 <XCircle className="h-3 w-3" />
-                                {person.recusados} recusado
+                                <span className="o2-num">{person.recusados}</span> recusado
                                 {person.recusados > 1 ? 's' : ''}
-                              </Badge>
+                              </span>
                             )}
                             {person.excecoes > 0 && (
-                              <Badge variant="secondary" className="gap-1">
+                              <span className={`${STAMP} status-out-of-policy`}>
                                 <AlertTriangle className="h-3 w-3" />
-                                {person.excecoes} exceç
+                                <span className="o2-num">{person.excecoes}</span> exceç
                                 {person.excecoes > 1 ? 'ões' : 'ão'}
-                              </Badge>
+                              </span>
                             )}
                           </div>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right o2-num">
                       <span className="font-medium">
                         {formatCurrency(person.food_realized_cents)}
                       </span>
@@ -438,7 +447,7 @@ export default function Gestao() {
                         {formatCurrency(person.food_projected_cents)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right o2-num">
                       <span className="font-medium">
                         {formatCurrency(person.transport_realized_cents)}
                       </span>
@@ -447,7 +456,7 @@ export default function Gestao() {
                         {formatCurrency(person.transport_projected_cents)}
                       </span>
                     </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
+                    <TableCell className="text-right font-semibold o2-num">
                       {formatCurrency(person.a_pagar_cents)}
                     </TableCell>
                   </TableRow>
@@ -483,23 +492,31 @@ export default function Gestao() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Setor</TableHead>
-                  <TableHead className="text-right">Alimentação</TableHead>
-                  <TableHead className="text-right">Transporte</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">
+                    Setor
+                  </TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
+                    Alimentação
+                  </TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
+                    Transporte
+                  </TableHead>
+                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
+                    Total
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sectors.map((sector) => (
                   <TableRow key={sector.sector}>
-                    <TableCell className="font-medium">{sector.sector}</TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="font-sans font-medium">{sector.sector}</TableCell>
+                    <TableCell className="text-right o2-num text-muted-foreground">
                       {formatCurrency(sector.food_cents)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                    <TableCell className="text-right o2-num text-muted-foreground">
                       {formatCurrency(sector.transport_cents)}
                     </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
+                    <TableCell className="text-right font-semibold o2-num">
                       {formatCurrency(sector.total_cents)}
                     </TableCell>
                   </TableRow>
