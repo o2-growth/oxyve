@@ -45,19 +45,17 @@ export function TopBar() {
   };
 
   return (
-    <header
-      className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6"
-      style={{ paddingTop: 'env(safe-area-inset-top)' }}
-    >
+    <header className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       <div className="flex items-center gap-3">
-        {/* Sidebar trigger + sessão — desktop only (mobile usa BottomNav) */}
+        {/* Sidebar trigger - desktop only (mobile usa BottomNav) */}
         <SidebarTrigger className="hidden lg:flex h-8 w-8" />
+        {/* Metadados de sessão — mono, toque "instrumento" (desktop) */}
         <div className="hidden lg:flex items-center gap-2">
           <span className="o2-live-dot" aria-hidden="true" />
           <span className="o2-eyebrow">Sessão ativa</span>
         </div>
-        {/* Marca O2 — mobile only (herda a assinatura que vivia na sidebar) */}
-        <div className="flex lg:hidden items-center gap-2.5">
+        {/* Marca O2 — mobile only (sem sidebar, o app precisa de assinatura) */}
+        <div className="flex items-center gap-2 lg:hidden">
           <O2Rings size={22} className="shrink-0" />
           <span className="font-display text-lg uppercase leading-none tracking-wide">
             Oxy VE
@@ -67,11 +65,11 @@ export function TopBar() {
 
       <div className="flex items-center gap-1 md:gap-2">
         <NotificationsBell />
-        {/* Tema — desktop no TopBar; no mobile vive no rodapé do MoreSheet */}
+        {/* Tema — desktop; no mobile vira row do MoreSheet */}
         <span className="hidden lg:inline-flex">
           <ThemeToggle />
         </span>
-        <div className="hidden sm:block ml-1">
+        <div className="hidden lg:block ml-1">
           {getRoleBadge()}
         </div>
 
@@ -102,10 +100,10 @@ export function TopBar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <div className="sm:hidden px-2 py-1.5">
+            <div className="lg:hidden px-2 py-1.5">
               {getRoleBadge()}
             </div>
-            <DropdownMenuSeparator className="sm:hidden" />
+            <DropdownMenuSeparator className="lg:hidden" />
             <DropdownMenuItem onClick={() => navigate('/app/settings/profile')}>
               <User className="mr-2 h-4 w-4" />
               Meu Perfil

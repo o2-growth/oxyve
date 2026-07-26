@@ -1,31 +1,29 @@
 import * as React from "react";
 
-/**
- * Ponto de corte único do app: alinhado ao `lg:` do Tailwind.
- *
- * < 1024px  → mundo mobile (BottomNav + MoreSheet, sem sidebar)
- * ≥ 1024px  → mundo desktop (SidebarNav)
- *
- * Antes o hook cortava em 768 enquanto a BottomNav/SidebarTrigger cortavam
- * em `lg:` (1024) — a faixa tablet (768–1023) mostrava rail + bottom nav ao
- * mesmo tempo. Unificar em 1024 elimina a navegação dupla.
- */
+// Corte único mobile↔desktop = 1024px (Tailwind `lg`). Bate com o CSS da casca
+// (BottomNav `lg:hidden`, sidebar montada só em lg+, `main` com `lg:` padding).
+// Antes era 768 e brigava com o CSS, criando a zona morta 768–1023 onde sidebar
+// e bottom nav apareciam juntas. iPad em retrato (768–834) passa a ganhar a
+// experiência de polegar — correta para captura de recibo.
 const MOBILE_BREAKPOINT = 1024;
 
+const QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+
 export function useIsMobile() {
-  // Inicialização síncrona a partir da largura real — sem "flash" de layout
-  // desktop no primeiro paint em telas pequenas (app é client-only/Vite).
-  const [isMobile, setIsMobile] = React.useState<boolean>(() =>
-    typeof window !== "undefined"
-      ? window.innerWidth < MOBILE_BREAKPOINT
-      : false,
-  );
+  // Lazy initializer lê o match no 1º render — mata o flash onde `isMobile`
+  // chegava `false` no celular e a sidebar piscava antes do efeito corrigir.
+  const [isMobile, setIsMobile] = React.useState<boolean>(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia(QUERY).matches;
+  });
 
   React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-    const onChange = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    const mql = window.matchMedia(QUERY);
+    const onChange = () => setIsMobile(mql.matches);
     mql.addEventListener("change", onChange);
-    onChange();
+    setIsMobile(mql.matches);
     return () => mql.removeEventListener("change", onChange);
   }, []);
 

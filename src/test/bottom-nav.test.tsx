@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { BottomNav } from '@/components/layout/BottomNav';
 
-// isAdmin controla só o grupo "Administração" dentro do MoreSheet (mockado aqui).
-vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ isAdmin: false }),
-}));
-
-// Sheets são portais Radix (fechados por padrão não montam conteúdo); mockamos
-// pra isolar a BottomNav de dependências pesadas (supabase/query/theme).
+// Filhos pesados (react-query + AuthContext) — stub pra isolar a navegação.
 vi.mock('@/components/expenses/QuickExpenseSheet', () => ({
   QuickExpenseSheet: () => null,
 }));
@@ -16,8 +11,10 @@ vi.mock('@/components/layout/MoreSheet', () => ({
   MoreSheet: () => null,
 }));
 
-import { BottomNav } from '@/components/layout/BottomNav';
-
+beforeEach(() => {
+  // Desliga o hint de 1ª vez pra render determinístico (sem timeout pendente).
+  localStorage.setItem('oxyve.fab-hint-shown', '1');
+});
 afterEach(cleanup);
 
 function renderAt(path = '/app/dashboard') {
@@ -29,31 +26,35 @@ function renderAt(path = '/app/dashboard') {
 }
 
 describe('BottomNav (mobile)', () => {
-  it('renderiza as 4 abas (Início / Despesas / Relatórios / Mais) + FAB de captura', () => {
+  it('renderiza 3 abas de rota (Início / Despesas / Relatórios) + Capturar + Mais', () => {
     renderAt();
 
-    for (const label of ['Início', 'Despesas', 'Relatórios', 'Mais']) {
+    for (const label of ['Início', 'Despesas', 'Relatórios']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
 
-    // FAB central de nova despesa (botão, não rota).
-    expect(screen.getByLabelText(/nova despesa/i)).toBeInTheDocument();
+    // Captura docada e overflow são botões (não NavLink).
+    expect(
+      screen.getByRole('button', { name: /capturar despesa por foto/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /mais/i })).toBeInTheDocument();
 
-    // Só Início/Despesas/Relatórios são links; FAB e "Mais" são botões.
+    // Perfil saiu da barra (vive no avatar da TopBar + MoreSheet).
+    expect(screen.queryByText('Perfil')).toBeNull();
+
+    // Apenas 3 links de rota — o resto são ações.
     expect(screen.getAllByRole('link')).toHaveLength(3);
   });
 
   it('marca o link ativo conforme a rota atual', () => {
     renderAt('/app/expenses');
     const expensesLink = screen.getByRole('link', { name: /despesas/i });
-    // NavLink adiciona aria-current="page" na rota ativa por padrão.
     expect(expensesLink).toHaveAttribute('aria-current', 'page');
   });
 
-  it('a aba Mais acende em rotas do overflow (ex.: /app/advances)', () => {
-    renderAt('/app/advances');
-    const mais = screen.getByRole('button', { name: /mais/i });
-    // text-primary é o marcador visual do estado ativo.
-    expect(mais.className).toContain('text-primary');
+  it('acende o slot "Mais" quando a rota pertence ao overflow (ex.: /app/gestao)', () => {
+    renderAt('/app/gestao');
+    const maisBtn = screen.getByRole('button', { name: /mais/i });
+    expect(maisBtn.className).toMatch(/text-primary/);
   });
 });

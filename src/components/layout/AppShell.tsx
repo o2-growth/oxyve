@@ -45,19 +45,21 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <SidebarProvider defaultOpen={!isMobile}>
-      <SidebarNav />
+      {/* Sidebar só existe no desktop (≥lg). No mobile não montamos — nada de
+          drawer lateral (DS §10 proíbe); navegação é 100% BottomNav + dock. */}
+      {!isMobile && <SidebarNav />}
       <SidebarInset>
         <OfflineBanner />
         <TopBar />
         <CycleRibbon />
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-6">
+        {/* pb-28 no mobile abre espaço pra barra (h-16) + dock elevado + safe-area. */}
+        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-28 lg:pb-6">
           {children}
         </main>
         <InstallPrompt />
       </SidebarInset>
       <BottomNav />
-      {/* FAB flutuante é desktop-only; no mobile a BottomNav tem o FAB docado */}
-      {!isMobile && <QuickExpenseFab />}
+      <QuickExpenseFab />
     </SidebarProvider>
   );
 }
