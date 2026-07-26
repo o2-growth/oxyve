@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { O2Rings } from '@/components/brand/O2Rings';
+import { O2Logo } from '@/components/brand/O2Logo';
 
 // Google "G" icon (lucide-react não tem ícone do Google) — SVG inline com as
 // 4 cores oficiais da marca.
@@ -333,11 +334,8 @@ export default function Login() {
       {/* ===== Palco da marca — herói (desktop) ===== */}
       <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden border-r border-border/50 p-12 lg:flex">
         {/* Lockup O2 no topo */}
-        <img
-          src="/brand/o2-logo-white.png"
-          alt="O2 Inc."
-          className="relative z-10 h-6 w-auto opacity-90"
-        />
+        <O2Logo size={28} className="relative z-10 opacity-90" />
+
 
         {/* Herói central: anéis + título display */}
         <div className="relative z-10 flex flex-col items-start gap-9">
