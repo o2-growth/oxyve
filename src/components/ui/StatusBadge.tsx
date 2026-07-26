@@ -12,17 +12,18 @@ interface StatusBadgeProps {
   className?: string;
 }
 
+// Chip pill compacto — mono uppercase tabular, o "carimbo" do instrumento.
+const CHIP_BASE =
+  'border-transparent rounded-full font-mono font-medium uppercase text-[10px] leading-none tracking-[0.08em] tabular-nums px-2 py-1';
+
 export function StatusBadge({ status, type = 'expense', isOutOfPolicy, className }: StatusBadgeProps) {
   const labels = type === 'expense' ? EXPENSE_STATUS_LABELS : REPORT_STATUS_LABELS;
-  
-  // If out of policy, show warning badge
+
+  // Fora da política — carimbo âmbar de auditoria.
   if (isOutOfPolicy) {
     return (
       <Badge
-        className={cn(
-          'font-medium status-out-of-policy gap-1',
-          className
-        )}
+        className={cn(CHIP_BASE, 'status-out-of-policy gap-1', className)}
         variant="secondary"
       >
         <AlertTriangle className="h-3 w-3" />
@@ -30,11 +31,11 @@ export function StatusBadge({ status, type = 'expense', isOutOfPolicy, className
       </Badge>
     );
   }
-  
+
   return (
     <Badge
       className={cn(
-        'font-medium',
+        CHIP_BASE,
         status === 'draft' && 'status-draft',
         status === 'submitted' && 'status-submitted',
         status === 'approved' && 'status-approved',

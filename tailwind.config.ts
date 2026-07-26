@@ -13,6 +13,13 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        // O2 Inc.: display condensada uppercase (títulos), corpo Montserrat, mono JetBrains
+        display: ['"Barlow Condensed"', 'Anton', 'Impact', 'sans-serif'],
+        body: ['Montserrat', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['Montserrat', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'Consolas', 'Menlo', 'monospace'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

@@ -48,8 +48,18 @@ export function ExpenseCard({
 
   const isDraft = expense.status === 'draft' && !expense.report;
 
+  // Carimbo de auditoria — chip pill mono uppercase âmbar.
+  const STAMP =
+    'inline-flex shrink-0 items-center rounded-full font-mono font-medium uppercase text-[10px] leading-none tracking-[0.08em] px-1.5 py-1';
+
   return (
-    <Card className={cn('transition-colors', isSelected && 'ring-2 ring-primary')}>
+    <Card
+      className={cn(
+        'transition-colors duration-150 hover:border-primary/40 hover:bg-muted/40',
+        isSelected && 'ring-2 ring-primary',
+        expense.is_out_of_policy && 'border-l-2 border-l-[hsl(var(--status-event))]'
+      )}
+    >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <Checkbox
@@ -57,24 +67,24 @@ export function ExpenseCard({
             onCheckedChange={() => onSelect(expense.id)}
             className="mt-1"
           />
-          
+
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium truncate">{expense.description}</p>
+                  <p className="font-sans font-medium truncate text-foreground">{expense.description}</p>
                   {expense.is_event && (
-                    <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-medium">
+                    <span className={cn(STAMP, 'border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]')}>
                       Evento
                     </span>
                   )}
                   {expense.is_out_of_policy && (
-                    <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium">
-                      Revisar
+                    <span className={cn(STAMP, 'status-out-of-policy')}>
+                      Exc · Revisar
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="o2-num text-[11px] text-muted-foreground mt-0.5">
                   {formatDate(expense.date)} • {expense.category?.name || 'Sem tipo'}
                 </p>
               </div>
@@ -138,17 +148,17 @@ export function ExpenseCard({
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge status={expense.status} />
                 {expense.report && (
-                  <Badge variant="outline" className="font-normal text-xs">
+                  <Badge variant="outline" className="font-mono font-normal text-[10px]">
                     {expense.report.title}
                   </Badge>
                 )}
               </div>
-              <p className="font-semibold text-lg">
+              <p className="o2-num text-lg font-semibold tracking-tight text-foreground">
                 {formatCurrency(expense.amount_cents, expense.currency)}
               </p>
             </div>
 
-            <p className="text-xs text-muted-foreground">
+            <p className="font-mono text-[11px] text-muted-foreground">
               {PAYMENT_METHOD_LABELS[expense.payment_method]}
             </p>
           </div>

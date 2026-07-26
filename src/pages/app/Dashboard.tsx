@@ -65,77 +65,85 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Stats Cards - 2 cols on mobile, 4 on desktop */}
+      {/* Stats como PLACAR — hierarquia do dinheiro, entrada em stagger */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        <Card className="animate-fade-in">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Período Atual
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
-          </CardHeader>
-          <CardContent>
+        {/* Período Atual — valor em moeda (R$ menor e muted, número grita) */}
+        <Card className="o2-rise" style={{ animationDelay: '0ms' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between">
+              <span className="o2-eyebrow">Período Atual</span>
+              <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            </div>
             {isLoading ? (
-              <Skeleton className="h-7 w-24" />
+              <Skeleton className="mt-2 h-9 w-28" />
             ) : (
-              <div className="text-xl sm:text-2xl font-bold">
-                {formatCurrency(currentReportExpenses?.total_cents || 0)}
+              <div className="mt-2 flex items-baseline gap-1.5">
+                <span className="font-mono text-sm text-muted-foreground">R$</span>
+                <span className="o2-display tabular-nums text-3xl sm:text-4xl text-foreground">
+                  {new Intl.NumberFormat('pt-BR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  }).format((currentReportExpenses?.total_cents || 0) / 100)}
+                </span>
               </div>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="mt-1.5 text-xs text-muted-foreground">
               {currentReportExpenses?.count || 0} despesas
             </p>
           </CardContent>
         </Card>
 
-        <Card className="animate-fade-in" style={{ animationDelay: '0.1s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Rascunhos
-            </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
-          </CardHeader>
-          <CardContent>
+        {/* Rascunhos */}
+        <Card className="o2-rise" style={{ animationDelay: '60ms' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between">
+              <span className="o2-eyebrow">Rascunhos</span>
+              <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            </div>
             {isLoading ? (
-              <Skeleton className="h-7 w-12" />
+              <Skeleton className="mt-2 h-9 w-14" />
             ) : (
-              <div className="text-xl sm:text-2xl font-bold">{draftReports}</div>
+              <div className="mt-2 o2-display tabular-nums text-3xl sm:text-4xl text-foreground">
+                {draftReports}
+              </div>
             )}
-            <p className="text-xs text-muted-foreground">Aguardando envio</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">Aguardando envio</p>
           </CardContent>
         </Card>
 
-        <Card className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Enviados
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground hidden sm:block" />
-          </CardHeader>
-          <CardContent>
+        {/* Enviados */}
+        <Card className="o2-rise" style={{ animationDelay: '120ms' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between">
+              <span className="o2-eyebrow">Enviados</span>
+              <FileText className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            </div>
             {isLoading ? (
-              <Skeleton className="h-7 w-12" />
+              <Skeleton className="mt-2 h-9 w-14" />
             ) : (
-              <div className="text-xl sm:text-2xl font-bold">{submittedReports}</div>
+              <div className="mt-2 o2-display tabular-nums text-3xl sm:text-4xl text-foreground">
+                {submittedReports}
+              </div>
             )}
-            <p className="text-xs text-muted-foreground">Em aprovação</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">Em aprovação</p>
           </CardContent>
         </Card>
 
-        <Card className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-              Aprovados
-            </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-600 hidden sm:block" />
-          </CardHeader>
-          <CardContent>
+        {/* Aprovados — único número em verde (destaque) */}
+        <Card className="o2-rise" style={{ animationDelay: '180ms' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between">
+              <span className="o2-eyebrow">Aprovados</span>
+              <CheckCircle2 className="h-4 w-4 text-primary hidden sm:block" />
+            </div>
             {isLoading ? (
-              <Skeleton className="h-7 w-12" />
+              <Skeleton className="mt-2 h-9 w-14" />
             ) : (
-              <div className="text-xl sm:text-2xl font-bold">{approvedReports}</div>
+              <div className="mt-2 o2-display tabular-nums text-3xl sm:text-4xl text-primary">
+                {approvedReports}
+              </div>
             )}
-            <p className="text-xs text-muted-foreground">Relatórios aprovados</p>
+            <p className="mt-1.5 text-xs text-muted-foreground">Relatórios aprovados</p>
           </CardContent>
         </Card>
       </div>

@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Mail, Info } from 'lucide-react';
+import { Mail, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { O2Rings } from '@/components/brand/O2Rings';
 
 // Google "G" icon (lucide-react não tem ícone do Google) — SVG inline com as
 // 4 cores oficiais da marca.
@@ -37,25 +38,6 @@ function GoogleIcon({ className }: { className?: string }) {
         d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.62l3.99 3.1C6.22 6.86 8.87 4.75 12 4.75z"
       />
     </svg>
-  );
-}
-
-// O2 Logo Component
-function O2Logo({ size = 'md', inverted = false }: { size?: 'sm' | 'md' | 'lg'; inverted?: boolean }) {
-  const sizes = {
-    sm: 'h-8 w-8 text-sm',
-    md: 'h-10 w-10 text-base',
-    lg: 'h-12 w-12 text-lg',
-  };
-
-  return (
-    <div
-      className={`flex ${sizes[size]} shrink-0 items-center justify-center rounded-full border-2 ${
-        inverted ? 'border-white bg-transparent' : 'border-primary bg-background'
-      }`}
-    >
-      <span className={`font-bold ${inverted ? 'text-white' : 'text-primary'}`}>O2</span>
-    </div>
   );
 }
 
@@ -106,6 +88,9 @@ export default function Login() {
 
   const inviteToken = searchParams.get('invite');
   const hasInvite = !!inviteToken;
+  // Estado agregado de "trabalhando" — faz os anéis O2 acelerarem no submit
+  // (eles são o loader cerimonial da marca; nunca um spinner genérico).
+  const busy = isLoading || isGoogleLoading;
 
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -248,17 +233,15 @@ export default function Login() {
   // evento PASSWORD_RECOVERY do Supabase JS.
   if (isRecoveryMode) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="space-y-1 text-center">
-            <div className="mb-4 flex items-center justify-center gap-2">
-              <O2Logo />
-              <span className="text-2xl font-bold text-foreground">Oxy VE</span>
+      <div className="flex min-h-screen items-center justify-center bg-background p-6 sm:p-8">
+        <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
+          <CardHeader className="items-center space-y-3 text-center">
+            <O2Rings size={72} breathing spinning fast={busy} />
+            <div className="space-y-1">
+              <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
+              <CardTitle className="text-2xl">Definir nova senha</CardTitle>
+              <CardDescription>Escolha uma senha nova para sua conta</CardDescription>
             </div>
-            <CardTitle className="text-2xl">Definir nova senha</CardTitle>
-            <CardDescription>
-              Escolha uma senha nova para sua conta
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={recoveryForm.handleSubmit(handleRecovery)} className="space-y-4">
@@ -293,7 +276,6 @@ export default function Login() {
                 )}
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Salvar nova senha
               </Button>
             </form>
@@ -305,17 +287,15 @@ export default function Login() {
 
   if (showForgotPassword) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-8">
-        <Card className="w-full max-w-md shadow-lg">
-          <CardHeader className="space-y-1 text-center">
-            <div className="mb-4 flex items-center justify-center gap-2">
-              <O2Logo />
-              <span className="text-2xl font-bold text-foreground">Oxy VE</span>
+      <div className="flex min-h-screen items-center justify-center bg-background p-6 sm:p-8">
+        <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
+          <CardHeader className="items-center space-y-3 text-center">
+            <O2Rings size={72} breathing spinning fast={busy} />
+            <div className="space-y-1">
+              <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
+              <CardTitle className="text-2xl">Recuperar senha</CardTitle>
+              <CardDescription>Informe seu email para receber o link de recuperação</CardDescription>
             </div>
-            <CardTitle className="text-2xl">Recuperar senha</CardTitle>
-            <CardDescription>
-              Informe seu email para receber o link de recuperação
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={forgotForm.handleSubmit(handleForgotPassword)} className="space-y-4">
@@ -334,7 +314,7 @@ export default function Login() {
                 )}
               </div>
               <Button type="submit" className="w-full gap-2" disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                <Mail className="h-4 w-4" />
                 Enviar link de recuperação
               </Button>
               <Button
@@ -353,35 +333,73 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      {/* Left side - Branding (Graphite background) */}
-      <div className="hidden w-1/2 flex-col justify-between bg-brand-graphite p-12 lg:flex">
-        <div className="flex items-center gap-3">
-          <O2Logo inverted />
-          <span className="text-2xl font-bold text-white">Oxy VE</span>
+    <div className="flex min-h-screen bg-background">
+      {/* ===== Palco da marca — herói (desktop) ===== */}
+      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden border-r border-border/50 p-12 lg:flex">
+        {/* Lockup O2 no topo */}
+        <img
+          src="/brand/o2-logo-white.png"
+          alt="O2 Inc."
+          className="relative z-10 h-6 w-auto opacity-90"
+        />
+
+        {/* Herói central: anéis + título display */}
+        <div className="relative z-10 flex flex-col items-start gap-9">
+          <div className="relative flex items-center justify-center">
+            {/* Glow radial verde-lima atrás do símbolo */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-24"
+              style={{
+                background:
+                  'radial-gradient(circle at center, hsl(var(--primary) / 0.15), transparent 70%)',
+              }}
+            />
+            <O2Rings size={220} breathing spinning fast={busy} className="relative" />
+          </div>
+
+          <div className="space-y-4">
+            <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
+            <h1 className="o2-display text-6xl leading-[0.9] text-foreground">
+              Oxy VE
+              <span className="mt-3 block text-2xl text-muted-foreground">
+                Gestão de despesas
+              </span>
+            </h1>
+          </div>
         </div>
 
-        <div className="space-y-6">
-          <h1 className="text-4xl font-bold leading-tight text-white">
-            Gerencie suas despesas<br />de forma simples e eficiente
-          </h1>
-          <p className="text-lg text-white/70">
-            Lançe despesas, organize relatórios e acompanhe aprovações em um só lugar.
-          </p>
-        </div>
-
-        <p className="text-sm text-white/50">© 2024 Oxy VE. Todos os direitos reservados.</p>
+        {/* Rodapé discreto */}
+        <p className="o2-num relative z-10 text-xs text-muted-foreground">
+          © 2026 O2 Inc · Oxy VE
+        </p>
       </div>
 
-      {/* Right side - Form */}
-      <div className="flex w-full items-center justify-center bg-background p-8 lg:w-1/2">
-        <Card className="w-full max-w-md border-0 shadow-none lg:shadow-lg lg:border">
-          <CardHeader className="space-y-1 text-center lg:text-left">
-            <div className="mb-4 flex items-center justify-center gap-2 lg:hidden">
-              <O2Logo />
-              <span className="text-2xl font-bold">Oxy VE</span>
-            </div>
-            <CardTitle className="text-2xl">Bem-vindo!</CardTitle>
+      {/* ===== Card de login ===== */}
+      <div className="flex w-full flex-col items-center justify-center p-6 sm:p-8 lg:w-1/2">
+        {/* Herói compacto no mobile (anéis no topo) */}
+        <div className="mb-8 flex flex-col items-center gap-4 text-center lg:hidden">
+          <div className="relative flex items-center justify-center">
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -inset-10"
+              style={{
+                background:
+                  'radial-gradient(circle at center, hsl(var(--primary) / 0.15), transparent 70%)',
+              }}
+            />
+            <O2Rings size={80} breathing spinning fast={busy} className="relative" />
+          </div>
+          <div className="space-y-1">
+            <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
+            <h1 className="o2-display text-3xl text-foreground">Oxy VE</h1>
+          </div>
+        </div>
+
+        <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
+          <CardHeader className="space-y-1">
+            <p className="o2-eyebrow">{hasInvite ? 'Criar conta' : 'Acessar conta'}</p>
+            <CardTitle className="text-2xl">Bem-vindo</CardTitle>
             <CardDescription>
               {hasInvite
                 ? 'Você foi convidado! Crie sua conta para continuar.'
@@ -475,7 +493,7 @@ function GoogleAuthSection({
         disabled={isLoading || isGoogleLoading}
       >
         {isGoogleLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <O2Rings size={16} spinning fast />
         ) : (
           <GoogleIcon className="h-4 w-4" />
         )}
@@ -522,7 +540,6 @@ function LoginFormBlock({ form, onSubmit, isLoading, onForgot, onGoogle, isGoogl
         )}
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Entrar
       </Button>
       <GoogleAuthSection
@@ -592,7 +609,6 @@ function SignupFormBlock({ form, onSubmit, isLoading, onGoogle, isGoogleLoading 
         )}
       </div>
       <Button type="submit" className="w-full" disabled={isLoading}>
-        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Criar conta
       </Button>
       <GoogleAuthSection

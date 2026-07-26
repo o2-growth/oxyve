@@ -30,6 +30,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { O2Rings } from '@/components/brand/O2Rings';
 
 const mainNavItems = [
   { to: '/app/dashboard', icon: LayoutDashboard, label: 'Início' },
@@ -64,15 +65,12 @@ export function SidebarNav() {
 
   return (
     <Sidebar collapsible="icon">
-      {/* Logo */}
+      {/* Marca O2 — anéis + wordmark condensado */}
       <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-        <div className="flex h-10 items-center gap-2">
-          {/* O2 Logo Mark */}
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-sidebar-primary bg-sidebar-background">
-            <span className="text-sm font-bold text-sidebar-primary">O2</span>
-          </div>
+        <div className="flex h-10 items-center gap-2.5">
+          <O2Rings size={26} className="shrink-0" />
           {!isCollapsed && (
-            <span className="text-lg font-semibold text-sidebar-foreground">
+            <span className="font-display text-xl uppercase leading-none tracking-wide text-sidebar-foreground">
               Oxy VE
             </span>
           )}
@@ -91,11 +89,11 @@ export function SidebarNav() {
                     isActive={isActive(item.to)}
                     tooltip={item.label}
                   >
-                    <NavLink 
+                    <NavLink
                       to={item.to}
                       className={cn(
-                        "transition-colors",
-                        isActive(item.to) && "border-l-2 border-sidebar-primary"
+                        "font-sans transition-colors duration-150",
+                        isActive(item.to) && "border-l-2 border-sidebar-primary font-medium text-sidebar-primary"
                       )}
                     >
                       <item.icon className="h-5 w-5" />
@@ -118,11 +116,11 @@ export function SidebarNav() {
                     isActive={isActive(item.to, item.matchPrefix)}
                     tooltip={item.label}
                   >
-                    <NavLink 
+                    <NavLink
                       to={item.to}
                       className={cn(
-                        "transition-colors",
-                        isActive(item.to, item.matchPrefix) && "border-l-2 border-sidebar-primary"
+                        "font-sans transition-colors duration-150",
+                        isActive(item.to, item.matchPrefix) && "border-l-2 border-sidebar-primary font-medium text-sidebar-primary"
                       )}
                     >
                       <item.icon className="h-5 w-5" />
@@ -143,8 +141,8 @@ export function SidebarNav() {
           isCollapsed ? "justify-center" : "justify-between px-2"
         )}>
           {!isCollapsed && (
-            <p className="text-xs text-sidebar-foreground/50">
-              © 2024 Oxy VE
+            <p className="o2-eyebrow text-sidebar-foreground/45">
+              © 2026 Oxy VE
             </p>
           )}
           <Tooltip>

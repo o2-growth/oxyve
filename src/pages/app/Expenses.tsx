@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -66,6 +66,14 @@ export default function Expenses() {
 
   const deleteExpense = useDeleteExpense();
   const deleteExpenses = useDeleteExpenses();
+
+  // Stagger o2-rise só na PRIMEIRA carga da lista — troca de aba/filtro é instantânea.
+  const firstListLoad = useRef(true);
+  useEffect(() => {
+    if (!isLoading && expenses) {
+      firstListLoad.current = false;
+    }
+  }, [isLoading, expenses]);
 
   // Count active advanced filters
   const advancedFilterCount = useMemo(() => {
@@ -237,13 +245,13 @@ export default function Expenses() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="gap-1.5 text-xs sm:text-sm data-[state=active]:shadow-sm whitespace-nowrap"
+                className="gap-1.5 font-mono uppercase tracking-[0.08em] text-[11px] data-[state=active]:shadow-sm whitespace-nowrap"
               >
                 {tab.label}
                 {counts && (
                   <span
                     className={cn(
-                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-medium',
+                      'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-mono tabular-nums',
                       activeTab === tab.value
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-muted text-muted-foreground'
@@ -373,16 +381,25 @@ export default function Expenses() {
       ) : isMobile ? (
         // Mobile: Card layout
         <div className="space-y-3">
-          {expenses?.map((expense) => (
-            <ExpenseCard
+          {expenses?.map((expense, i) => (
+            <div
               key={expense.id}
-              expense={expense}
-              isSelected={selectedIds.has(expense.id)}
-              onSelect={toggleSelection}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onAddToReport={handleAddToReport}
-            />
+              className={firstListLoad.current ? 'o2-rise' : undefined}
+              style={
+                firstListLoad.current
+                  ? { animationDelay: `${Math.min(i, 8) * 40}ms` }
+                  : undefined
+              }
+            >
+              <ExpenseCard
+                expense={expense}
+                isSelected={selectedIds.has(expense.id)}
+                onSelect={toggleSelection}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onAddToReport={handleAddToReport}
+              />
+            </div>
           ))}
         </div>
       ) : (
