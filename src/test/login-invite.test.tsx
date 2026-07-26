@@ -13,6 +13,7 @@ vi.mock('@/integrations/supabase/client', () => ({
       }),
       signInWithPassword: vi.fn(),
       signUp: vi.fn(),
+      signInWithOAuth: vi.fn(),
       signOut: vi.fn(),
       resetPasswordForEmail: vi.fn(),
     },
@@ -26,7 +27,10 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     signIn: vi.fn(),
     signUp: vi.fn(),
+    signInWithGoogle: vi.fn(),
     requestPasswordReset: vi.fn(),
+    updatePassword: vi.fn(),
+    isRecoveryMode: false,
   }),
 }));
 
@@ -38,20 +42,18 @@ function renderLoginAt(path: string) {
   );
 }
 
-describe('Login — invite-gated signup tab', () => {
+describe('Login — abas Entrar/Cadastrar (auto-join por domínio)', () => {
   beforeEach(() => {
     cleanup();
   });
 
-  it('não exibe a tab "Cadastrar" sem ?invite= na URL', () => {
+  it('exibe a tab "Cadastrar" mesmo sem ?invite= (auto-join por domínio)', () => {
     renderLoginAt('/login');
-    // Tab "Cadastrar" não deve estar presente.
-    expect(screen.queryByTestId('signup-tab')).toBeNull();
-    // Aviso para usuário sem invite deve aparecer.
-    expect(
-      screen.getByText(/Você precisa de um convite/i),
-    ).toBeInTheDocument();
-    // Mas o form de "Entrar" ainda existe.
+    // Convite deixou de ser obrigatório — a aba de cadastro sempre aparece.
+    expect(screen.getByTestId('signup-tab')).toBeInTheDocument();
+    // O aviso de convite não deve mais existir.
+    expect(screen.queryByText(/Você precisa de um convite/i)).toBeNull();
+    // O botão de entrar continua presente.
     expect(screen.getByRole('button', { name: /^Entrar$/i })).toBeInTheDocument();
   });
 
