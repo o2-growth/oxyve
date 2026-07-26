@@ -146,6 +146,57 @@ export function useCreateExpenseInReport() {
   });
 }
 
+export function useCreateExpenseMultiday() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: {
+      description: string;
+      amount_cents_per_day: number;
+      start_date: string;
+      end_date: string;
+      category_id?: string | null;
+      cost_center_id?: string | null;
+      project_id?: string | null;
+      payment_method?: string;
+      currency?: string;
+      is_reimbursable?: boolean;
+      notes?: string | null;
+      is_event?: boolean;
+    }) => {
+      const { data, error } = await supabase.rpc('create_expense_multiday', {
+        p_description: input.description,
+        p_amount_cents_per_day: input.amount_cents_per_day,
+        p_start_date: input.start_date,
+        p_end_date: input.end_date,
+        p_category_id: input.category_id || undefined,
+        p_cost_center_id: input.cost_center_id || undefined,
+        p_project_id: input.project_id || undefined,
+        p_payment_method: input.payment_method || 'personal_card',
+        p_currency: input.currency || 'BRL',
+        p_is_reimbursable: input.is_reimbursable ?? true,
+        p_notes: input.notes || undefined,
+        p_is_event: input.is_event ?? false,
+      });
+      if (error) throw error;
+      return data as unknown as { count: number; expenses: unknown[] };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
+      toast.success(`${data.count} despesa(s) criada(s) — uma por dia.`);
+    },
+    onError: (error) => {
+      const msg = error.message || 'Não foi possível criar as despesas.';
+      const isPolicyBlock = /limite|política|politica|período|periodo|data/i.test(msg);
+      toast.error(isPolicyBlock ? msg : 'Erro ao criar despesas: ' + msg);
+    },
+  });
+}
+
 export function useSubmitReportRpc() {
   const queryClient = useQueryClient();
 
