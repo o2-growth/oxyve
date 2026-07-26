@@ -15,6 +15,31 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Mail, Info } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Google "G" icon (lucide-react não tem ícone do Google) — SVG inline com as
+// 4 cores oficiais da marca.
+function GoogleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M23.52 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.47a5.53 5.53 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.57-5.17 3.57-8.87z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.96-1.08 7.95-2.91l-3.88-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.96H1.28v3.1A12 12 0 0 0 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.27 14.28a7.2 7.2 0 0 1 0-4.56v-3.1H1.28a12 12 0 0 0 0 10.76l3.99-3.1z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.28 6.62l3.99 3.1C6.22 6.86 8.87 4.75 12 4.75z"
+      />
+    </svg>
+  );
+}
+
 // O2 Logo Component
 function O2Logo({ size = 'md', inverted = false }: { size?: 'sm' | 'md' | 'lg'; inverted?: boolean }) {
   const sizes = {
@@ -74,8 +99,9 @@ type RecoveryFormValues = z.infer<typeof recoverySchema>;
 export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signIn, signUp, requestPasswordReset, isRecoveryMode, updatePassword } = useAuth();
+  const { signIn, signUp, signInWithGoogle, requestPasswordReset, isRecoveryMode, updatePassword } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const inviteToken = searchParams.get('invite');
@@ -111,6 +137,18 @@ export default function Login() {
     }
     toast.success('Senha alterada com sucesso!');
     navigate('/app/dashboard');
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    const { error } = await signInWithGoogle();
+    if (error) {
+      toast.error('Erro ao entrar com Google: ' + error.message);
+      setIsGoogleLoading(false);
+      return;
+    }
+    // Em caso de sucesso o navegador é redirecionado ao Google/OAuth; não
+    // resetamos o loading para manter o botão desabilitado durante o redirect.
   };
 
   const handleLogin = async (values: LoginFormValues) => {
@@ -366,6 +404,8 @@ export default function Login() {
                     onSubmit={handleLogin}
                     isLoading={isLoading}
                     onForgot={() => setShowForgotPassword(true)}
+                    onGoogle={handleGoogleSignIn}
+                    isGoogleLoading={isGoogleLoading}
                   />
                 </TabsContent>
 
@@ -374,6 +414,8 @@ export default function Login() {
                     form={signupForm}
                     onSubmit={handleSignup}
                     isLoading={isLoading}
+                    onGoogle={handleGoogleSignIn}
+                    isGoogleLoading={isGoogleLoading}
                   />
                 </TabsContent>
               </Tabs>
@@ -390,6 +432,8 @@ export default function Login() {
                   onSubmit={handleLogin}
                   isLoading={isLoading}
                   onForgot={() => setShowForgotPassword(true)}
+                  onGoogle={handleGoogleSignIn}
+                  isGoogleLoading={isGoogleLoading}
                 />
               </div>
             )}
@@ -400,14 +444,57 @@ export default function Login() {
   );
 }
 
+// Separador "ou" + botão de login com Google, reutilizado nas abas de login e
+// cadastro. bg-card casa com o fundo do Card (ver components/ui/card.tsx).
+function GoogleAuthSection({
+  label,
+  onGoogle,
+  isGoogleLoading,
+  isLoading,
+}: {
+  label: string;
+  onGoogle: () => void;
+  isGoogleLoading: boolean;
+  isLoading: boolean;
+}) {
+  return (
+    <>
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-card px-2 text-muted-foreground">ou</span>
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full gap-2"
+        onClick={onGoogle}
+        disabled={isLoading || isGoogleLoading}
+      >
+        {isGoogleLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <GoogleIcon className="h-4 w-4" />
+        )}
+        {label}
+      </Button>
+    </>
+  );
+}
+
 interface LoginBlockProps {
   form: ReturnType<typeof useForm<LoginFormValues>>;
   onSubmit: (values: LoginFormValues) => void | Promise<void>;
   isLoading: boolean;
   onForgot: () => void;
+  onGoogle: () => void;
+  isGoogleLoading: boolean;
 }
 
-function LoginFormBlock({ form, onSubmit, isLoading, onForgot }: LoginBlockProps) {
+function LoginFormBlock({ form, onSubmit, isLoading, onForgot, onGoogle, isGoogleLoading }: LoginBlockProps) {
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
@@ -438,6 +525,12 @@ function LoginFormBlock({ form, onSubmit, isLoading, onForgot }: LoginBlockProps
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Entrar
       </Button>
+      <GoogleAuthSection
+        label="Entrar com Google"
+        onGoogle={onGoogle}
+        isGoogleLoading={isGoogleLoading}
+        isLoading={isLoading}
+      />
     </form>
   );
 }
@@ -446,9 +539,11 @@ interface SignupBlockProps {
   form: ReturnType<typeof useForm<SignupFormValues>>;
   onSubmit: (values: SignupFormValues) => void | Promise<void>;
   isLoading: boolean;
+  onGoogle: () => void;
+  isGoogleLoading: boolean;
 }
 
-function SignupFormBlock({ form, onSubmit, isLoading }: SignupBlockProps) {
+function SignupFormBlock({ form, onSubmit, isLoading, onGoogle, isGoogleLoading }: SignupBlockProps) {
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
       <div className="space-y-2">
@@ -500,6 +595,12 @@ function SignupFormBlock({ form, onSubmit, isLoading }: SignupBlockProps) {
         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Criar conta
       </Button>
+      <GoogleAuthSection
+        label="Cadastrar com Google"
+        onGoogle={onGoogle}
+        isGoogleLoading={isGoogleLoading}
+        isLoading={isLoading}
+      />
     </form>
   );
 }

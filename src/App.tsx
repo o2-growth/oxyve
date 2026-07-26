@@ -16,6 +16,7 @@ import { UpdatePrompt } from "@/components/pwa/UpdatePrompt";
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/app/Dashboard"));
 const Expenses = lazy(() => import("./pages/app/Expenses"));
+const Gestao = lazy(() => import("./pages/app/Gestao"));
 const Reports = lazy(() => import("./pages/app/Reports"));
 const ReportDetail = lazy(() => import("./pages/app/ReportDetail"));
 const SettingsProfile = lazy(() => import("./pages/app/SettingsProfile"));
@@ -94,6 +95,7 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route path="/app/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/app/expenses" element={<ProtectedRoute><Expenses /></ProtectedRoute>} />
+      <Route path="/app/gestao" element={<ProtectedRoute><Gestao /></ProtectedRoute>} />
       <Route path="/app/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/app/reports/:id" element={<ProtectedRoute><ReportDetail /></ProtectedRoute>} />
       <Route path="/app/settings/profile" element={<ProtectedRoute><SettingsProfile /></ProtectedRoute>} />

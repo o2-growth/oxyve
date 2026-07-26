@@ -1,0 +1,509 @@
+import { useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AppShell } from '@/components/layout/AppShell';
+import { PageHeader } from '@/components/layout/PageHeader';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { formatCurrency } from '@/lib/constants';
+import {
+  useAdminOverview,
+  type PersonRow,
+} from '@/hooks/useAdminOverview';
+import {
+  Wallet,
+  TrendingUp,
+  Banknote,
+  Users,
+  ShieldOff,
+  Building2,
+  AlertTriangle,
+  XCircle,
+  CalendarRange,
+  CheckCircle2,
+} from 'lucide-react';
+
+/** Formata uma data ISO "yyyy-MM-dd" para "dd/MM/yyyy" sem sofrer com
+ *  deslocamento de timezone (não passa por Date/UTC). */
+function formatIsoDate(iso: string): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('T')[0].split('-');
+  if (!y || !m || !d) return iso;
+  return `${d}/${m}/${y}`;
+}
+
+interface DrillExpense {
+  id: string;
+  date: string;
+  description: string;
+  amount_cents: number;
+  currency: string;
+  status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
+  is_out_of_policy: boolean;
+  is_event: boolean;
+  category?: { name: string } | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Drill-down: lançamentos de uma pessoa                               */
+/* ------------------------------------------------------------------ */
+
+function PersonExpensesDialog({
+  person,
+  onClose,
+}: {
+  person: PersonRow | null;
+  onClose: () => void;
+}) {
+  const userId = person?.user_id ?? null;
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['admin-person-expenses', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*, category:expense_categories(name)')
+        .eq('user_id', userId as string)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      return data as unknown as DrillExpense[];
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const payable = (data ?? []).filter(
+    (e) => e.status === 'submitted' || e.status === 'approved',
+  );
+  const payableTotal = payable.reduce((s, e) => s + e.amount_cents, 0);
+
+  const markPaid = useMutation({
+    mutationFn: async () => {
+      const { data: res, error } = await supabase.rpc('mark_expenses_paid', {
+        p_expense_ids: payable.map((e) => e.id),
+      } as never);
+      if (error) throw error;
+      return res as unknown as { paid: number };
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-person-expenses', userId] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success(`${res.paid} lançamento(s) marcado(s) como pago(s).`);
+      onClose();
+    },
+    onError: (e) =>
+      toast.error('Erro ao confirmar pagamento: ' + (e as Error).message),
+  });
+
+  return (
+    <Dialog open={!!person} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{person?.full_name || 'Colaborador'}</DialogTitle>
+          <DialogDescription>
+            Lançamentos do colaborador
+            {person ? ` — total a pagar ${formatCurrency(person.a_pagar_cents)}` : ''}
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : isError ? (
+          <EmptyState
+            icon={<AlertTriangle className="h-6 w-6" />}
+            title="Não foi possível carregar os lançamentos"
+            description="Tente novamente em instantes."
+          />
+        ) : !data || data.length === 0 ? (
+          <EmptyState
+            icon={<Banknote className="h-6 w-6" />}
+            title="Nenhum lançamento"
+            description="Este colaborador ainda não possui despesas registradas."
+          />
+        ) : (
+          <div className="space-y-2">
+            {data.map((expense) => (
+              <div
+                key={expense.id}
+                className="flex items-start justify-between gap-3 rounded-lg border p-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-sm truncate">
+                      {expense.description}
+                    </p>
+                    {expense.is_out_of_policy && (
+                      <Badge variant="destructive" className="gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Revisar
+                      </Badge>
+                    )}
+                    {expense.is_event && (
+                      <Badge variant="secondary" className="gap-1">
+                        <CalendarRange className="h-3 w-3" />
+                        Evento
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {formatIsoDate(expense.date)}
+                    {expense.category?.name ? ` • ${expense.category.name}` : ''}
+                  </p>
+                  <div className="mt-1.5">
+                    <StatusBadge status={expense.status} />
+                  </div>
+                </div>
+                <p className="shrink-0 font-semibold text-sm">
+                  {formatCurrency(expense.amount_cents, expense.currency)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {payable.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              {payable.length} lançamento(s) aguardando pagamento
+            </p>
+            <Button
+              onClick={() => markPaid.mutate()}
+              disabled={markPaid.isPending}
+              className="gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Confirmar pagamento ({formatCurrency(payableTotal)})
+            </Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Página                                                              */
+/* ------------------------------------------------------------------ */
+
+export default function Gestao() {
+  const { data, isLoading, isError } = useAdminOverview();
+  const [selectedPerson, setSelectedPerson] = useState<PersonRow | null>(null);
+
+  const people = useMemo(
+    () =>
+      [...(data?.por_pessoa ?? [])].sort(
+        (a, b) => b.a_pagar_cents - a.a_pagar_cents,
+      ),
+    [data],
+  );
+
+  const sectors = useMemo(
+    () =>
+      [...(data?.por_setor ?? [])].sort(
+        (a, b) => b.total_cents - a.total_cents,
+      ),
+    [data],
+  );
+
+  // Estado de acesso restrito (RPC bloqueia não-admins).
+  if (isError) {
+    return (
+      <AppShell>
+        <PageHeader
+          title="Gestão"
+          description="Painel financeiro da organização"
+        />
+        <EmptyState
+          icon={<ShieldOff className="h-6 w-6" />}
+          title="Acesso restrito aos administradores."
+          description="Você não tem permissão para visualizar o painel de gestão financeira."
+        />
+      </AppShell>
+    );
+  }
+
+  const org = data?.org;
+  const cycle = data?.cycle;
+  const realizadoCents =
+    (org?.food_realized_cents ?? 0) + (org?.transport_realized_cents ?? 0);
+
+  const kpis = [
+    {
+      label: 'Orçamento alimentação',
+      value: org?.food_budget_cents ?? 0,
+      icon: Wallet,
+      hint: cycle ? `${cycle.business_days} dias úteis` : undefined,
+    },
+    {
+      label: 'Realizado',
+      value: realizadoCents,
+      icon: TrendingUp,
+      hint: 'Alimentação + transporte',
+    },
+    {
+      label: 'Total a pagar',
+      value: org?.total_a_pagar_cents ?? 0,
+      icon: Banknote,
+      hint: 'No ciclo atual',
+    },
+  ];
+
+  return (
+    <AppShell>
+      <PageHeader
+        title="Gestão"
+        description="Painel financeiro da organização"
+      />
+
+      {/* Ciclo atual */}
+      <div className="mb-4 md:mb-6 flex items-center gap-2 text-sm text-muted-foreground">
+        <CalendarRange className="h-4 w-4 shrink-0" />
+        {isLoading || !cycle ? (
+          <Skeleton className="h-4 w-56" />
+        ) : (
+          <span>
+            Ciclo{' '}
+            <span className="font-medium text-foreground">{cycle.cycle_key}</span>
+            {' · '}
+            {formatIsoDate(cycle.start)} – {formatIsoDate(cycle.end)}
+            {' · '}
+            {cycle.business_days} dias úteis
+          </span>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        {kpis.map((kpi, i) => (
+          <Card
+            key={kpi.label}
+            className="animate-fade-in"
+            style={{ animationDelay: `${i * 0.1}s` }}
+          >
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+                {kpi.label}
+              </CardTitle>
+              <kpi.icon className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-7 w-24" />
+              ) : (
+                <div className="text-xl sm:text-2xl font-bold">
+                  {formatCurrency(kpi.value)}
+                </div>
+              )}
+              {kpi.hint && (
+                <p className="text-xs text-muted-foreground">{kpi.hint}</p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Colaboradores (contagem, não moeda) */}
+        <Card className="animate-fade-in" style={{ animationDelay: '0.3s' }}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Colaboradores
+            </CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground hidden sm:block" />
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-7 w-12" />
+            ) : (
+              <div className="text-xl sm:text-2xl font-bold">
+                {org?.colaboradores ?? 0}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">Ativos no ciclo</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Por pessoa */}
+      <Card className="mt-6 md:mt-8">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">Por pessoa</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Realizado e projeção por colaborador — clique para ver os lançamentos
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : people.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-6 w-6" />}
+              title="Nenhum colaborador no ciclo"
+              description="Ainda não há dados de gastos para este período."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Colaborador</TableHead>
+                  <TableHead className="text-right">
+                    Alimentação (real. / proj.)
+                  </TableHead>
+                  <TableHead className="text-right">
+                    Transporte (real. / proj.)
+                  </TableHead>
+                  <TableHead className="text-right">Total a pagar</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {people.map((person) => (
+                  <TableRow
+                    key={person.user_id}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedPerson(person)}
+                  >
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">{person.full_name}</span>
+                        {(person.recusados > 0 || person.excecoes > 0) && (
+                          <div className="flex flex-wrap gap-1">
+                            {person.recusados > 0 && (
+                              <Badge variant="destructive" className="gap-1">
+                                <XCircle className="h-3 w-3" />
+                                {person.recusados} recusado
+                                {person.recusados > 1 ? 's' : ''}
+                              </Badge>
+                            )}
+                            {person.excecoes > 0 && (
+                              <Badge variant="secondary" className="gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                {person.excecoes} exceç
+                                {person.excecoes > 1 ? 'ões' : 'ão'}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <span className="font-medium">
+                        {formatCurrency(person.food_realized_cents)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {' / '}
+                        {formatCurrency(person.food_projected_cents)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <span className="font-medium">
+                        {formatCurrency(person.transport_realized_cents)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {' / '}
+                        {formatCurrency(person.transport_projected_cents)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {formatCurrency(person.a_pagar_cents)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Por setor */}
+      <Card className="mt-6 md:mt-8">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base sm:text-lg">Por setor</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Distribuição dos gastos realizados por setor
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : sectors.length === 0 ? (
+            <EmptyState
+              icon={<Building2 className="h-6 w-6" />}
+              title="Sem dados por setor"
+              description="Nenhum gasto atribuído a setores neste ciclo."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Setor</TableHead>
+                  <TableHead className="text-right">Alimentação</TableHead>
+                  <TableHead className="text-right">Transporte</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sectors.map((sector) => (
+                  <TableRow key={sector.sector}>
+                    <TableCell className="font-medium">{sector.sector}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {formatCurrency(sector.food_cents)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {formatCurrency(sector.transport_cents)}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">
+                      {formatCurrency(sector.total_cents)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Drill-down */}
+      <PersonExpensesDialog
+        person={selectedPerson}
+        onClose={() => setSelectedPerson(null)}
+      />
+    </AppShell>
+  );
+}

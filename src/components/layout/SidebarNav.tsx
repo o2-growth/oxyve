@@ -4,11 +4,13 @@ import {
   Receipt,
   FileText,
   Wallet,
+  LineChart,
   Settings,
   HelpCircle,
   ChevronsLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Sidebar,
   SidebarContent,
@@ -36,6 +38,9 @@ const mainNavItems = [
   { to: '/app/advances', icon: Wallet, label: 'Adiantamentos' },
 ];
 
+// Item exclusivo de admin — visibilidade condicionada por useAuth().isAdmin.
+const adminNavItem = { to: '/app/gestao', icon: LineChart, label: 'Gestão' };
+
 const secondaryNavItems = [
   { to: '/app/settings/policy', icon: Settings, label: 'Configurações', matchPrefix: '/app/settings' },
   { to: '/app/support', icon: HelpCircle, label: 'Suporte' },
@@ -44,7 +49,11 @@ const secondaryNavItems = [
 export function SidebarNav() {
   const location = useLocation();
   const { state, toggleSidebar } = useSidebar();
+  const { isAdmin } = useAuth();
   const isCollapsed = state === 'collapsed';
+
+  // "Gestão" só aparece para admin (backend já bloqueia a RPC de não-admins).
+  const navItems = isAdmin ? [...mainNavItems, adminNavItem] : mainNavItems;
 
   const isActive = (to: string, matchPrefix?: string) => {
     if (matchPrefix) {
@@ -75,7 +84,7 @@ export function SidebarNav() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNavItems.map((item) => (
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton
                     asChild
