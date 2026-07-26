@@ -12,6 +12,7 @@ export interface ExpenseType {
   department_id: string | null;
   daily_limit_cents: number | null;
   kind: ExpenseKind;
+  sector: string | null;
   requires_receipt: boolean;
   is_active: boolean;
   created_at: string;
@@ -72,7 +73,10 @@ export function useCreateExpenseType() {
       name: string;
       department_id?: string | null;
       daily_limit_cents?: number | null;
+      kind?: ExpenseKind;
+      sector?: string | null;
       requires_receipt?: boolean;
+      is_active?: boolean;
     }) => {
       const { data, error } = await supabase
         .from('expense_categories')
@@ -102,6 +106,8 @@ export function useUpdateExpenseType() {
       name?: string;
       department_id?: string | null;
       daily_limit_cents?: number | null;
+      kind?: ExpenseKind;
+      sector?: string | null;
       requires_receipt?: boolean;
       is_active?: boolean;
     }) => {

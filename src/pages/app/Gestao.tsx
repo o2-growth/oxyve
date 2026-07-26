@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { GestaoUsuarios } from '@/components/gestao/GestaoUsuarios';
+import { GestaoCategorias } from '@/components/gestao/GestaoCategorias';
 import {
   Card,
   CardContent,
@@ -283,9 +286,17 @@ export default function Gestao() {
     <AppShell>
       <PageHeader
         title="Gestão"
-        description="Painel financeiro da organização"
+        description="Painel administrativo da organização"
       />
 
+      <Tabs defaultValue="financeiro" className="w-full">
+        <TabsList className="mb-4 md:mb-6">
+          <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
+          <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+          <TabsTrigger value="categorias">Categorias</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="financeiro" className="mt-0">
       {/* Ciclo atual */}
       <div className="mb-4 md:mb-6 flex items-center gap-2 text-sm text-muted-foreground">
         <CalendarRange className="h-4 w-4 shrink-0" />
@@ -504,6 +515,16 @@ export default function Gestao() {
         person={selectedPerson}
         onClose={() => setSelectedPerson(null)}
       />
+        </TabsContent>
+
+        <TabsContent value="usuarios" className="mt-0">
+          <GestaoUsuarios />
+        </TabsContent>
+
+        <TabsContent value="categorias" className="mt-0">
+          <GestaoCategorias />
+        </TabsContent>
+      </Tabs>
     </AppShell>
   );
 }
