@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Mail, Info } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { O2Rings } from '@/components/brand/O2Rings';
 
@@ -149,11 +148,8 @@ export default function Login() {
   };
 
   const handleSignup = async (values: SignupFormValues) => {
-    if (!inviteToken) {
-      toast.error('Você precisa de um convite válido para criar uma conta.');
-      return;
-    }
-
+    // Auto-join por domínio: qualquer @o2inc pode criar conta — o trigger
+    // handle_new_user cria o profile na org. Convite deixou de ser obrigatório.
     setIsLoading(true);
 
     const { error: signUpError } = await signUp(
@@ -407,8 +403,7 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {hasInvite ? (
-              <Tabs defaultValue="signup" className="w-full">
+            <Tabs defaultValue={hasInvite ? 'signup' : 'login'} className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="login">Entrar</TabsTrigger>
                   <TabsTrigger value="signup" data-testid="signup-tab">
@@ -437,24 +432,6 @@ export default function Login() {
                   />
                 </TabsContent>
               </Tabs>
-            ) : (
-              <div className="space-y-4">
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    Você precisa de um convite. Solicite ao seu administrador.
-                  </AlertDescription>
-                </Alert>
-                <LoginFormBlock
-                  form={loginForm}
-                  onSubmit={handleLogin}
-                  isLoading={isLoading}
-                  onForgot={() => setShowForgotPassword(true)}
-                  onGoogle={handleGoogleSignIn}
-                  isGoogleLoading={isGoogleLoading}
-                />
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
