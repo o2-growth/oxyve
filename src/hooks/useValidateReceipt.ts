@@ -3,10 +3,50 @@ import { supabase } from '@/integrations/supabase/client';
 
 export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
 
+export type ReceiptType =
+  | 'nota_fiscal'
+  | 'recibo'
+  | 'comprovante_pix'
+  | 'comprovante_cartao'
+  | 'outro';
+
 export interface ValidationResult {
   extracted_date: string | null;
   extracted_amount_cents: number | null;
+  extracted_cnpj: string | null;
+  extracted_supplier: string | null;
+  receipt_type: ReceiptType | null;
   confidence: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Bloqueios de política sobre o comprovante (PO-0002 4.9.1 e 4.9.3), avaliados
+ * no submit com a data FINAL do lançamento. Retorna os motivos que impedem
+ * salvar — vazio se o comprovante está conforme (ou se a leitura foi incerta).
+ */
+export function receiptPolicyBlocks(
+  result: ValidationResult | null,
+  finalDateYMD: string,
+): string[] {
+  // Leitura de baixa confiança não bloqueia — evita falso positivo do OCR.
+  if (!result || result.confidence === 'low') return [];
+  const blocks: string[] = [];
+
+  if (result.receipt_type === 'comprovante_pix') {
+    blocks.push('Comprovante PIX não é aceito. Envie a nota fiscal (Política 4.9.3).');
+  }
+  if (result.receipt_type === 'comprovante_cartao') {
+    blocks.push('Comprovante de cartão sem nota fiscal não é aceito (Política 4.9.3).');
+  }
+  if (!result.extracted_cnpj && result.receipt_type !== 'nota_fiscal') {
+    blocks.push('O comprovante não tem CNPJ. É necessária nota fiscal com CNPJ (Política 4.9.3).');
+  }
+  if (result.extracted_date && result.extracted_date !== finalDateYMD) {
+    blocks.push(
+      `A data do comprovante (${formatDate(result.extracted_date)}) não corresponde ao dia da despesa (${formatDate(finalDateYMD)}) — Política 4.9.1.`,
+    );
+  }
+  return blocks;
 }
 
 export interface ValidationState {
@@ -96,6 +136,9 @@ export function useValidateReceipt() {
       const result: ValidationResult = {
         extracted_date: data.extracted_date || null,
         extracted_amount_cents: data.extracted_amount_cents ?? null,
+        extracted_cnpj: data.extracted_cnpj || null,
+        extracted_supplier: data.extracted_supplier || null,
+        receipt_type: data.receipt_type || null,
         confidence: data.confidence || 'low',
       };
 

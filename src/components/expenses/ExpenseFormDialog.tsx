@@ -55,7 +55,7 @@ import { ReceiptValidation } from './ReceiptValidation';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useValidateReceipt } from '@/hooks/useValidateReceipt';
+import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 
 interface ExpenseFormDialogProps {
@@ -331,6 +331,17 @@ export function ExpenseFormDialog({
         form.setError('distance_km', { message: 'Informe a distância em km' });
         return;
       }
+    }
+
+    // Motor de política — comprovante (OCR): PIX, sem CNPJ, cartão sem NF, ou
+    // data divergente do dia bloqueiam o lançamento (PO-0002 4.9.1/4.9.3).
+    const receiptBlocks = receiptPolicyBlocks(
+      receiptValidation.result,
+      format(data.date, 'yyyy-MM-dd'),
+    );
+    if (receiptBlocks.length > 0) {
+      form.setError('root', { message: receiptBlocks[0] });
+      return;
     }
 
     setIsUploading(true);

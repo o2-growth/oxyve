@@ -59,7 +59,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCreateExpenseInReport } from '@/hooks/useCurrentReport';
 import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
-import { useValidateReceipt } from '@/hooks/useValidateReceipt';
+import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency } from '@/lib/constants';
 
@@ -238,6 +238,12 @@ export function QuickExpenseSheet({
       return;
     }
     const extracted = validation.result;
+    const finalDate = extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd');
+    const blocks = receiptPolicyBlocks(validation.result, finalDate);
+    if (blocks.length > 0) {
+      toast.error(blocks[0]);
+      return;
+    }
     const description =
       extracted?.extracted_date
         ? `Despesa ${format(new Date(extracted.extracted_date + 'T00:00:00'), 'dd/MM/yyyy')}`
@@ -264,6 +270,14 @@ export function QuickExpenseSheet({
   const handleEditSubmit = async (data: FormData) => {
     if (!categoryId) {
       toast.error('Escolha a categoria da despesa.');
+      return;
+    }
+    const blocks = receiptPolicyBlocks(
+      validation.result,
+      format(data.date, 'yyyy-MM-dd'),
+    );
+    if (blocks.length > 0) {
+      toast.error(blocks[0]);
       return;
     }
     try {

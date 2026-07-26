@@ -89,14 +89,20 @@ serve(async (req) => {
           {
             role: "system",
             content:
-              "Você é um assistente especializado em analisar comprovantes fiscais brasileiros (notas fiscais, cupons fiscais, recibos). Extraia a data de emissão e o valor total do documento. Se não conseguir identificar com clareza, indique confiança baixa.",
+              "Você é um assistente especializado em analisar comprovantes fiscais brasileiros. " +
+              "Extraia: (1) a data de emissão, (2) o valor total, (3) o CNPJ do emitente (se houver), " +
+              "(4) o nome do estabelecimento e (5) o tipo de documento. " +
+              "Classifique o tipo em: 'nota_fiscal' (NF-e, NFC-e ou cupom fiscal com CNPJ), " +
+              "'recibo' (recibo simples, sem CNPJ), 'comprovante_pix' (comprovante de transferência PIX), " +
+              "'comprovante_cartao' (comprovante de cartão/maquininha sem nota fiscal), ou 'outro'. " +
+              "Se não conseguir identificar algo com clareza, use null e indique confiança baixa.",
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Analise este comprovante e extraia a data de emissão e o valor total.",
+                text: "Analise este comprovante e extraia a data de emissão, o valor total, o CNPJ do emitente, o nome do estabelecimento e o tipo de documento.",
               },
               {
                 type: "image_url",
@@ -124,6 +130,28 @@ serve(async (req) => {
                     type: "integer",
                     description:
                       "Valor total em centavos (ex: R$ 45,90 = 4590). Null se não identificado.",
+                  },
+                  extracted_cnpj: {
+                    type: "string",
+                    description:
+                      "CNPJ do emitente (apenas dígitos ou formatado). Null se o documento não tiver CNPJ.",
+                  },
+                  extracted_supplier: {
+                    type: "string",
+                    description:
+                      "Nome do estabelecimento/emitente. Null se não identificado.",
+                  },
+                  receipt_type: {
+                    type: "string",
+                    enum: [
+                      "nota_fiscal",
+                      "recibo",
+                      "comprovante_pix",
+                      "comprovante_cartao",
+                      "outro",
+                    ],
+                    description:
+                      "Tipo do documento fiscal identificado.",
                   },
                   confidence: {
                     type: "string",
