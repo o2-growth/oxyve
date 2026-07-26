@@ -10,6 +10,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
+import { MultiDayExpenseDialog } from '@/components/expenses/MultiDayExpenseDialog';
 import { AddToReportDialog } from '@/components/expenses/AddToReportDialog';
 import { ExpenseFiltersPopover, AdvancedFilters } from '@/components/expenses/ExpenseFiltersPopover';
 import { ExpensesTable } from '@/components/expenses/ExpensesTable';
@@ -22,7 +23,7 @@ import {
   Expense,
   ExpenseTab,
 } from '@/hooks/useExpenses';
-import { Plus, Search, Receipt, CalendarIcon, Trash2, FileText, Filter } from 'lucide-react';
+import { Plus, Search, Receipt, CalendarIcon, Trash2, FileText, Filter, CalendarDays } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 const TAB_CONFIG: { value: ExpenseTab; label: string; emptyMessage: string }[] = [
   { value: 'all', label: 'Todas', emptyMessage: 'Nenhuma despesa encontrada' },
+  { value: 'exceptions', label: 'Exceções', emptyMessage: 'Nenhuma despesa fora da política — tudo em conformidade' },
   { value: 'loose', label: 'Avulsas', emptyMessage: 'Nenhuma despesa avulsa' },
   { value: 'open', label: 'Abertas', emptyMessage: 'Nenhuma despesa aberta' },
   { value: 'submitted', label: 'Enviadas', emptyMessage: 'Nenhuma despesa enviada' },
@@ -46,6 +48,7 @@ export default function Expenses() {
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({});
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isMultiDayOpen, setIsMultiDayOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const [isAddToReportOpen, setIsAddToReportOpen] = useState(false);
@@ -186,6 +189,10 @@ export default function Expenses() {
                 )}
               </>
             )}
+            <Button variant="outline" onClick={() => setIsMultiDayOpen(true)} className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Vários dias
+            </Button>
             <Button onClick={() => setIsFormOpen(true)} className="gap-2">
               <Plus className="h-4 w-4" />
               Nova Despesa
@@ -396,6 +403,11 @@ export default function Expenses() {
         onOpenChange={handleFormClose}
         expense={selectedExpense}
         useCurrentReportFlow={true}
+      />
+
+      <MultiDayExpenseDialog
+        open={isMultiDayOpen}
+        onOpenChange={setIsMultiDayOpen}
       />
 
       <AddToReportDialog

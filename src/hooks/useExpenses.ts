@@ -52,7 +52,7 @@ export interface ExpenseInput {
   distance_km?: number | null;
 }
 
-export type ExpenseTab = 'all' | 'loose' | 'open' | 'submitted' | 'approved' | 'rejected' | 'paid';
+export type ExpenseTab = 'all' | 'loose' | 'open' | 'submitted' | 'approved' | 'rejected' | 'paid' | 'exceptions';
 
 export interface ExpenseFilters {
   tab?: ExpenseTab;
@@ -207,6 +207,11 @@ export function useExpenses(filters?: ExpenseFilters) {
       });
 
       // Apply tab filter
+      // "exceptions" é transversal (is_out_of_policy coexiste com qualquer status),
+      // então não passa por getExpenseTab.
+      if (filters?.tab === 'exceptions') {
+        return enrichedExpenses.filter(expense => expense.is_out_of_policy);
+      }
       if (filters?.tab && filters.tab !== 'all') {
         return enrichedExpenses.filter(expense => getExpenseTab(expense) === filters.tab);
       }
@@ -226,7 +231,7 @@ export function useExpenseCounts() {
       // Fetch all expenses
       const { data: expenses, error } = await supabase
         .from('expenses')
-        .select('id, status');
+        .select('id, status, is_out_of_policy');
       
       if (error) throw error;
 
@@ -278,6 +283,7 @@ export function useExpenseCounts() {
         approved: 0,
         rejected: 0,
         paid: 0,
+        exceptions: 0,
       };
 
       (expenses || []).forEach(expense => {
@@ -293,6 +299,9 @@ export function useExpenseCounts() {
         counts.all++;
         if (tab !== 'all') {
           counts[tab]++;
+        }
+        if (expense.is_out_of_policy) {
+          counts.exceptions++;
         }
       });
 
