@@ -893,6 +893,7 @@ export type Database = {
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
       get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
+      get_org_members: { Args: never; Returns: Json }
       get_user_org_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -904,6 +905,13 @@ export type Database = {
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       mark_expenses_paid: { Args: { p_expense_ids: string[] }; Returns: Json }
       mark_report_paid: { Args: { p_report_id: string }; Returns: Json }
+      set_user_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       submit_report: { Args: { p_report_id: string }; Returns: Json }
     }
     Enums: {
