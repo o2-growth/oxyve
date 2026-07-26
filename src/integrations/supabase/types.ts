@@ -113,6 +113,7 @@ export type Database = {
           name: string
           org_id: string
           requires_receipt: boolean
+          sector: string | null
           updated_at: string
         }
         Insert: {
@@ -125,6 +126,7 @@ export type Database = {
           name: string
           org_id: string
           requires_receipt?: boolean
+          sector?: string | null
           updated_at?: string
         }
         Update: {
@@ -137,6 +139,7 @@ export type Database = {
           name?: string
           org_id?: string
           requires_receipt?: boolean
+          sector?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -857,6 +860,23 @@ export type Database = {
         }
         Returns: Json
       }
+      create_expense_multiday: {
+        Args: {
+          p_amount_cents_per_day: number
+          p_category_id?: string
+          p_cost_center_id?: string
+          p_currency?: string
+          p_description: string
+          p_end_date: string
+          p_is_event?: boolean
+          p_is_reimbursable?: boolean
+          p_notes?: string
+          p_payment_method?: string
+          p_project_id?: string
+          p_start_date: string
+        }
+        Returns: Json
+      }
       create_notification: {
         Args: {
           p_body?: string
@@ -869,6 +889,7 @@ export type Database = {
       }
       dispatch_pending_notification_emails: { Args: never; Returns: number }
       dispatch_pending_notification_pushes: { Args: never; Returns: number }
+      get_admin_financial_overview: { Args: never; Returns: Json }
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
       get_or_create_report_for_date: { Args: { p_date: string }; Returns: Json }
