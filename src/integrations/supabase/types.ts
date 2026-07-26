@@ -902,6 +902,7 @@ export type Database = {
         Returns: boolean
       }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      mark_expenses_paid: { Args: { p_expense_ids: string[] }; Returns: Json }
       mark_report_paid: { Args: { p_report_id: string }; Returns: Json }
       submit_report: { Args: { p_report_id: string }; Returns: Json }
     }
