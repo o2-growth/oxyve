@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Mail, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { O2Rings } from '@/components/brand/O2Rings';
+import { O2Logo } from '@/components/brand/O2Logo';
 
 // Google "G" icon (lucide-react não tem ícone do Google) — SVG inline com as
 // 4 cores oficiais da marca.
