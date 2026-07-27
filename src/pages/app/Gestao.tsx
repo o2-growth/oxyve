@@ -492,31 +492,23 @@ export default function Gestao() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="font-mono text-[11px] uppercase tracking-wider">
-                    Setor
-                  </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
-                    Alimentação
-                  </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
-                    Transporte
-                  </TableHead>
-                  <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">
-                    Total
-                  </TableHead>
+                  <TableHead>Setor</TableHead>
+                  <TableHead className="text-right">Alimentação</TableHead>
+                  <TableHead className="text-right">Transporte</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sectors.map((sector) => (
                   <TableRow key={sector.sector}>
-                    <TableCell className="font-sans font-medium">{sector.sector}</TableCell>
-                    <TableCell className="text-right o2-num text-muted-foreground">
+                    <TableCell className="font-medium">{sector.sector}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
                       {formatCurrency(sector.food_cents)}
                     </TableCell>
-                    <TableCell className="text-right o2-num text-muted-foreground">
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
                       {formatCurrency(sector.transport_cents)}
                     </TableCell>
-                    <TableCell className="text-right font-semibold o2-num">
+                    <TableCell className="text-right font-semibold tabular-nums">
                       {formatCurrency(sector.total_cents)}
                     </TableCell>
                   </TableRow>

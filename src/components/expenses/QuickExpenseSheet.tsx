@@ -360,7 +360,7 @@ export function QuickExpenseSheet({
 
       <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
         <div className="space-y-0.5">
-          <Label htmlFor="quick-event" className="o2-eyebrow flex items-center gap-1.5">
+          <Label htmlFor="quick-event" className="flex items-center gap-1.5">
             <PartyPopper className="h-4 w-4 text-muted-foreground" />
             Evento
           </Label>
@@ -562,11 +562,11 @@ export function QuickExpenseSheet({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="o2-eyebrow">Descrição</FormLabel>
+                  <FormLabel>Descrição</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Ex: Almoço com cliente"
-                      className="h-12 font-sans"
+                      className="h-12"
                       {...field}
                     />
                   </FormControl>
@@ -581,11 +581,11 @@ export function QuickExpenseSheet({
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="o2-eyebrow">Valor (R$)</FormLabel>
+                    <FormLabel>Valor (R$)</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="0,00"
-                        className="h-12 o2-num"
+                        className="h-12"
                         inputMode="decimal"
                         {...field}
                       />
@@ -600,14 +600,14 @@ export function QuickExpenseSheet({
                 name="date"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel className="o2-eyebrow">Data</FormLabel>
+                    <FormLabel>Data</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
                             variant="outline"
                             className={cn(
-                              'h-12 pl-3 text-left font-normal o2-num',
+                              'h-12 pl-3 text-left font-normal',
                               !field.value && 'text-muted-foreground'
                             )}
                           >

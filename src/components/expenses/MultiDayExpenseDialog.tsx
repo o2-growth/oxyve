@@ -167,7 +167,7 @@ export function MultiDayExpenseDialog({
               name="category_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="o2-eyebrow">Categoria</FormLabel>
+                  <FormLabel>Categoria</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="h-12">
@@ -197,9 +197,9 @@ export function MultiDayExpenseDialog({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="o2-eyebrow">Descrição</FormLabel>
+                  <FormLabel>Descrição</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Almoço presencial" className="h-12 font-sans" {...field} />
+                    <Input placeholder="Ex: Almoço presencial" className="h-12" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -212,13 +212,13 @@ export function MultiDayExpenseDialog({
                 name="start_date"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel className="o2-eyebrow">De</FormLabel>
+                    <FormLabel>De</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
                             variant="outline"
-                            className={cn('h-12 pl-3 text-left font-normal o2-num', !field.value && 'text-muted-foreground')}
+                            className={cn('h-12 pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
                           >
                             {field.value ? format(field.value, 'dd/MM/yyyy', { locale: ptBR }) : <span>Início</span>}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
@@ -238,13 +238,13 @@ export function MultiDayExpenseDialog({
                 name="end_date"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel className="o2-eyebrow">Até</FormLabel>
+                    <FormLabel>Até</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
                             variant="outline"
-                            className={cn('h-12 pl-3 text-left font-normal o2-num', !field.value && 'text-muted-foreground')}
+                            className={cn('h-12 pl-3 text-left font-normal', !field.value && 'text-muted-foreground')}
                           >
                             {field.value ? format(field.value, 'dd/MM/yyyy', { locale: ptBR }) : <span>Fim</span>}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
@@ -266,9 +266,9 @@ export function MultiDayExpenseDialog({
               name="amount_per_day"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="o2-eyebrow">Valor por dia (R$)</FormLabel>
+                  <FormLabel>Valor por dia (R$)</FormLabel>
                   <FormControl>
-                    <Input placeholder="0,00" className="h-12 o2-num" inputMode="decimal" {...field} />
+                    <Input placeholder="0,00" className="h-12" inputMode="decimal" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -276,16 +276,10 @@ export function MultiDayExpenseDialog({
             />
 
             {days > 0 && perDayCents > 0 && (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-                <p className="o2-eyebrow mb-1.5">Resumo do lançamento</p>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="o2-num text-sm text-muted-foreground">
-                    {days} {days === 1 ? 'dia' : 'dias'} × {formatCurrency(perDayCents)}
-                  </span>
-                  <span className="o2-num text-lg font-semibold tracking-tight text-primary">
-                    {formatCurrency(totalCents)}
-                  </span>
-                </div>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <span className="font-medium">{days}</span> dia(s) ×{' '}
+                <span className="font-medium">{formatCurrency(perDayCents)}</span> ={' '}
+                <span className="font-semibold">{formatCurrency(totalCents)}</span> no total
               </div>
             )}
 
@@ -295,7 +289,7 @@ export function MultiDayExpenseDialog({
               render={({ field }) => (
                 <FormItem className="flex flex-row items-start justify-between gap-3 rounded-lg border p-3 space-y-0">
                   <div className="space-y-0.5">
-                    <FormLabel className="o2-eyebrow flex items-center gap-1.5">
+                    <FormLabel className="flex items-center gap-1.5">
                       <PartyPopper className="h-4 w-4 text-muted-foreground" />
                       Evento
                     </FormLabel>
