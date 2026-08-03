@@ -104,22 +104,33 @@ export function ExpenseFormDialog({
   // forçava o zodResolver a reidentar e quebrava referência estável.
   const formSchema = useMemo(
     () =>
-      z.object({
-        date: z.date({ required_error: 'Selecione uma data' }),
-        description: z.string().min(1, 'Descrição é obrigatória'),
-        category_id: z.string().optional(),
-        amount: z.string().min(1, 'Valor é obrigatório'),
-        payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
-        is_reimbursable: z.boolean(),
-        is_event: z.boolean(),
-        by_km: z.boolean(),
-        distance_km: z.string().optional(),
-        notes: z.string().optional(),
-        cost_center_id: z.string().optional(),
-        project_id: policy?.require_project
-          ? z.string().min(1, 'Projeto é obrigatório')
-          : z.string().optional(),
-      }),
+      z
+        .object({
+          date: z.date({ required_error: 'Selecione uma data' }),
+          description: z.string().min(1, 'Descrição é obrigatória'),
+          category_id: z.string().optional(),
+          amount: z.string().min(1, 'Valor é obrigatório'),
+          payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
+          is_reimbursable: z.boolean(),
+          is_event: z.boolean(),
+          by_km: z.boolean(),
+          distance_km: z.string().optional(),
+          notes: z.string().optional(),
+          cost_center_id: z.string().optional(),
+          project_id: policy?.require_project
+            ? z.string().min(1, 'Projeto é obrigatório')
+            : z.string().optional(),
+        })
+        // Exceção de evento (libera o teto diário) exige justificativa escrita.
+        .superRefine((val, ctx) => {
+          if (val.is_event && (!val.notes || val.notes.trim().length < 3)) {
+            ctx.addIssue({
+              path: ['notes'],
+              code: z.ZodIssueCode.custom,
+              message: 'Descreva em Observações o motivo da exceção de evento.',
+            });
+          }
+        }),
     [policy?.require_project]
   );
 
@@ -149,6 +160,7 @@ export function ExpenseFormDialog({
   const watchedAmount = form.watch('amount');
   const watchedByKm = form.watch('by_km');
   const watchedDistanceKm = form.watch('distance_km');
+  const watchedIsEvent = form.watch('is_event');
   const isTransport = selectedCategory?.kind === 'transport';
   const kmRateCents = policy?.km_rate_cents ?? 120;
 
@@ -727,15 +739,27 @@ export function ExpenseFormDialog({
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Observações</FormLabel>
+              <FormLabel>
+                Observações
+                {watchedIsEvent && <span className="text-destructive"> *</span>}
+              </FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Observações adicionais..."
+                  placeholder={
+                    watchedIsEvent
+                      ? 'Descreva o motivo da exceção de evento...'
+                      : 'Observações adicionais...'
+                  }
                   {...field}
                   disabled={isReadOnly}
                   className="min-h-[80px]"
                 />
               </FormControl>
+              {watchedIsEvent && (
+                <p className="text-xs text-muted-foreground">
+                  Obrigatório: justifique por que essa despesa foge do combinado.
+                </p>
+              )}
               <FormMessage />
             </FormItem>
           )}
@@ -776,7 +800,7 @@ export function ExpenseFormDialog({
                 <FormLabel>Evento</FormLabel>
                 <p className="text-xs text-muted-foreground">
                   Exceção aprovada pela Diretoria (refeição/despesa de evento). Libera o
-                  teto diário e envia a despesa para revisão do aprovador.
+                  teto diário e envia para revisão — exige justificativa em Observações.
                 </p>
               </div>
             </FormItem>

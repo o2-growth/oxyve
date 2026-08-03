@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
@@ -83,10 +84,21 @@ const schema = z
     amount_per_day: z.string().min(1, 'Informe o valor por dia'),
     description: z.string().min(1, 'Descrição obrigatória'),
     is_event: z.boolean(),
+    notes: z.string().optional(),
   })
   .refine((d) => d.end_date >= d.start_date, {
     message: 'A data final deve ser igual ou posterior à inicial',
     path: ['end_date'],
+  })
+  // Evento (libera o teto diário) exige justificativa escrita.
+  .superRefine((d, ctx) => {
+    if (d.is_event && (!d.notes || d.notes.trim().length < 3)) {
+      ctx.addIssue({
+        path: ['notes'],
+        code: z.ZodIssueCode.custom,
+        message: 'Descreva o motivo da exceção de evento.',
+      });
+    }
   });
 
 type FormData = z.infer<typeof schema>;
@@ -109,8 +121,11 @@ export function MultiDayExpenseDialog({
       amount_per_day: '',
       description: '',
       is_event: false,
+      notes: '',
     },
   });
+
+  const watchedIsEvent = form.watch('is_event');
 
   const start = form.watch('start_date');
   const end = form.watch('end_date');
@@ -134,6 +149,7 @@ export function MultiDayExpenseDialog({
         end_date: format(data.end_date, 'yyyy-MM-dd'),
         category_id: data.category_id,
         is_event: data.is_event,
+        notes: data.is_event ? data.notes?.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
@@ -303,6 +319,28 @@ export function MultiDayExpenseDialog({
                 </FormItem>
               )}
             />
+
+            {watchedIsEvent && (
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Motivo da exceção <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Descreva por que essas despesas fogem do combinado..."
+                        className="min-h-[72px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving} className="h-12">

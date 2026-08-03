@@ -51,6 +51,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -132,6 +133,8 @@ export function QuickExpenseSheet({
   const [waitingForCamera, setWaitingForCamera] = useState(false);
   const [categoryId, setCategoryId] = useState<string>('');
   const [isEvent, setIsEvent] = useState(false);
+  // Justificativa obrigatória quando a despesa é marcada como evento (foge do teto).
+  const [eventNote, setEventNote] = useState('');
   // Flash verde discreto quando o OCR entrega os dados (visual apenas).
   const [dataFlash, setDataFlash] = useState(false);
 
@@ -161,6 +164,7 @@ export function QuickExpenseSheet({
       setWaitingForCamera(false);
       setCategoryId('');
       setIsEvent(false);
+      setEventNote('');
       autoOpenedRef.current = false;
       validation.reset();
       form.reset({ date: new Date(), description: '', amount: '' });
@@ -240,6 +244,10 @@ export function QuickExpenseSheet({
       toast.error('Escolha a categoria da despesa.');
       return;
     }
+    if (isEvent && eventNote.trim().length < 3) {
+      toast.error('Descreva o motivo da exceção de evento na observação.');
+      return;
+    }
     const extracted = validation.result;
     const finalDate = extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd');
     const blocks = receiptPolicyBlocks(validation.result, finalDate);
@@ -259,6 +267,7 @@ export function QuickExpenseSheet({
         amount_cents: extracted?.extracted_amount_cents ?? 0,
         category_id: categoryId,
         is_event: isEvent,
+        notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
@@ -273,6 +282,10 @@ export function QuickExpenseSheet({
   const handleEditSubmit = async (data: FormData) => {
     if (!categoryId) {
       toast.error('Escolha a categoria da despesa.');
+      return;
+    }
+    if (isEvent && eventNote.trim().length < 3) {
+      toast.error('Descreva o motivo da exceção de evento na observação.');
       return;
     }
     const blocks = receiptPolicyBlocks(
@@ -290,6 +303,7 @@ export function QuickExpenseSheet({
         amount_cents: parseAmountToCents(data.amount),
         category_id: categoryId,
         is_event: isEvent,
+        notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
@@ -377,6 +391,25 @@ export function QuickExpenseSheet({
           data-testid="quick-event-switch"
         />
       </div>
+
+      {isEvent && (
+        <div className="space-y-1.5">
+          <Label htmlFor="quick-event-note">
+            Motivo da exceção <span className="text-destructive">*</span>
+          </Label>
+          <Textarea
+            id="quick-event-note"
+            value={eventNote}
+            onChange={(e) => setEventNote(e.target.value)}
+            placeholder="Descreva por que essa despesa foge do combinado..."
+            className="min-h-[72px]"
+            data-testid="quick-event-note"
+          />
+          <p className="text-xs text-muted-foreground">
+            Obrigatório para lançar como evento.
+          </p>
+        </div>
+      )}
     </div>
   );
 
@@ -510,7 +543,12 @@ export function QuickExpenseSheet({
           <div className="flex flex-col gap-2">
             <Button
               onClick={handleQuickSave}
-              disabled={isSaving || validation.status === 'validating' || !categoryId}
+              disabled={
+                isSaving ||
+                validation.status === 'validating' ||
+                !categoryId ||
+                (isEvent && eventNote.trim().length < 3)
+              }
               className="h-12"
               data-testid="quick-save-btn"
             >
