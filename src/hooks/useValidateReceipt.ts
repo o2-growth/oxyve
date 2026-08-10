@@ -1,7 +1,13 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
-export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
+export type ValidationStatus =
+  | 'idle'
+  | 'validating'
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'unavailable';
 
 export type ReceiptType =
   | 'nota_fiscal'
@@ -114,11 +120,37 @@ export function useValidateReceipt() {
       });
 
       if (error) {
+        // Supabase wraps non-2xx in error.context (Response). Tentar extrair
+        // o code para distinguir OCR_UNAVAILABLE (503) de erro genérico.
+        let code: string | undefined;
+        const ctx = (error as { context?: Response }).context;
+        if (ctx instanceof Response) {
+          try {
+            const body = await ctx.clone().json();
+            code = body?.code;
+          } catch {
+            // body not JSON — fallback to generic error
+          }
+        }
+
+        const isUnavailable = code === 'OCR_UNAVAILABLE';
         setState({
-          status: 'error',
+          status: isUnavailable ? 'unavailable' : 'error',
           result: null,
           divergences: [],
-          errorMessage: 'Não foi possível validar o comprovante.',
+          errorMessage: isUnavailable
+            ? 'OCR indisponível no momento. Preencha os dados manualmente.'
+            : 'Não foi possível validar o comprovante.',
+        });
+        return;
+      }
+
+      if (data?.code === 'OCR_UNAVAILABLE') {
+        setState({
+          status: 'unavailable',
+          result: null,
+          divergences: [],
+          errorMessage: 'OCR indisponível no momento. Preencha os dados manualmente.',
         });
         return;
       }
