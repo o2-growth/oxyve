@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Variaveis de ambiente — o deploy usa as env vars da Vercel;
+# o .env fica local (veja .env.example)
+.env
+.env.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
