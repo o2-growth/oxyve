@@ -61,7 +61,15 @@ serve(async (req) => {
     // ou um admin/manager pode disparar — nunca um employee comum. Sem esta trava,
     // qualquer JWT válido viraria relay de phishing do domínio quando a
     // RESEND_API_KEY for configurada. Mesmo padrão do send-push.
-    const isServiceRole = jwt === SUPABASE_SERVICE_ROLE_KEY;
+    // O cron prova identidade pelo header x-dispatch-token, não pelo bearer.
+    // O bearer segue sendo a service role JWT porque o gateway roda verify_jwt
+    // antes desta função e recusa qualquer coisa que não tenha formato de JWT;
+    // a igualdade com SUPABASE_SERVICE_ROLE_KEY não serve para o cron porque
+    // projetos novos recebem essa env como sb_secret_*, que o Postgres não lê.
+    const DISPATCH_TOKEN = Deno.env.get("DISPATCH_TOKEN");
+    const dispatchHeader = req.headers.get("x-dispatch-token");
+    const isServiceRole = jwt === SUPABASE_SERVICE_ROLE_KEY ||
+      (!!DISPATCH_TOKEN && dispatchHeader === DISPATCH_TOKEN);
     if (!isServiceRole) {
       const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         global: { headers: { Authorization: `Bearer ${jwt}` } },
