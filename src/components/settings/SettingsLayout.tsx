@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { FileText, User, Lock, Users } from 'lucide-react';
+import { FileText, User, Users } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Select,
@@ -34,12 +34,6 @@ const settingsLinks = [
     to: '/app/settings/profile',
     label: 'Meus Dados',
     icon: User,
-    adminOnly: false,
-  },
-  {
-    to: '/app/settings/password',
-    label: 'Mudar Senha',
-    icon: Lock,
     adminOnly: false,
   },
 ];

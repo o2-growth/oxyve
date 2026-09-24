@@ -20,12 +20,12 @@ refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
 
+# Login só com Google da O2 Inc. O provider de e-mail/senha fica desligado (no
+# CLI, enable_signup aqui é o external_email_enabled do projeto): sem ele, não há
+# senha para vazar nem e-mail de confirmação dependendo de SMTP.
 [auth.email]
-enable_signup = true
+enable_signup = false
 double_confirm_changes = true
-# Confirmação segue obrigatória de propósito: handle_new_user faz auto-join pelo
-# domínio em org_domains, então sem confirmar e-mail qualquer um que saiba o
-# domínio entraria na organização como employee.
 enable_confirmations = true
 secure_password_change = true
 # Restaura o que o projeto já tinha: o config push do CLI reescreve com os
@@ -33,6 +33,19 @@ secure_password_change = true
 max_frequency = "1m0s"
 otp_length = 8
 otp_expiry = 3600
+
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
+# Trava de domínio no servidor: recusa a criação de usuário cujo e-mail não está
+# em org_domains, qualquer que seja o provider. O `hd` que o front manda ao
+# Google é só filtro de UI. Função em 20260924170000_login_so_dominio_o2inc.sql.
+[auth.hook.before_user_created]
+enabled = true
+uri = "pg-functions://postgres/public/hook_restringe_dominio"
 
 [auth.mfa.totp]
 enroll_enabled = true

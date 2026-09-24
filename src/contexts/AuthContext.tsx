@@ -36,38 +36,13 @@ interface AuthContextType {
   isAdmin: boolean;
   isManager: boolean;
   bootstrapError: string | null;
-  isRecoveryMode: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, fullName: string, inviteToken?: string | null) => Promise<{ error: Error | null }>;
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   retryBootstrap: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<{ error: Error | null }>;
-  updatePassword: (newPassword: string) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-const INVITE_STORAGE_KEY = 'oxyve.pendingInviteToken';
-
-function readPendingInviteToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.sessionStorage.getItem(INVITE_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function clearPendingInviteToken() {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.removeItem(INVITE_STORAGE_KEY);
-  } catch {
-    /* noop */
-  }
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -77,10 +52,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
-  // Sprint 3.2: PASSWORD_RECOVERY do Supabase. Setado quando usuário chega via
-  // link de reset de senha. Faz Login.tsx mostrar form de nova senha em vez do
-  // form de login normal, e impede PublicRoute de redirecionar pra dashboard.
-  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   // Guarda contra duplicate bootstrap por usuário (B3 / Aria-1).
   const bootstrappedUserId = useRef<string | null>(null);
@@ -137,10 +108,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .maybeSingle();
 
         if (!existingProfile) {
-          const inviteToken = readPendingInviteToken();
-          await bootstrapUser(inviteToken);
-          // Sucesso → invite consumido; limpar.
-          clearPendingInviteToken();
+          // Rede de segurança: handle_new_user já cria o profile de quem é
+          // da O2 no INSERT em auth.users, então isto só roda se ele falhar.
+          await bootstrapUser(null);
         }
 
         await fetchProfile(userId);
@@ -182,16 +152,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Confiar APENAS em onAuthStateChange — o evento INITIAL_SESSION cobre
     // sessões existentes (B2/B3/Aria-1).
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
-
-      // Sprint 3.2: detectar fluxo de reset de senha. Quando user clica no link
-      // do email, Supabase JS popula a sessão e dispara PASSWORD_RECOVERY.
-      // Marcamos o flag pra UI renderizar form de nova senha em vez de redirecionar.
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsRecoveryMode(true);
-      }
 
       if (nextSession?.user) {
         // Defer (setTimeout 0) evita reentrância dentro do handler do auth.
@@ -203,7 +166,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setRoles([]);
         setBootstrapError(null);
-        setIsRecoveryMode(false);
       }
 
       setIsLoading(false);
@@ -212,45 +174,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [runBootstrap]);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
-  };
-
-  const signUp = async (
-    email: string,
-    password: string,
-    fullName: string,
-    inviteToken?: string | null,
-  ) => {
-    // Persistir token em sessionStorage para o bootstrap consumir após o
-    // INITIAL_SESSION/SIGNED_IN dispatch.
-    if (inviteToken) {
-      try {
-        window.sessionStorage.setItem(INVITE_STORAGE_KEY, inviteToken);
-      } catch {
-        /* noop */
-      }
-    }
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: window.location.origin,
-        data: {
-          full_name: fullName,
-          ...(inviteToken ? { invite_token: inviteToken } : {}),
-        },
-      },
-    });
-    return { error };
-  };
-
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/app/dashboard` },
+      options: {
+        // Volta para /login: com sessão, o PublicRoute segue para o dashboard;
+        // se o Auth recusou (e-mail fora da O2), o Login mostra o motivo.
+        redirectTo: `${window.location.origin}/login`,
+        // `hd` só filtra as contas que o Google oferece — é conveniência. Quem
+        // barra de fato é o hook hook_restringe_dominio no Supabase Auth.
+        queryParams: { hd: 'o2inc.com.br', prompt: 'select_account' },
+      },
     });
     return { error };
   };
@@ -261,22 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setRoles([]);
     setBootstrapError(null);
-  };
-
-  const requestPasswordReset = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
-    });
-    return { error };
-  };
-
-  const updatePassword = async (newPassword: string) => {
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (!error) {
-      // Reset do flag de recovery — login.tsx já vai redirecionar via PublicRoute.
-      setIsRecoveryMode(false);
-    }
-    return { error };
   };
 
   const isAdmin = roles.some((r) => r.role === 'admin');
@@ -294,15 +212,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isManager,
         bootstrapError,
-        isRecoveryMode,
-        signIn,
-        signUp,
         signInWithGoogle,
         signOut,
         refreshProfile,
         retryBootstrap,
-        requestPasswordReset,
-        updatePassword,
       }}
     >
       {children}

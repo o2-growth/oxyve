@@ -1,17 +1,7 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { bootstrapUser } from '@/hooks/useBootstrap';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { O2Rings } from '@/components/brand/O2Rings';
 import { O2Logo } from '@/components/brand/O2Logo';
@@ -41,293 +31,43 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(1, 'Informe a senha'),
-});
-
-const signupSchema = z
-  .object({
-    fullName: z.string().min(2, 'Informe seu nome completo'),
-    email: z.string().email('Email inválido'),
-    password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ['confirmPassword'],
-    message: 'As senhas não coincidem',
-  });
-
-const forgotSchema = z.object({
-  email: z.string().email('Email inválido'),
-});
-
-// Sprint 3.2 — form de definir nova senha após PASSWORD_RECOVERY.
-const recoverySchema = z
-  .object({
-    password: z.string().min(8, 'A senha deve ter pelo menos 8 caracteres'),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    path: ['confirmPassword'],
-    message: 'As senhas não coincidem',
-  });
-
-type LoginFormValues = z.infer<typeof loginSchema>;
-type SignupFormValues = z.infer<typeof signupSchema>;
-type ForgotFormValues = z.infer<typeof forgotSchema>;
-type RecoveryFormValues = z.infer<typeof recoverySchema>;
+// Quando o Auth recusa o login (o hook hook_restringe_dominio barra e-mail fora
+// da O2), o Supabase volta para o redirectTo com o motivo na URL — na query ou
+// no fragmento, conforme o fluxo. Lê dos dois e limpa a URL para o aviso não
+// reaparecer num refresh.
+function readOAuthError(): string | null {
+  if (typeof window === 'undefined') return null;
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const description =
+    query.get('error_description') ?? hash.get('error_description') ?? query.get('error') ?? hash.get('error');
+  if (!description) return null;
+  window.history.replaceState(null, '', window.location.pathname);
+  return description.replace(/\+/g, ' ');
+}
 
 export default function Login() {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { signIn, signUp, signInWithGoogle, requestPasswordReset, isRecoveryMode, updatePassword } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const { signInWithGoogle } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  // Os anéis O2 aceleram durante o redirect — são o loader cerimonial da marca.
+  const busy = isGoogleLoading;
 
-  const inviteToken = searchParams.get('invite');
-  const hasInvite = !!inviteToken;
-  // Estado agregado de "trabalhando" — faz os anéis O2 acelerarem no submit
-  // (eles são o loader cerimonial da marca; nunca um spinner genérico).
-  const busy = isLoading || isGoogleLoading;
-
-  const loginForm = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '' },
-  });
-
-  const signupForm = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { fullName: '', email: '', password: '', confirmPassword: '' },
-  });
-
-  const forgotForm = useForm<ForgotFormValues>({
-    resolver: zodResolver(forgotSchema),
-    defaultValues: { email: '' },
-  });
-
-  const recoveryForm = useForm<RecoveryFormValues>({
-    resolver: zodResolver(recoverySchema),
-    defaultValues: { password: '', confirmPassword: '' },
-  });
-
-  const handleRecovery = async (values: RecoveryFormValues) => {
-    setIsLoading(true);
-    const { error } = await updatePassword(values.password);
-    setIsLoading(false);
-    if (error) {
-      toast.error('Erro ao definir nova senha: ' + error.message);
-      return;
-    }
-    toast.success('Senha alterada com sucesso!');
-    navigate('/app/dashboard');
-  };
+  useEffect(() => {
+    setAuthError(readOAuthError());
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
+    setAuthError(null);
     const { error } = await signInWithGoogle();
     if (error) {
       toast.error('Erro ao entrar com Google: ' + error.message);
       setIsGoogleLoading(false);
-      return;
     }
-    // Em caso de sucesso o navegador é redirecionado ao Google/OAuth; não
-    // resetamos o loading para manter o botão desabilitado durante o redirect.
+    // Em caso de sucesso o navegador é redirecionado ao Google; o botão fica
+    // desabilitado até a página sair.
   };
-
-  const handleLogin = async (values: LoginFormValues) => {
-    setIsLoading(true);
-    const { error } = await signIn(values.email, values.password);
-    if (error) {
-      toast.error('Erro ao entrar: ' + error.message);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(false);
-    navigate('/app/dashboard');
-  };
-
-  const handleSignup = async (values: SignupFormValues) => {
-    // Auto-join por domínio: qualquer @o2inc pode criar conta — o trigger
-    // handle_new_user cria o profile na org. Convite deixou de ser obrigatório.
-    setIsLoading(true);
-
-    const { error: signUpError } = await signUp(
-      values.email,
-      values.password,
-      values.fullName,
-      inviteToken,
-    );
-
-    // Se conta já existe, tentar signIn + bootstrap.
-    if (signUpError) {
-      const message = signUpError.message || '';
-      const alreadyRegistered =
-        message.toLowerCase().includes('already') ||
-        message.toLowerCase().includes('registered');
-
-      if (!alreadyRegistered) {
-        toast.error('Erro ao cadastrar: ' + message);
-        setIsLoading(false);
-        return;
-      }
-
-      const { error: signInError } = await signIn(values.email, values.password);
-      if (signInError) {
-        toast.error('Conta já existe, mas a senha está incorreta. ' + signInError.message);
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        await bootstrapUser(inviteToken);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Erro ao consumir convite.';
-        toast.error(msg);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(false);
-      navigate('/app/dashboard');
-      return;
-    }
-
-    // Após signUp, tentar signIn (Supabase pode auto-loggar se email confirm desabilitado).
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-      const { error: signInError } = await signIn(values.email, values.password);
-      if (signInError) {
-        toast.error(
-          'Conta criada. Verifique seu email para confirmar antes de entrar.',
-        );
-        setIsLoading(false);
-        return;
-      }
-    }
-
-    // bootstrap_user será chamado pelo AuthContext após o evento SIGNED_IN
-    // (token foi persistido em sessionStorage pelo signUp).
-    setIsLoading(false);
-    navigate('/app/dashboard');
-  };
-
-  const handleForgotPassword = async (values: ForgotFormValues) => {
-    setIsLoading(true);
-    const { error } = await requestPasswordReset(values.email);
-    if (error) {
-      toast.error('Erro ao enviar email: ' + error.message);
-    } else {
-      toast.success('Email de recuperação enviado! Verifique sua caixa de entrada.');
-      setShowForgotPassword(false);
-    }
-    setIsLoading(false);
-  };
-
-  // Sprint 3.2 — fluxo de redefinição de senha após o usuário clicar no link
-  // do email de recovery. AuthContext setou isRecoveryMode true ao receber o
-  // evento PASSWORD_RECOVERY do Supabase JS.
-  if (isRecoveryMode) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-6 sm:p-8">
-        <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
-          <CardHeader className="items-center space-y-3 text-center">
-            <O2Rings size={72} breathing spinning fast={busy} />
-            <div className="space-y-1">
-              <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
-              <CardTitle className="text-2xl">Definir nova senha</CardTitle>
-              <CardDescription>Escolha uma senha nova para sua conta</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={recoveryForm.handleSubmit(handleRecovery)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="recovery-password">Nova senha</Label>
-                <Input
-                  id="recovery-password"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  {...recoveryForm.register('password')}
-                />
-                {recoveryForm.formState.errors.password && (
-                  <p className="text-sm text-destructive">
-                    {recoveryForm.formState.errors.password.message}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="recovery-confirm">Confirmar nova senha</Label>
-                <Input
-                  id="recovery-confirm"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  {...recoveryForm.register('confirmPassword')}
-                />
-                {recoveryForm.formState.errors.confirmPassword && (
-                  <p className="text-sm text-destructive">
-                    {recoveryForm.formState.errors.confirmPassword.message}
-                  </p>
-                )}
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                Salvar nova senha
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (showForgotPassword) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-6 sm:p-8">
-        <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
-          <CardHeader className="items-center space-y-3 text-center">
-            <O2Rings size={72} breathing spinning fast={busy} />
-            <div className="space-y-1">
-              <p className="o2-eyebrow">O2 INC · REEMBOLSO</p>
-              <CardTitle className="text-2xl">Recuperar senha</CardTitle>
-              <CardDescription>Informe seu email para receber o link de recuperação</CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={forgotForm.handleSubmit(handleForgotPassword)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="forgot-email">Email</Label>
-                <Input
-                  id="forgot-email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  {...forgotForm.register('email')}
-                />
-                {forgotForm.formState.errors.email && (
-                  <p className="text-sm text-destructive">
-                    {forgotForm.formState.errors.email.message}
-                  </p>
-                )}
-              </div>
-              <Button type="submit" className="w-full gap-2" disabled={isLoading}>
-                <Mail className="h-4 w-4" />
-                Enviar link de recuperação
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => setShowForgotPassword(false)}
-              >
-                Voltar ao login
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -392,206 +132,31 @@ export default function Login() {
 
         <Card className="w-full max-w-md o2-rise border border-border/60 bg-card shadow-2xl">
           <CardHeader className="space-y-1">
-            <p className="o2-eyebrow">{hasInvite ? 'Criar conta' : 'Acessar conta'}</p>
+            <p className="o2-eyebrow">Acessar conta</p>
             <CardTitle className="text-2xl">Bem-vindo</CardTitle>
-            <CardDescription>
-              {hasInvite
-                ? 'Você foi convidado! Crie sua conta para continuar.'
-                : 'Entre na sua conta'}
-            </CardDescription>
+            <CardDescription>Entre com sua conta Google da O2 Inc.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Tabs defaultValue={hasInvite ? 'signup' : 'login'} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="login">Entrar</TabsTrigger>
-                  <TabsTrigger value="signup" data-testid="signup-tab">
-                    Cadastrar
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="login">
-                  <LoginFormBlock
-                    form={loginForm}
-                    onSubmit={handleLogin}
-                    isLoading={isLoading}
-                    onForgot={() => setShowForgotPassword(true)}
-                    onGoogle={handleGoogleSignIn}
-                    isGoogleLoading={isGoogleLoading}
-                  />
-                </TabsContent>
-
-                <TabsContent value="signup">
-                  <SignupFormBlock
-                    form={signupForm}
-                    onSubmit={handleSignup}
-                    isLoading={isLoading}
-                    onGoogle={handleGoogleSignIn}
-                    isGoogleLoading={isGoogleLoading}
-                  />
-                </TabsContent>
-              </Tabs>
+          <CardContent className="space-y-4">
+            {authError && (
+              <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                {authError}
+              </p>
+            )}
+            <Button
+              type="button"
+              className="w-full gap-2"
+              onClick={handleGoogleSignIn}
+              disabled={isGoogleLoading}
+            >
+              {isGoogleLoading ? <O2Rings size={16} spinning fast /> : <GoogleIcon className="h-4 w-4" />}
+              Entrar com Google
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Acesso restrito a e-mails @o2inc.com.br.
+            </p>
           </CardContent>
         </Card>
       </div>
     </div>
-  );
-}
-
-// Separador "ou" + botão de login com Google, reutilizado nas abas de login e
-// cadastro. bg-card casa com o fundo do Card (ver components/ui/card.tsx).
-function GoogleAuthSection({
-  label,
-  onGoogle,
-  isGoogleLoading,
-  isLoading,
-}: {
-  label: string;
-  onGoogle: () => void;
-  isGoogleLoading: boolean;
-  isLoading: boolean;
-}) {
-  return (
-    <>
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-2 text-muted-foreground">ou</span>
-        </div>
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full gap-2"
-        onClick={onGoogle}
-        disabled={isLoading || isGoogleLoading}
-      >
-        {isGoogleLoading ? (
-          <O2Rings size={16} spinning fast />
-        ) : (
-          <GoogleIcon className="h-4 w-4" />
-        )}
-        {label}
-      </Button>
-    </>
-  );
-}
-
-interface LoginBlockProps {
-  form: ReturnType<typeof useForm<LoginFormValues>>;
-  onSubmit: (values: LoginFormValues) => void | Promise<void>;
-  isLoading: boolean;
-  onForgot: () => void;
-  onGoogle: () => void;
-  isGoogleLoading: boolean;
-}
-
-function LoginFormBlock({ form, onSubmit, isLoading, onForgot, onGoogle, isGoogleLoading }: LoginBlockProps) {
-  return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="login-email">Email</Label>
-        <Input id="login-email" type="email" placeholder="seu@email.com" {...form.register('email')} />
-        {form.formState.errors.email && (
-          <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="login-password">Senha</Label>
-          <button type="button" onClick={onForgot} className="text-xs text-primary hover:underline">
-            Esqueceu a senha?
-          </button>
-        </div>
-        <Input
-          id="login-password"
-          type="password"
-          placeholder="••••••••"
-          {...form.register('password')}
-        />
-        {form.formState.errors.password && (
-          <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
-        )}
-      </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        Entrar
-      </Button>
-      <GoogleAuthSection
-        label="Entrar com Google"
-        onGoogle={onGoogle}
-        isGoogleLoading={isGoogleLoading}
-        isLoading={isLoading}
-      />
-    </form>
-  );
-}
-
-interface SignupBlockProps {
-  form: ReturnType<typeof useForm<SignupFormValues>>;
-  onSubmit: (values: SignupFormValues) => void | Promise<void>;
-  isLoading: boolean;
-  onGoogle: () => void;
-  isGoogleLoading: boolean;
-}
-
-function SignupFormBlock({ form, onSubmit, isLoading, onGoogle, isGoogleLoading }: SignupBlockProps) {
-  return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="signup-name">Nome completo</Label>
-        <Input id="signup-name" type="text" placeholder="Seu nome" {...form.register('fullName')} />
-        {form.formState.errors.fullName && (
-          <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="signup-email">Email</Label>
-        <Input
-          id="signup-email"
-          type="email"
-          placeholder="seu@email.com"
-          {...form.register('email')}
-        />
-        {form.formState.errors.email && (
-          <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="signup-password">Senha</Label>
-        <Input
-          id="signup-password"
-          type="password"
-          placeholder="••••••••"
-          {...form.register('password')}
-        />
-        {form.formState.errors.password && (
-          <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
-        )}
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="signup-confirm">Confirmar senha</Label>
-        <Input
-          id="signup-confirm"
-          type="password"
-          placeholder="••••••••"
-          {...form.register('confirmPassword')}
-        />
-        {form.formState.errors.confirmPassword && (
-          <p className="text-sm text-destructive">
-            {form.formState.errors.confirmPassword.message}
-          </p>
-        )}
-      </div>
-      <Button type="submit" className="w-full" disabled={isLoading}>
-        Criar conta
-      </Button>
-      <GoogleAuthSection
-        label="Cadastrar com Google"
-        onGoogle={onGoogle}
-        isGoogleLoading={isGoogleLoading}
-        isLoading={isLoading}
-      />
-    </form>
   );
 }

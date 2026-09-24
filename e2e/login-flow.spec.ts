@@ -1,46 +1,44 @@
 /**
- * Sprint 3 — E2E smoke do fluxo de login (invite-gated).
+ * E2E smoke do login — só Google da O2 Inc.
  *
  * Cobertura intencional:
  *   1. Acesso anônimo a rota protegida → redirect /login.
- *   2. Sem `?invite=`, a tab "Cadastrar" não aparece.
- *   3. Com `?invite=token-fake`, a tab "Cadastrar" aparece.
- *   4. Login com credenciais inválidas → toast de erro.
+ *   2. /login não oferece e-mail/senha nem cadastro, só o botão do Google.
+ *   3. O botão manda para o Google com hd=o2inc.com.br.
+ *   4. Recusa do Auth (e-mail fora da O2) aparece na tela.
  *
- * Não fazemos signup/login real — exigiria fixture user no Supabase.
- * Testes focam em rotas + UI + Zod (camadas client-only).
+ * Não fazemos o login real — exigiria uma conta Google interativa. A trava de
+ * domínio de verdade é o hook hook_restringe_dominio, testado contra o banco.
  */
 import { test, expect } from '@playwright/test';
 
-test.describe('Login & invite-only signup', () => {
+test.describe('Login só com Google da O2 Inc.', () => {
   test('rota protegida redireciona para /login quando anônimo', async ({ page }) => {
     await page.goto('/app/dashboard');
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('tab "Cadastrar" não aparece sem ?invite= na URL', async ({ page }) => {
+  test('não há formulário de senha nem cadastro', async ({ page }) => {
     await page.goto('/login');
-    // Form de login está sempre presente.
-    await expect(page.getByLabel(/email/i)).toBeVisible();
-    // Sem invite, nem a tab "Cadastrar" nem a "Entrar" da Tabs renderizam.
+    await expect(page.getByRole('button', { name: /entrar com google/i })).toBeVisible();
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await expect(page.locator('input[type="email"]')).toHaveCount(0);
     await expect(page.getByRole('tab', { name: /cadastrar/i })).toHaveCount(0);
-    await expect(page.getByTestId('signup-tab')).toHaveCount(0);
   });
 
-  test('tab "Cadastrar" aparece com ?invite=<token>', async ({ page }) => {
-    await page.goto('/login?invite=token-fake-123');
-    await expect(page.getByRole('tab', { name: /cadastrar/i })).toBeVisible();
-  });
-
-  test('login com credenciais inválidas mostra erro', async ({ page }) => {
+  test('o botão leva ao Google restrito ao domínio da O2', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel(/email/i).fill('naoexiste@oxyve.example');
-    await page.getByLabel(/senha/i).fill('senhaerrada123');
-    await page.getByRole('button', { name: /entrar/i }).click();
-    // O toast/sonner aparece com erro do Supabase. Aceita qualquer texto de erro
-    // visível (toast pode levar ~1-2s pra renderizar).
-    await expect(
-      page.locator('[data-sonner-toast], [role="status"]').filter({ hasText: /(invalid|inválid|erro|falh)/i })
-    ).toBeVisible({ timeout: 8_000 });
+    const [request] = await Promise.all([
+      page.waitForRequest((r) => r.url().includes('/auth/v1/authorize')),
+      page.getByRole('button', { name: /entrar com google/i }).click(),
+    ]);
+    const url = new URL(request.url());
+    expect(url.searchParams.get('provider')).toBe('google');
+    expect(url.searchParams.get('hd')).toBe('o2inc.com.br');
+  });
+
+  test('recusa do Auth aparece na tela', async ({ page }) => {
+    await page.goto('/login?error=access_denied&error_description=Acesso+restrito+a+contas+Google+da+O2+Inc.');
+    await expect(page.getByRole('alert')).toContainText('Acesso restrito');
   });
 });
