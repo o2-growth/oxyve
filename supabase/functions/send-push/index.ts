@@ -71,7 +71,15 @@ serve(async (req) => {
     const jwt = authHeader.slice("bearer ".length).trim();
 
     // Caminho 1: service-role (cron) — bypass de validação.
-    const isServiceRole = jwt === SUPABASE_SERVICE_ROLE_KEY;
+    // O cron prova identidade pelo header x-dispatch-token, não pelo bearer.
+    // O bearer segue sendo a service role JWT porque o gateway roda verify_jwt
+    // antes desta função e recusa qualquer coisa que não tenha formato de JWT;
+    // a igualdade com SUPABASE_SERVICE_ROLE_KEY não serve para o cron porque
+    // projetos novos recebem essa env como sb_secret_*, que o Postgres não lê.
+    const DISPATCH_TOKEN = Deno.env.get("DISPATCH_TOKEN");
+    const dispatchHeader = req.headers.get("x-dispatch-token");
+    const isServiceRole = jwt === SUPABASE_SERVICE_ROLE_KEY ||
+      (!!DISPATCH_TOKEN && dispatchHeader === DISPATCH_TOKEN);
 
     if (!isServiceRole) {
       // Caminho 2: usuário humano (admin/manager) → valida via is_manager_or_admin.
