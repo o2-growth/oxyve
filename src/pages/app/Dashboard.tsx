@@ -7,9 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, formatDate } from '@/lib/constants';
 import { FileText, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
@@ -27,10 +27,12 @@ export default function Dashboard() {
 
   const isLoading = expensesLoading || reportsLoading || contextLoading;
 
-  // Calculate stats
-  const draftReports = reports?.filter((r) => r.status === 'draft').length || 0;
-  const submittedReports = reports?.filter((r) => r.status === 'submitted').length || 0;
-  const approvedReports = reports?.filter((r) => r.status === 'approved').length || 0;
+  // Para gestor a RLS devolve os relatórios da org inteira; o placar do Início é
+  // pessoal, então conta só os do próprio usuário.
+  const myReports = reports?.filter((r) => r.user_id === profile?.id) ?? [];
+  const draftReports = myReports.filter((r) => r.status === 'draft').length;
+  const submittedReports = myReports.filter((r) => r.status === 'submitted').length;
+  const approvedReports = myReports.filter((r) => r.status === 'approved').length;
 
   // Calculate current report expenses using dashboard context
   const currentReportId = dashboardContext?.current_report?.id;
@@ -43,7 +45,9 @@ export default function Dashboard() {
       .length || 0,
   } : null;
 
-  const pendingApproval = reports?.filter((r) => r.status === 'submitted').length || 0;
+  const pendingApproval = isManager
+    ? reports?.filter((r) => r.status === 'submitted' && r.user_id !== profile?.id).length || 0
+    : 0;
 
   return (
     <AppShell>
@@ -56,6 +60,20 @@ export default function Dashboard() {
       <div className="mb-4">
         <PushPermissionPrompt />
       </div>
+
+      {/* Aprovador: o que espera decisão vem antes do próprio relatório. */}
+      {pendingApproval > 0 && (
+        <Link
+          to="/app/reports?tab=approval"
+          className="mb-4 flex min-h-11 items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-sm transition-colors hover:bg-primary/15"
+        >
+          <span>
+            <strong className="o2-num">{pendingApproval}</strong>{' '}
+            {pendingApproval === 1 ? 'relatório aguardando' : 'relatórios aguardando'} sua aprovação
+          </span>
+          <span className="font-medium text-primary">Revisar →</span>
+        </Link>
+      )}
 
       {/* Current Period Report Card */}
       <div className="mb-6 md:mb-8">
@@ -148,29 +166,6 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Manager Section */}
-      {isManager && pendingApproval > 0 && (
-        <Card className="mt-6 md:mt-8 border-primary/30 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <Clock className="h-5 w-5 text-primary" />
-              Relatórios Pendentes de Aprovação
-            </CardTitle>
-            <CardDescription>
-              Você tem {pendingApproval} relatório(s) aguardando sua análise
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              onClick={() => navigate('/app/reports?status=submitted')}
-              className="w-full sm:w-auto h-12 sm:h-10"
-            >
-              Ver Relatórios Pendentes
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Recent Activity - stack on mobile */}
       <div className="mt-6 md:mt-8 grid gap-4 md:gap-6 lg:grid-cols-2">
         <Card>
@@ -209,7 +204,7 @@ export default function Dashboard() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          {new Date(expense.date).toLocaleDateString('pt-BR')}
+                          {formatDate(expense.date)}
                         </p>
                       </div>
                       <p className="font-semibold text-sm sm:text-base shrink-0 ml-2">

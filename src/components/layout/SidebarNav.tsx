@@ -43,7 +43,8 @@ const mainNavItems = [
 const adminNavItem = { to: '/app/gestao', icon: LineChart, label: 'Gestão' };
 
 const secondaryNavItems = [
-  { to: '/app/settings/policy', icon: Settings, label: 'Configurações', matchPrefix: '/app/settings' },
+  // Perfil é a porta comum: Política/Equipe são só de admin e aparecem no menu interno.
+  { to: '/app/settings/profile', icon: Settings, label: 'Configurações', matchPrefix: '/app/settings' },
   { to: '/app/support', icon: HelpCircle, label: 'Suporte' },
 ];
 

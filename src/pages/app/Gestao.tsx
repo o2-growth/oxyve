@@ -104,10 +104,11 @@ function PersonExpensesDialog({
   });
 
   const queryClient = useQueryClient();
-  const payable = (data ?? []).filter(
-    (e) => e.status === 'submitted' || e.status === 'approved',
-  );
+  // Só aprovada é pagável — a RPC recusa o resto; a tela diz o mesmo antes.
+  const payable = (data ?? []).filter((e) => e.status === 'approved');
   const payableTotal = payable.reduce((s, e) => s + e.amount_cents, 0);
+  const pending = (data ?? []).filter((e) => e.status === 'submitted');
+  const [confirming, setConfirming] = useState(false);
 
   const markPaid = useMutation({
     mutationFn: async () => {
@@ -122,6 +123,7 @@ function PersonExpensesDialog({
       queryClient.invalidateQueries({ queryKey: ['admin-person-expenses', userId] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       toast.success(`${res.paid} lançamento(s) marcado(s) como pago(s).`);
+      setConfirming(false);
       onClose();
     },
     onError: (e) =>
@@ -135,7 +137,10 @@ function PersonExpensesDialog({
           <DialogTitle>{person?.full_name || 'Colaborador'}</DialogTitle>
           <DialogDescription>
             Lançamentos do colaborador
-            {person ? ` — total a pagar ${formatCurrency(person.a_pagar_cents)}` : ''}
+            {person ? ` — a pagar ${formatCurrency(person.a_pagar_cents)}` : ''}
+            {person && person.aguardando_aprovacao_cents > 0
+              ? ` · aguardando aprovação ${formatCurrency(person.aguardando_aprovacao_cents)}`
+              : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -200,19 +205,36 @@ function PersonExpensesDialog({
           </div>
         )}
 
+        {pending.length > 0 && (
+          <p className="mt-4 border-t pt-4 text-sm text-muted-foreground">
+            {pending.length} lançamento(s) enviado(s) aguardando aprovação — aprove o
+            relatório em Relatórios › Fila de aprovação antes de pagar.
+          </p>
+        )}
+
         {payable.length > 0 && (
           <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {payable.length} lançamento(s) aguardando pagamento
+              {confirming
+                ? `Confirmar o pagamento de ${payable.length} lançamento(s) aprovado(s)?`
+                : `${payable.length} lançamento(s) aprovado(s) aguardando pagamento`}
             </p>
-            <Button
-              onClick={() => markPaid.mutate()}
-              disabled={markPaid.isPending}
-              className="gap-2"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Confirmar pagamento ({formatCurrency(payableTotal)})
-            </Button>
+            {confirming ? (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setConfirming(false)} disabled={markPaid.isPending}>
+                  Cancelar
+                </Button>
+                <Button onClick={() => markPaid.mutate()} disabled={markPaid.isPending} className="gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Sim, pagar {formatCurrency(payableTotal)}
+                </Button>
+              </div>
+            ) : (
+              <Button onClick={() => setConfirming(true)} className="gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                Confirmar pagamento ({formatCurrency(payableTotal)})
+              </Button>
+            )}
           </div>
         )}
       </DialogContent>
@@ -263,8 +285,7 @@ export default function Gestao() {
 
   const org = data?.org;
   const cycle = data?.cycle;
-  const realizadoCents =
-    (org?.food_realized_cents ?? 0) + (org?.transport_realized_cents ?? 0);
+  const realizadoCents = org?.realized_cents ?? 0;
 
   const kpis = [
     {
@@ -277,13 +298,16 @@ export default function Gestao() {
       label: 'Realizado',
       value: realizadoCents,
       icon: TrendingUp,
-      hint: 'Alimentação + transporte',
+      hint: 'Enviado, aprovado e pago no ciclo',
     },
     {
       label: 'Total a pagar',
       value: org?.total_a_pagar_cents ?? 0,
       icon: Banknote,
-      hint: 'No ciclo atual',
+      hint:
+        (org?.aguardando_aprovacao_cents ?? 0) > 0
+          ? `Aprovado · + ${formatCurrency(org?.aguardando_aprovacao_cents ?? 0)} aguardando aprovação`
+          : 'Aprovado, aguardando pagamento',
     },
   ];
 

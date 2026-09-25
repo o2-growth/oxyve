@@ -62,11 +62,14 @@ export function ExpenseCard({
     >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <Checkbox
-            checked={isSelected}
-            onCheckedChange={() => onSelect(expense.id)}
-            className="mt-1"
-          />
+          {/* Área de toque de 44px em volta do checkbox de 16px. */}
+          <label className="-m-3 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onSelect(expense.id)}
+              aria-label={`Selecionar ${expense.description}`}
+            />
+          </label>
 
           <div className="flex-1 min-w-0 space-y-2">
             <div className="flex items-start justify-between gap-2">
@@ -93,8 +96,9 @@ export function ExpenseCard({
                 {expense.receipt_path && (
                   <button
                     onClick={() => onViewReceipt?.(expense)}
-                    className="flex h-8 w-8 items-center justify-center rounded bg-muted hover:bg-muted/80"
+                    className="flex h-11 w-11 items-center justify-center rounded bg-muted hover:bg-muted/80"
                     title="Ver comprovante"
+                    aria-label="Ver comprovante"
                   >
                     {getReceiptIcon(expense.receipt_path)}
                   </button>
@@ -102,8 +106,8 @@ export function ExpenseCard({
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <MoreVertical className="h-4 w-4" />
+                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label="Ações da despesa">
+                      <MoreVertical className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">

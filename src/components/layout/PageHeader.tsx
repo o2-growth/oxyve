@@ -9,13 +9,14 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, description, actions, eyebrow }: PageHeaderProps) {
-  const eyebrowLabel = eyebrow ?? title;
+  // Eyebrow igual ao H1 é ruído ("DESPESAS / Despesas"): só aparece quando diz outra coisa.
+  const eyebrowLabel = eyebrow && eyebrow.toLowerCase() !== title.toLowerCase() ? eyebrow : null;
 
   return (
     <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
       <div className="min-w-0">
-        <p className="o2-eyebrow truncate">{eyebrowLabel}</p>
-        <h1 className="o2-display text-2xl md:text-3xl text-foreground mt-1 truncate">
+        {eyebrowLabel && <p className="o2-eyebrow truncate">{eyebrowLabel}</p>}
+        <h1 className={`o2-display text-2xl md:text-3xl text-foreground truncate${eyebrowLabel ? ' mt-1' : ''}`}>
           {title}
         </h1>
         {description && (

@@ -1,7 +1,7 @@
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
-import { Wallet, Clock } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 
 export default function Advances() {
   return (
@@ -22,10 +22,6 @@ export default function Advances() {
             você poderá solicitar adiantamentos para viagens e despesas
             corporativas.
           </p>
-          <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>Previsão: Q2 2024</span>
-          </div>
         </CardContent>
       </Card>
     </AppShell>

@@ -19,7 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ReportFormDialog } from '@/components/reports/ReportFormDialog';
@@ -54,7 +54,7 @@ export default function Reports() {
 
   const { isManager } = useAuth();
   const isMobile = useIsMobile();
-  const { data: reports, isLoading } = useReports({ status: statusFilter });
+  const { data: reports, isLoading, isError, refetch } = useReports({ status: statusFilter });
   const { data: pendingReports } = useReports({ status: 'submitted' });
   // Carrega TUDO uma vez pra calcular contadores nas tabs (GAP-G016).
   // Custo é baixo: o useReports já tem cache 1×.
@@ -152,6 +152,8 @@ export default function Reports() {
             <ReportsContent
               reports={reports}
               isLoading={isLoading}
+              isError={isError}
+              onRetry={() => refetch()}
               stats={stats}
               statusFilter={statusFilter}
               tabCounts={tabCounts}
@@ -172,6 +174,8 @@ export default function Reports() {
           <ReportsContent
             reports={reports}
             isLoading={isLoading}
+            isError={isError}
+            onRetry={() => refetch()}
             stats={stats}
             statusFilter={statusFilter}
             tabCounts={tabCounts}
@@ -204,6 +208,8 @@ export default function Reports() {
 interface ReportsContentProps {
   reports: Report[] | undefined;
   isLoading: boolean;
+  isError: boolean;
+  onRetry: () => void;
   stats: { total: number; reimbursable: number; nonReimbursable: number; average: number };
   statusFilter: string;
   tabCounts: { all: number; draft: number; submitted: number; approved: number; rejected: number; paid: number };
@@ -217,6 +223,8 @@ interface ReportsContentProps {
 function ReportsContent({
   reports,
   isLoading,
+  isError,
+  onRetry,
   stats,
   statusFilter,
   tabCounts,
@@ -322,6 +330,8 @@ function ReportsContent({
             <Skeleton key={i} className="h-16 w-full" />
           ))}
         </div>
+      ) : isError ? (
+        <LoadError onRetry={onRetry} />
       ) : reports?.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-6 w-6" />}

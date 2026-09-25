@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useReports } from '@/hooks/useReports';
 import { useApproveReportRpc } from '@/hooks/useReportActions';
@@ -32,7 +32,7 @@ import { cn } from '@/lib/utils';
 export function ApprovalQueue() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { data: reports, isLoading } = useReports({ status: 'submitted' });
+  const { data: reports, isLoading, isError, refetch } = useReports({ status: 'submitted' });
   const approveReport = useApproveReportRpc();
 
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -75,6 +75,10 @@ export function ApprovalQueue() {
         ))}
       </div>
     );
+  }
+
+  if (isError) {
+    return <LoadError onRetry={() => refetch()} />;
   }
 
   if (!reports?.length) {
