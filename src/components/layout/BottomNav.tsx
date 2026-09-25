@@ -34,21 +34,26 @@ export function BottomNav() {
 
   const moreActive = MORE_PREFIXES.some((p) => location.pathname.startsWith(p));
 
-  // Hint de 1ª aparição — tooltip acima do dock por 3s, uma vez (localStorage).
+  // Hint de 1ª aparição — tooltip acima do dock por 3s, uma única vez.
+  // A flag é gravada no instante em que aparece: o componente remonta a cada
+  // navegação e o timer de 3s quase nunca completava, então o balão voltava.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      if (!window.localStorage.getItem(HINT_STORAGE_KEY)) {
-        setShowHint(true);
-        const t = setTimeout(() => {
-          setShowHint(false);
-          window.localStorage.setItem(HINT_STORAGE_KEY, '1');
-        }, 3000);
-        return () => clearTimeout(t);
-      }
+      if (window.localStorage.getItem(HINT_STORAGE_KEY)) return;
+      window.localStorage.setItem(HINT_STORAGE_KEY, '1');
     } catch {
-      // localStorage indisponível — segue sem hint.
+      return; // localStorage indisponível — segue sem hint (senão reapareceria sempre).
     }
+    setShowHint(true);
+    const t = setTimeout(() => setShowHint(false), 3000);
+    // Fecha no primeiro toque em qualquer lugar.
+    const dismiss = () => setShowHint(false);
+    window.addEventListener('pointerdown', dismiss, { once: true });
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('pointerdown', dismiss);
+    };
   }, []);
 
   return (
@@ -57,7 +62,7 @@ export function BottomNav() {
         <div
           role="tooltip"
           data-testid="capture-hint"
-          className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-foreground px-3 py-2 text-xs text-background shadow-lg o2-fade lg:hidden"
+          className="pointer-events-none fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-foreground px-3 py-2 text-xs text-background shadow-lg o2-fade lg:hidden"
         >
           Toque pra fotografar uma nota
         </div>
