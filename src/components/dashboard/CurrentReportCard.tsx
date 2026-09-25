@@ -9,6 +9,7 @@ import { useDashboardContext, useSubmitReportRpc, CurrentReport } from '@/hooks/
 import { formatCurrency } from '@/lib/constants';
 import { Plus, Send, Clock, AlertTriangle, CalendarClock, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 interface CurrentReportCardProps {
   onAddExpense: () => void;
@@ -50,28 +51,26 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
 
   return (
     <div className="space-y-4">
-      {/* Pending overdue report alert */}
+      {/* Relatório de ciclo anterior ainda aberto. Leva à revisão em vez de enviar
+          em um toque: enviar sem ver a lista deixava passar duplicata. */}
       {pending_due_report && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Relatório atrasado</AlertTitle>
+        <Alert className="border-destructive/60 bg-destructive/10 text-foreground">
+          <AlertTriangle className="h-4 w-4 !text-destructive" />
+          <AlertTitle>
+            {pending_due_report.days_overdue > 0 ? 'Relatório atrasado' : 'Relatório vence hoje'}
+          </AlertTitle>
           <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <span>
-              O relatório "{pending_due_report.title}" está {pending_due_report.days_overdue} dia(s) atrasado.
+              O relatório "{pending_due_report.title}" ainda não foi enviado
+              {pending_due_report.days_overdue > 0
+                ? ` — ${pending_due_report.days_overdue} dia${pending_due_report.days_overdue > 1 ? 's' : ''} de atraso.`
+                : ' e o prazo termina hoje.'}
             </span>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={() => handleSubmit(pending_due_report)}
-              disabled={submitReport.isPending}
-              className="shrink-0"
-            >
-              {submitReport.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
+            <Button asChild size="sm" variant="outline" className="h-11 shrink-0">
+              <Link to={`/app/reports/${pending_due_report.id}`}>
                 <Send className="mr-2 h-4 w-4" />
-              )}
-              Enviar agora
+                Revisar e enviar
+              </Link>
             </Button>
           </AlertDescription>
         </Alert>

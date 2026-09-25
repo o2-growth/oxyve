@@ -25,6 +25,8 @@ export interface AdminOrg {
   food_realized_cents: number;
   transport_realized_cents: number;
   total_a_pagar_cents: number;
+  realized_cents: number;
+  aguardando_aprovacao_cents: number;
 }
 
 export interface PersonRow {
@@ -33,6 +35,8 @@ export interface PersonRow {
   food_realized_cents: number;
   transport_realized_cents: number;
   a_pagar_cents: number;
+  realized_cents: number;
+  aguardando_aprovacao_cents: number;
   recusados: number;
   excecoes: number;
   transport_projected_cents: number;
@@ -54,7 +58,7 @@ export interface AdminOverview {
 }
 
 export function useAdminOverview() {
-  const { user } = useAuth();
+  const { user, isManager } = useAuth();
 
   return useQuery({
     queryKey: ['admin-overview'],
@@ -67,7 +71,8 @@ export function useAdminOverview() {
       if (error) throw error;
       return data as unknown as AdminOverview;
     },
-    enabled: !!user,
+    // A RPC recusa não-gestor com 400; nem chamar evita erro no console de quem não é admin.
+    enabled: !!user && isManager,
     // Erro de permissão (não-admin) não deve ser repetido.
     retry: false,
   });

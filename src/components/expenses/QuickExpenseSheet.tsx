@@ -58,11 +58,14 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon, Camera, Loader2, RotateCcw, PartyPopper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useCreateExpenseInReport } from '@/hooks/useCurrentReport';
+import { useCreateExpenseInReport, type CreateExpenseInReportResult } from '@/hooks/useCurrentReport';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
+import { attachReceipt } from '@/lib/receipts';
 import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, amountFieldError } from '@/lib/constants';
 import { O2Rings } from '@/components/brand/O2Rings';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -81,7 +84,10 @@ export interface QuickExpenseSheetProps {
 const formSchema = z.object({
   date: z.date({ required_error: 'Selecione uma data' }),
   description: z.string().min(1, 'Descrição é obrigatória'),
-  amount: z.string().min(1, 'Valor é obrigatório'),
+  amount: z
+    .string()
+    .min(1, 'Valor é obrigatório')
+    .refine((v) => !amountFieldError(v), (v) => ({ message: amountFieldError(v) ?? '' })),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -107,9 +113,7 @@ function groupByKind(types: ExpenseType[]) {
   }));
 }
 
-function parseAmountToCents(amount: string): number {
-  return Math.round(parseFloat(amount.replace(',', '.') || '0') * 100);
-}
+
 
 function centsToInput(cents: number | null): string {
   if (cents == null) return '';
@@ -124,6 +128,8 @@ export function QuickExpenseSheet({
 }: QuickExpenseSheetProps) {
   const isMobile = useIsMobile();
   const inputRef = useRef<HTMLInputElement>(null);
+  // Galeria: mesmo input sem `capture`, para quem não quer (ou não pode) usar a câmera.
+  const galleryRef = useRef<HTMLInputElement>(null);
   const autoOpenedRef = useRef(false);
 
   const [step, setStep] = useState<QuickExpenseStep>(initialStep);
@@ -140,6 +146,8 @@ export function QuickExpenseSheet({
 
   const validation = useValidateReceipt();
   const createExpense = useCreateExpenseInReport();
+  const queryClient = useQueryClient();
+  const { profile } = useAuth();
   const { data: categories = [] } = useActiveExpenseTypes();
 
   const grouped = useMemo(() => groupByKind(categories), [categories]);
@@ -185,6 +193,16 @@ export function QuickExpenseSheet({
       return () => clearTimeout(t);
     }
   }, [open, step, isMobile]);
+
+  // Cancelar a câmera não dispara `change`; sem ouvir `cancel` a folha ficava presa
+  // em "Aguardando câmera...". (React ainda não tipa onCancel em <input>.)
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const onCancel = () => setWaitingForCamera(false);
+    el.addEventListener('cancel', onCancel);
+    return () => el.removeEventListener('cancel', onCancel);
+  }, [open]);
 
   const handleFileSelected = async (selected: File | null) => {
     setWaitingForCamera(false);
@@ -238,6 +256,25 @@ export function QuickExpenseSheet({
     setStep('capture');
   };
 
+  // A despesa já existe quando isto roda; se o upload falhar, ela fica sem anexo e
+  // o usuário precisa saber — não pode parecer que o comprovante foi junto.
+  const saveReceipt = async (result: CreateExpenseInReportResult) => {
+    if (!file || !profile?.org_id || !result?.expense?.id) return;
+    try {
+      await attachReceipt({
+        file,
+        orgId: profile.org_id,
+        userId: profile.id,
+        reportId: result.report?.id,
+        expenseId: result.expense.id,
+      });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+    } catch (err) {
+      console.error('receipt upload failed', err);
+      toast.error('Despesa salva, mas o comprovante não subiu. Anexe de novo em Despesas › Ver detalhes.');
+    }
+  };
+
   const handleQuickSave = async () => {
     if (!file) return;
     if (!categoryId) {
@@ -255,13 +292,20 @@ export function QuickExpenseSheet({
       toast.error(blocks[0]);
       return;
     }
+    // Sem valor lido do cupom não há "salvar rápido": salvar R$ 0,00 em silêncio era
+    // o que acontecia. Leva para o formulário com o foco no valor.
+    if (!extracted?.extracted_amount_cents || extracted.extracted_amount_cents <= 0) {
+      toast.error('Não consegui ler o valor do comprovante — confira os dados.');
+      goToEdit();
+      return;
+    }
     const description =
       extracted?.extracted_date
         ? `Despesa ${format(new Date(extracted.extracted_date + 'T00:00:00'), 'dd/MM/yyyy')}`
         : 'Despesa';
 
     try {
-      await createExpense.mutateAsync({
+      const result = await createExpense.mutateAsync({
         date: extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd'),
         description,
         amount_cents: extracted?.extracted_amount_cents ?? 0,
@@ -271,6 +315,7 @@ export function QuickExpenseSheet({
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
+      await saveReceipt(result);
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
@@ -297,7 +342,7 @@ export function QuickExpenseSheet({
       return;
     }
     try {
-      await createExpense.mutateAsync({
+      const result = await createExpense.mutateAsync({
         date: format(data.date, 'yyyy-MM-dd'),
         description: data.description,
         amount_cents: parseAmountToCents(data.amount),
@@ -307,6 +352,7 @@ export function QuickExpenseSheet({
         payment_method: 'personal_card',
         is_reimbursable: true,
       });
+      await saveReceipt(result);
       onCreated?.();
       onOpenChange(false);
     } catch (err) {
@@ -430,6 +476,17 @@ export function QuickExpenseSheet({
           e.target.value = '';
         }}
       />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        hidden
+        data-testid="quick-expense-gallery-input"
+        onChange={(e) => {
+          handleFileSelected(e.target.files?.[0] ?? null);
+          e.target.value = '';
+        }}
+      />
 
       {step === 'capture' && (
         <div
@@ -445,6 +502,10 @@ export function QuickExpenseSheet({
             <>
               <O2Rings size={56} spinning fast />
               <p className="o2-eyebrow">Aguardando câmera...</p>
+              <CaptureAlternatives
+                onGallery={() => galleryRef.current?.click()}
+                onManual={goToEdit}
+              />
             </>
           ) : (
             <>
@@ -462,6 +523,10 @@ export function QuickExpenseSheet({
                 <Camera className="h-5 w-5" />
                 {isMobile ? 'Abrir câmera' : 'Selecionar foto'}
               </Button>
+              <CaptureAlternatives
+                onGallery={isMobile ? () => galleryRef.current?.click() : undefined}
+                onManual={goToEdit}
+              />
             </>
           )}
         </div>
@@ -525,8 +590,9 @@ export function QuickExpenseSheet({
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Confiança</span>
-                  <span className="font-mono text-sm font-medium capitalize">
-                    {extractedSummary.confidence}
+                  <span className="font-mono text-sm font-medium">
+                    {CONFIDENCE_LABELS[String(extractedSummary.confidence).toLowerCase()] ??
+                      extractedSummary.confidence}
                   </span>
                 </div>
               </div>
@@ -727,5 +793,22 @@ export function QuickExpenseSheet({
         {content}
       </DialogContent>
     </Dialog>
+  );
+}
+
+const CONFIDENCE_LABELS: Record<string, string> = { high: 'Alta', medium: 'Média', low: 'Baixa' };
+
+function CaptureAlternatives({ onGallery, onManual }: { onGallery?: () => void; onManual: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      {onGallery && (
+        <Button type="button" variant="outline" className="h-11" onClick={onGallery}>
+          Escolher da galeria
+        </Button>
+      )}
+      <Button type="button" variant="ghost" className="h-11" onClick={onManual}>
+        Digitar sem foto
+      </Button>
+    </div>
   );
 }

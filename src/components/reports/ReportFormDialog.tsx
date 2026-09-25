@@ -25,6 +25,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { useCreateReport, Report } from '@/hooks/useReports';
+import { parseDateOnly } from '@/lib/constants';
 
 const formSchema = z.object({
   title: z.string().min(1, 'Título é obrigatório'),
@@ -58,8 +59,8 @@ export function ReportFormDialog({
     if (report) {
       form.reset({
         title: report.title,
-        start_date: report.start_date ? new Date(report.start_date) : undefined,
-        end_date: report.end_date ? new Date(report.end_date) : undefined,
+        start_date: report.start_date ? parseDateOnly(report.start_date) : undefined,
+        end_date: report.end_date ? parseDateOnly(report.end_date) : undefined,
       });
     } else {
       form.reset({

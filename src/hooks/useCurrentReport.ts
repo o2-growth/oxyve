@@ -133,7 +133,9 @@ export function useCreateExpenseInReport() {
       if (data.is_out_of_policy) {
         toast.warning('Despesa registrada como exceção — vai para revisão do aprovador.');
       } else {
-        toast.success('Despesa criada!');
+        // Diz em qual relatório entrou: pela data, a despesa pode cair num ciclo
+        // diferente do que o Início está mostrando.
+        toast.success(data.report?.title ? `Despesa adicionada ao ${data.report.title}.` : 'Despesa criada!');
       }
     },
     onError: (error) => {

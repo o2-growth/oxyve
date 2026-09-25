@@ -42,3 +42,27 @@ export function EmptyState({
     </div>
   );
 }
+
+/**
+ * Falha de carregamento. Nunca reaproveitar o estado vazio para erro: "nenhum
+ * relatório" quando a consulta falhou fez relatório enviado parecer sumido.
+ */
+export function LoadError({ onRetry, className }: { onRetry: () => void; className?: string }) {
+  return (
+    <EmptyState
+      eyebrow="Falha ao carregar"
+      title="Não foi possível carregar os dados"
+      description="Verifique a conexão e tente de novo. Se continuar, avise o suporte."
+      className={className}
+      action={
+        <button
+          type="button"
+          onClick={onRetry}
+          className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Tentar de novo
+        </button>
+      }
+    />
+  );
+}

@@ -48,7 +48,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency } from '@/lib/constants';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
@@ -109,7 +109,10 @@ export function ExpenseFormDialog({
           date: z.date({ required_error: 'Selecione uma data' }),
           description: z.string().min(1, 'Descrição é obrigatória'),
           category_id: z.string().optional(),
-          amount: z.string().min(1, 'Valor é obrigatório'),
+          amount: z
+            .string()
+            .min(1, 'Valor é obrigatório')
+            .refine((v) => !amountFieldError(v), (v) => ({ message: amountFieldError(v) ?? '' })),
           payment_method: z.enum(['personal_card', 'corporate_card', 'cash', 'other']),
           is_reimbursable: z.boolean(),
           is_event: z.boolean(),
@@ -206,7 +209,7 @@ export function ExpenseFormDialog({
   useEffect(() => {
     if (expense) {
       form.reset({
-        date: new Date(expense.date),
+        date: parseISO(expense.date),
         description: expense.description,
         category_id: expense.category_id || '',
         amount: (expense.amount_cents / 100).toFixed(2).replace('.', ','),
@@ -229,6 +232,10 @@ export function ExpenseFormDialog({
         amount: '',
         payment_method: 'personal_card',
         is_reimbursable: true,
+        // Sem estes três o zod recusava o submit em silêncio (boolean undefined).
+        is_event: false,
+        by_km: false,
+        distance_km: '',
         notes: '',
         cost_center_id: '',
         project_id: '',
@@ -243,7 +250,7 @@ export function ExpenseFormDialog({
     const amountStr = form.getValues('amount');
     if (!dateVal || !amountStr) return;
     const formDate = format(dateVal, 'yyyy-MM-dd');
-    const formAmountCents = Math.round(parseFloat(amountStr.replace(',', '.') || '0') * 100);
+    const formAmountCents = parseAmountToCents(amountStr) || 0;
     receiptValidation.validate(file, formDate, formAmountCents);
   }, [form, receiptValidation]);
 
@@ -360,7 +367,7 @@ export function ExpenseFormDialog({
 
     try {
       const amountCents = Math.round(
-        parseFloat(data.amount.replace(',', '.')) * 100
+        parseAmountToCents(data.amount)
       );
 
       const payload = {
@@ -425,7 +432,13 @@ export function ExpenseFormDialog({
 
   const formContent = (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        onSubmit={form.handleSubmit(onSubmit, (errors) => {
+          const first = Object.values(errors)[0] as { message?: string } | undefined;
+          toast.error(first?.message || 'Revise os campos destacados antes de salvar.');
+        })}
+        className="space-y-4"
+      >
         {/* Period indicator */}
         {useCurrentReportFlow && displayReport && (
           <Alert>

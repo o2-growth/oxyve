@@ -76,21 +76,25 @@ export function BottomNav() {
           <TabLink to="/app/expenses" icon={Receipt} label="Despesas" />
 
           {/* Slot central — dock de captura elevado. */}
-          <li className="relative flex items-end justify-center pb-1.5">
-            <button
-              type="button"
-              onClick={() => setCaptureOpen(true)}
-              aria-label="Capturar despesa por foto"
-              className={cn(
-                'absolute left-1/2 top-0 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2',
-                'items-center justify-center rounded-full',
-                'bg-primary text-primary-foreground shadow-lg ring-4 ring-background',
-                'transition-transform duration-150 active:scale-95',
-                !showHint && '[animation:o2-breathe_6s_cubic-bezier(0.2,0.8,0.2,1)_infinite]'
-              )}
-            >
-              <Camera className="h-6 w-6" aria-hidden="true" />
-            </button>
+          <li className="relative flex h-16 items-end justify-center pb-[14px]">
+            {/* O translate fica no wrapper: o keyframe o2-breathe anima `transform`
+                e, no mesmo elemento, apagava o -translate e jogava o dock sobre
+                o rótulo de Relatórios. */}
+            <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
+              <button
+                type="button"
+                onClick={() => setCaptureOpen(true)}
+                aria-label="Capturar despesa por foto"
+                className={cn(
+                  'flex h-14 w-14 items-center justify-center rounded-full',
+                  'bg-primary text-primary-foreground shadow-lg ring-4 ring-background',
+                  'transition-transform duration-150 active:scale-95',
+                  !showHint && 'motion-safe:[animation:o2-breathe_6s_cubic-bezier(0.2,0.8,0.2,1)_infinite]'
+                )}
+              >
+                <Camera className="h-6 w-6" aria-hidden="true" />
+              </button>
+            </div>
             <span className={cn(tabLabel, 'text-muted-foreground')}>Capturar</span>
           </li>
 

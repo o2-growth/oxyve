@@ -53,7 +53,7 @@ export function AppShell({ children }: AppShellProps) {
         <TopBar />
         <CycleRibbon />
         {/* pb-28 no mobile abre espaço pra barra (h-16) + dock elevado + safe-area. */}
-        <main className="flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-28 lg:pb-6">
+        <main className="min-w-0 flex-1 overflow-y-auto bg-background p-4 md:p-6 pb-28 lg:pb-6">
           {children}
         </main>
         <InstallPrompt />
