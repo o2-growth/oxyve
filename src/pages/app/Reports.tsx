@@ -52,13 +52,23 @@ export default function Reports() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
 
-  const { isManager } = useAuth();
+  const { isManager, profile } = useAuth();
   const isMobile = useIsMobile();
-  const { data: reports, isLoading, isError, refetch } = useReports({ status: statusFilter });
+  const { data: orgReports, isLoading, isError, refetch } = useReports({ status: statusFilter });
+  // Para gestor a RLS devolve a org inteira; "Meus Relatórios" é só do próprio usuário
+  // — os dos outros ficam na Fila de Aprovação.
+  const reports = useMemo(
+    () => orgReports?.filter((r) => r.user_id === profile?.id),
+    [orgReports, profile?.id],
+  );
   const { data: pendingReports } = useReports({ status: 'submitted' });
   // Carrega TUDO uma vez pra calcular contadores nas tabs (GAP-G016).
   // Custo é baixo: o useReports já tem cache 1×.
-  const { data: allReports } = useReports({ status: 'all' });
+  const { data: allOrgReports } = useReports({ status: 'all' });
+  const allReports = useMemo(
+    () => allOrgReports?.filter((r) => r.user_id === profile?.id),
+    [allOrgReports, profile?.id],
+  );
   const deleteReport = useDeleteReport();
 
   const tabCounts = useMemo(() => {
@@ -82,7 +92,7 @@ export default function Reports() {
     return { total, reimbursable, nonReimbursable, average };
   }, [reports]);
 
-  const pendingCount = pendingReports?.length || 0;
+  const pendingCount = pendingReports?.filter((r) => r.user_id !== profile?.id).length || 0;
 
   const handleStatusChange = (status: string) => {
     if (status === 'all') {

@@ -82,8 +82,15 @@ export function ExpenseCard({
                     </span>
                   )}
                   {expense.is_out_of_policy && (
-                    <span className={cn(STAMP, 'status-out-of-policy')}>
-                      Exc · Revisar
+                    <span
+                      className={cn(STAMP, 'status-out-of-policy')}
+                      title={
+                        expense.is_event
+                          ? 'Evento: fora do teto, o aprovador confere a observação.'
+                          : 'Acima do teto de alimentação: reembolso limitado ao teto.'
+                      }
+                    >
+                      {expense.is_event ? 'Exc · Evento' : 'Acima do teto'}
                     </span>
                   )}
                 </div>
@@ -156,10 +163,35 @@ export function ExpenseCard({
                     {expense.report.title}
                   </Badge>
                 )}
+                {expense.late_decision === 'pending' && (
+                  <span
+                    className={cn(STAMP, 'border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]')}
+                    title="Lançada depois do envio do relatório do mês. O gestor decide se entra neste mês ou no próximo."
+                  >
+                    Fora do prazo · com o gestor
+                  </span>
+                )}
               </div>
-              <p className="o2-num text-lg font-semibold tracking-tight text-foreground">
-                {formatCurrency(expense.amount_cents, expense.currency)}
-              </p>
+              <div className="text-right">
+                <p className="o2-num text-lg font-semibold tracking-tight text-foreground">
+                  {formatCurrency(expense.amount_cents, expense.currency)}
+                </p>
+                {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
+                  <p
+                    className="o2-num text-[11px] text-[hsl(var(--status-event))]"
+                    title={
+                      expense.food_days > 1
+                        ? `Teto de alimentação para ${expense.food_days} dias`
+                        : 'Teto de alimentação por dia'
+                    }
+                  >
+                    reembolso {formatCurrency(expense.reimbursable_cents, expense.currency)}
+                  </p>
+                )}
+                {expense.food_days > 1 && (
+                  <p className="o2-num text-[11px] text-muted-foreground">cobre {expense.food_days} dias</p>
+                )}
+              </div>
             </div>
 
             <p className="font-mono text-[11px] text-muted-foreground">

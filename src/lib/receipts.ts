@@ -22,3 +22,25 @@ export async function attachReceipt(opts: {
   if (updateError) throw updateError;
   return path;
 }
+
+/**
+ * Confere se o arquivo é mesmo um comprovante legível: imagem que o navegador
+ * decodifica ou PDF com assinatura %PDF. Extensão .png com texto dentro passava
+ * como comprovante, virava imagem quebrada e o OCR respondia 500.
+ * Devolve a mensagem de erro, ou null se estiver ok.
+ */
+export async function receiptFileProblem(file: File): Promise<string | null> {
+  if (file.size === 0) return 'O arquivo está vazio.';
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+    const head = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    return String.fromCharCode(...head).startsWith('%PDF') ? null : 'O PDF parece corrompido.';
+  }
+  if (!file.type.startsWith('image/')) return 'Envie uma foto (JPG, PNG, HEIC) ou um PDF.';
+  try {
+    const bitmap = await createImageBitmap(file);
+    bitmap.close();
+    return null;
+  } catch {
+    return 'Não consegui abrir essa imagem. Tire a foto de novo ou envie outro arquivo.';
+  }
+}

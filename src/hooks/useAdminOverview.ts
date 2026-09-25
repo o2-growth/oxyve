@@ -32,6 +32,7 @@ export interface AdminOrg {
 export interface PersonRow {
   user_id: string;
   full_name: string;
+  email: string;
   food_realized_cents: number;
   transport_realized_cents: number;
   a_pagar_cents: number;
@@ -50,11 +51,26 @@ export interface SectorRow {
   transport_cents: number;
 }
 
+/** Despesa lançada depois do envio do ciclo, aguardando o gestor decidir o destino. */
+export interface LateExpenseRow {
+  expense_id: string;
+  user_id: string;
+  full_name: string;
+  description: string;
+  date: string;
+  amount_cents: number;
+  reimbursable_cents: number;
+  created_at: string;
+  report_title: string | null;
+  report_status: string | null;
+}
+
 export interface AdminOverview {
   cycle: AdminCycle;
   org: AdminOrg;
   por_pessoa: PersonRow[];
   por_setor: SectorRow[];
+  fora_do_prazo: LateExpenseRow[];
 }
 
 export function useAdminOverview() {

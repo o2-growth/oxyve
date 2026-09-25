@@ -28,6 +28,12 @@ export interface Expense {
   is_out_of_policy: boolean;
   is_event: boolean;
   distance_km: number | null;
+  /** Valor que será reembolsado (teto de alimentação pode reduzir). */
+  reimbursable_cents: number | null;
+  /** Dias cobertos por uma nota de alimentação (marmitas do mês > 1). */
+  food_days: number;
+  /** 'pending' = lançada depois do envio do ciclo, aguardando o gestor. */
+  late_decision: 'pending' | 'this_month' | 'next_month' | null;
   created_at: string;
   updated_at: string;
   category?: { name: string } | null;
@@ -50,6 +56,7 @@ export interface ExpenseInput {
   project_id?: string | null;
   is_event?: boolean;
   distance_km?: number | null;
+  food_days?: number;
 }
 
 export type ExpenseTab = 'all' | 'loose' | 'open' | 'submitted' | 'approved' | 'rejected' | 'paid' | 'exceptions';

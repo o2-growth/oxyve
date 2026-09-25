@@ -67,6 +67,20 @@ export const amountFieldError = (input: string): string | null => {
   return null;
 };
 
+// Janela de lançamento (regra do banco: tg_expenses_regras). Datas em meia-noite local.
+export const MAX_EXPENSE_AGE_DAYS = 20;
+export const endOfToday = (): Date => {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d;
+};
+export const minExpenseDate = (): Date => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - MAX_EXPENSE_AGE_DAYS);
+  return d;
+};
+
 export const formatDate = (date: string | Date): string => {
   return new Intl.DateTimeFormat('pt-BR').format(parseDateOnly(date));
 };

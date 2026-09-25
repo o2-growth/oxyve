@@ -20,7 +20,10 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 13%;
 
-    --primary: 138 100% 42%;      /* lima 500 #00D842 — verde p/ fundo claro */
+    /* Verde O2 escurecido p/ fundo claro: #007F26. O lima 500 (#00D842) com texto
+       branco dava ~2:1 (CTA ilegível). Agora 5,1:1 com branco e 4,9:1 sobre o
+       off-white — vale para botão (bg) e para texto/ícone `text-primary`. */
+    --primary: 138 100% 25%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 60 5% 96%;
@@ -37,7 +40,7 @@
 
     --border: 0 0% 90%;
     --input: 0 0% 90%;
-    --ring: 138 100% 42%;
+    --ring: 138 100% 25%;
 
     --radius: 0.75rem;            /* 12px */
 

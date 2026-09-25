@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAdminOverview } from '@/hooks/useAdminOverview';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
@@ -45,6 +46,9 @@ export default function Dashboard() {
       .length || 0,
   } : null;
 
+  const { data: adminOverview } = useAdminOverview();
+  const latePending = adminOverview?.fora_do_prazo?.length ?? 0;
+
   const pendingApproval = isManager
     ? reports?.filter((r) => r.status === 'submitted' && r.user_id !== profile?.id).length || 0
     : 0;
@@ -72,6 +76,19 @@ export default function Dashboard() {
             {pendingApproval === 1 ? 'relatório aguardando' : 'relatórios aguardando'} sua aprovação
           </span>
           <span className="font-medium text-primary">Revisar →</span>
+        </Link>
+      )}
+
+      {latePending > 0 && (
+        <Link
+          to="/app/gestao"
+          className="mb-4 flex min-h-11 items-center justify-between gap-3 rounded-lg border border-[hsl(var(--status-event)/0.5)] bg-[hsl(var(--status-event)/0.08)] px-4 py-3 text-sm transition-colors hover:bg-[hsl(var(--status-event)/0.14)]"
+        >
+          <span>
+            <strong className="o2-num">{latePending}</strong>{' '}
+            {latePending === 1 ? 'despesa lançada fora do prazo aguarda' : 'despesas lançadas fora do prazo aguardam'} sua decisão
+          </span>
+          <span className="font-medium">Decidir →</span>
         </Link>
       )}
 

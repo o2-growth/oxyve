@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 import { SidebarNav } from './SidebarNav';
 import { TopBar } from './TopBar';
@@ -6,7 +7,6 @@ import { BottomNav } from './BottomNav';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { OfflineBanner } from '@/components/pwa/OfflineBanner';
 import { InstallPrompt } from '@/components/pwa/InstallPrompt';
-import { QuickExpenseFab } from '@/components/expenses/QuickExpenseFab';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
 import { cn } from '@/lib/utils';
 
@@ -19,22 +19,48 @@ interface AppShellProps {
  * Lê o ciclo do contexto já cacheado (react-query dedupa com o Dashboard) e
  * degrada para um indicador estático quando ainda não há dado. O ponto respira
  * verde enquanto o ciclo está aberto (relatório em rascunho, acumulando).
+ *
+ * Regra: UM sinal de prazo por tela. No Início quem fala de prazo é o
+ * CurrentReportCard (alerta vermelho ou selo do card), então a faixa mostra só
+ * o ciclo. Nas outras telas a faixa é o único sinal — e, se há relatório de
+ * ciclo anterior pendente, ela fala dele (o prazo do ciclo novo contradiria).
  */
 function CycleRibbon() {
   const { data } = useDashboardContext();
+  const { pathname } = useLocation();
   const report = data?.current_report;
   const isOpen = report?.status === 'draft';
   const cycleLabel = report?.cycle_key ? `Ciclo ${report.cycle_key}` : 'Ciclo';
   const daysUntilDue = data?.days_until_due;
+  const pending = data?.pending_due_report;
+  const onDashboard = pathname.startsWith('/app/dashboard');
+
+  let deadline: { text: string; short: string; urgent: boolean } | null = null;
+  if (!onDashboard) {
+    if (pending) {
+      const late = pending.days_overdue > 0;
+      deadline = {
+        text: late ? 'Relatório anterior atrasado' : 'Relatório anterior vence hoje',
+        short: late ? 'Anterior atrasado' : 'Anterior vence hoje',
+        urgent: true,
+      };
+    } else if (isOpen && typeof daysUntilDue === 'number' && daysUntilDue >= 0) {
+      const text = daysUntilDue === 0 ? 'Envio hoje' : `Envio em ${daysUntilDue} ${daysUntilDue === 1 ? 'dia' : 'dias'}`;
+      deadline = { text, short: text, urgent: daysUntilDue === 0 };
+    }
+  }
 
   return (
-    <div className="flex h-8 items-center justify-between border-b border-border bg-card/50 px-4 md:px-6">
-      <div className="flex items-center gap-2">
+    <div className="flex h-8 min-w-0 items-center justify-between gap-2 border-b border-border bg-card/50 px-4 md:px-6">
+      <div className="flex min-w-0 items-center gap-2">
         <span className={cn('o2-live-dot', !isOpen && 'o2-live-dot--off')} aria-hidden="true" />
-        <span className="o2-eyebrow">{cycleLabel}</span>
+        <span className="o2-eyebrow whitespace-nowrap">{cycleLabel}</span>
       </div>
-      {typeof daysUntilDue === 'number' && daysUntilDue >= 0 && (
-        <span className="o2-eyebrow">Prazo em {daysUntilDue}d</span>
+      {deadline && (
+        <span className={cn('o2-eyebrow min-w-0 truncate', deadline.urgent && '!text-destructive')}>
+          <span className="sm:hidden">{deadline.short}</span>
+          <span className="hidden sm:inline">{deadline.text}</span>
+        </span>
       )}
     </div>
   );
@@ -59,7 +85,6 @@ export function AppShell({ children }: AppShellProps) {
         <InstallPrompt />
       </SidebarInset>
       <BottomNav />
-      <QuickExpenseFab />
     </SidebarProvider>
   );
 }

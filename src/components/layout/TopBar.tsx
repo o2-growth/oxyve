@@ -16,6 +16,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { NotificationsBell } from '@/components/notifications/NotificationsBell';
 import { O2Rings } from '@/components/brand/O2Rings';
+import { QuickExpenseFab } from '@/components/expenses/QuickExpenseFab';
 
 export function TopBar() {
   const { user, profile, signOut, isAdmin, isManager } = useAuth();
@@ -64,6 +65,8 @@ export function TopBar() {
       </div>
 
       <div className="flex items-center gap-1 md:gap-2">
+        {/* Captura por foto — desktop (no mobile é o dock da BottomNav). */}
+        <QuickExpenseFab />
         <NotificationsBell />
         {/* Tema — desktop; no mobile vira row do MoreSheet */}
         <span className="hidden lg:inline-flex">
@@ -79,7 +82,8 @@ export function TopBar() {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="relative h-9 w-9 md:h-10 md:w-10 rounded-full transition-colors duration-150 hover:bg-muted"
+              aria-label="Menu da conta"
+              className="relative h-11 w-11 lg:h-10 lg:w-10 rounded-full transition-colors duration-150 hover:bg-muted"
             >
               <Avatar className="h-9 w-9 md:h-10 md:w-10">
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">

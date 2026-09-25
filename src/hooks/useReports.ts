@@ -63,6 +63,13 @@ export interface ReportInput {
  * profiles!user_id (depende de FK explícita), então mantemos um cast
  * narrow no shape final. Após Aria-6 (regen types), revisitar.
  */
+type ItemExpense = {
+  amount_cents: number | null;
+  reimbursable_cents: number | null;
+  is_reimbursable: boolean | null;
+  status: string | null;
+};
+
 type ReportRow = {
   id: string;
   org_id: string;
@@ -75,10 +82,7 @@ type ReportRow = {
   updated_at: string;
   user: { full_name: string | null } | { full_name: string | null }[] | null;
   items: Array<{
-    expense:
-      | { amount_cents: number | null; is_reimbursable: boolean | null }
-      | { amount_cents: number | null; is_reimbursable: boolean | null }[]
-      | null;
+    expense: ItemExpense | ItemExpense[] | null;
   }>;
 };
 
@@ -98,7 +102,7 @@ export function useReports(filters?: { status?: string }) {
         .select(
           `*,
           user:profiles!user_id(full_name),
-          items:report_items(expense:expenses(amount_cents, is_reimbursable))`
+          items:report_items(expense:expenses(amount_cents, reimbursable_cents, is_reimbursable, status))`
         )
         .order('created_at', { ascending: false });
 
@@ -117,9 +121,11 @@ export function useReports(filters?: { status?: string }) {
         let reimbursable_cents = 0;
         for (const item of items) {
           const expense = pickFirst(item.expense);
-          const amount = expense?.amount_cents ?? 0;
+          // Reprovada não conta; reembolsável é o valor já com o teto de alimentação.
+          if (!expense || expense.status === 'rejected') continue;
+          const amount = expense.amount_cents ?? 0;
           total_cents += amount;
-          if (expense?.is_reimbursable) reimbursable_cents += amount;
+          if (expense.is_reimbursable) reimbursable_cents += expense.reimbursable_cents ?? amount;
         }
         return {
           id: row.id,

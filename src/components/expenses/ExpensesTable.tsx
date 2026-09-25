@@ -172,6 +172,14 @@ export function ExpensesTable({
               </TableCell>
               <TableCell className="o2-num text-right font-semibold whitespace-nowrap">
                 {formatCurrency(expense.amount_cents, expense.currency)}
+                {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
+                  <span className="block text-[11px] font-normal text-[hsl(var(--status-event))]" title="Teto de alimentação">
+                    reembolso {formatCurrency(expense.reimbursable_cents, expense.currency)}
+                  </span>
+                )}
+                {expense.late_decision === 'pending' && (
+                  <span className="block text-[11px] font-normal text-[hsl(var(--status-event))]">fora do prazo · com o gestor</span>
+                )}
               </TableCell>
               <TableCell>
                 <StatusBadge status={expense.status} />
