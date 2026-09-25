@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -270,15 +270,18 @@ export type Database = {
           date: string
           description: string
           distance_km: number | null
+          food_days: number
           id: string
           is_event: boolean
           is_out_of_policy: boolean
           is_reimbursable: boolean
+          late_decision: string | null
           notes: string | null
           org_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           project_id: string | null
           receipt_path: string | null
+          reimbursable_cents: number | null
           status: Database["public"]["Enums"]["expense_status"]
           updated_at: string
           user_id: string
@@ -292,15 +295,18 @@ export type Database = {
           date: string
           description: string
           distance_km?: number | null
+          food_days?: number
           id?: string
           is_event?: boolean
           is_out_of_policy?: boolean
           is_reimbursable?: boolean
+          late_decision?: string | null
           notes?: string | null
           org_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           project_id?: string | null
           receipt_path?: string | null
+          reimbursable_cents?: number | null
           status?: Database["public"]["Enums"]["expense_status"]
           updated_at?: string
           user_id: string
@@ -314,15 +320,18 @@ export type Database = {
           date?: string
           description?: string
           distance_km?: number | null
+          food_days?: number
           id?: string
           is_event?: boolean
           is_out_of_policy?: boolean
           is_reimbursable?: boolean
+          late_decision?: string | null
           notes?: string | null
           org_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           project_id?: string | null
           receipt_path?: string | null
+          reimbursable_cents?: number | null
           status?: Database["public"]["Enums"]["expense_status"]
           updated_at?: string
           user_id?: string
@@ -615,9 +624,8 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
-          last_used_at: string | null
+          last_used_at: string
           p256dh: string
-          updated_at: string
           user_agent: string | null
           user_id: string
         }
@@ -626,9 +634,8 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
-          last_used_at?: string | null
+          last_used_at?: string
           p256dh: string
-          updated_at?: string
           user_agent?: string | null
           user_id: string
         }
@@ -637,9 +644,8 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
-          last_used_at?: string | null
+          last_used_at?: string
           p256dh?: string
-          updated_at?: string
           user_agent?: string | null
           user_id?: string
         }
@@ -758,7 +764,9 @@ export type Database = {
           due_date: string | null
           end_date: string | null
           id: string
+          last_rejection_comment: string | null
           org_id: string
+          returned_at: string | null
           start_date: string | null
           status: Database["public"]["Enums"]["report_status"]
           submitted_at: string | null
@@ -773,7 +781,9 @@ export type Database = {
           due_date?: string | null
           end_date?: string | null
           id?: string
+          last_rejection_comment?: string | null
           org_id: string
+          returned_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["report_status"]
           submitted_at?: string | null
@@ -788,7 +798,9 @@ export type Database = {
           due_date?: string | null
           end_date?: string | null
           id?: string
+          last_rejection_comment?: string | null
           org_id?: string
+          returned_at?: string | null
           start_date?: string | null
           status?: Database["public"]["Enums"]["report_status"]
           submitted_at?: string | null
@@ -803,6 +815,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -841,7 +860,13 @@ export type Database = {
         Args: { p_comment?: string; p_decision: string; p_report_id: string }
         Returns: Json
       }
+      app_setting: { Args: { _key: string }; Returns: string }
       bootstrap_user: { Args: { p_invite_token: string }; Returns: Json }
+      brl: { Args: { p_cents: number }; Returns: string }
+      business_days: {
+        Args: { p_end: string; p_start: string }
+        Returns: number
+      }
       create_expense_in_current_report: {
         Args: {
           p_amount_cents: number
@@ -851,6 +876,7 @@ export type Database = {
           p_date: string
           p_description: string
           p_distance_km?: number
+          p_food_days?: number
           p_is_event?: boolean
           p_is_reimbursable?: boolean
           p_notes?: string
@@ -887,6 +913,14 @@ export type Database = {
         }
         Returns: string
       }
+      cycle_bounds: {
+        Args: { p_date: string; p_org: string }
+        Returns: Record<string, unknown>
+      }
+      decide_late_expense: {
+        Args: { p_destino: string; p_expense_id: string }
+        Returns: Json
+      }
       dispatch_pending_notification_emails: { Args: never; Returns: number }
       dispatch_pending_notification_pushes: { Args: never; Returns: number }
       get_admin_financial_overview: { Args: never; Returns: Json }
@@ -902,6 +936,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      hook_restringe_dominio: { Args: { event: Json }; Returns: Json }
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       mark_expenses_paid: { Args: { p_expense_ids: string[] }; Returns: Json }
       mark_report_paid: { Args: { p_report_id: string }; Returns: Json }
@@ -941,12 +976,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -970,11 +1005,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -995,11 +1030,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1020,11 +1055,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1037,11 +1072,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
