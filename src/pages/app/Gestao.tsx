@@ -33,10 +33,12 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, formatDate } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   useAdminOverview,
   type PersonRow,
+  type LateExpenseRow,
 } from '@/hooks/useAdminOverview';
 import {
   Wallet,
@@ -69,6 +71,7 @@ interface DrillExpense {
   date: string;
   description: string;
   amount_cents: number;
+  reimbursable_cents: number | null;
   currency: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
   is_out_of_policy: boolean;
@@ -106,7 +109,9 @@ function PersonExpensesDialog({
   const queryClient = useQueryClient();
   // Só aprovada é pagável — a RPC recusa o resto; a tela diz o mesmo antes.
   const payable = (data ?? []).filter((e) => e.status === 'approved');
-  const payableTotal = payable.reduce((s, e) => s + e.amount_cents, 0);
+  // Paga-se o reembolsável (teto de alimentação), não o valor da nota.
+  const reimb = (e: DrillExpense) => e.reimbursable_cents ?? e.amount_cents;
+  const payableTotal = payable.reduce((s, e) => s + reimb(e), 0);
   const pending = (data ?? []).filter((e) => e.status === 'submitted');
   const [confirming, setConfirming] = useState(false);
 
@@ -197,9 +202,16 @@ function PersonExpensesDialog({
                     <StatusBadge status={expense.status} />
                   </div>
                 </div>
-                <p className="o2-num shrink-0 font-semibold text-sm">
-                  {formatCurrency(expense.amount_cents, expense.currency)}
-                </p>
+                <div className="shrink-0 text-right">
+                  <p className="o2-num font-semibold text-sm">
+                    {formatCurrency(reimb(expense), expense.currency)}
+                  </p>
+                  {reimb(expense) < expense.amount_cents && (
+                    <p className="o2-num text-[11px] text-muted-foreground">
+                      nota {formatCurrency(expense.amount_cents, expense.currency)} · teto
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -246,7 +258,93 @@ function PersonExpensesDialog({
 /* Página                                                              */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Despesas fora do prazo (ciclo já enviado)                           */
+/* ------------------------------------------------------------------ */
+
+function LateExpensesCard({ rows }: { rows: LateExpenseRow[] }) {
+  const queryClient = useQueryClient();
+  const decide = useMutation({
+    mutationFn: async ({ id, destino }: { id: string; destino: 'this_month' | 'next_month' }) => {
+      const { data, error } = await supabase.rpc('decide_late_expense', {
+        p_expense_id: id,
+        p_destino: destino,
+      });
+      if (error) throw error;
+      return data as unknown as { report_title: string };
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success(`Despesa incluída no ${res.report_title}.`);
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  if (rows.length === 0) return null;
+  return (
+    <Card className="mb-4 md:mb-6 border-[hsl(var(--status-event)/0.5)]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">
+          {rows.length === 1 ? '1 despesa fora do prazo' : `${rows.length} despesas fora do prazo`}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Lançadas depois que o relatório do mês foi enviado. Decida se entram neste mês ou passam
+          para o pagamento do mês seguinte.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.map((r) => (
+          <div
+            key={r.expense_id}
+            className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium" title={r.description}>
+                {r.full_name} · {r.description}
+              </p>
+              <p className="o2-num text-xs text-muted-foreground">
+                {formatDate(r.date)} · {formatCurrency(r.reimbursable_cents)}
+                {r.reimbursable_cents < r.amount_cents ? ` de ${formatCurrency(r.amount_cents)}` : ''}
+                {r.report_title ? ` · ${r.report_title} (${REPORT_STATUS_LABEL[r.report_status ?? ''] ?? r.report_status})` : ''}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                variant="outline"
+                className="h-11"
+                disabled={decide.isPending || r.report_status === 'paid'}
+                title={r.report_status === 'paid' ? 'O relatório deste mês já foi pago' : undefined}
+                onClick={() => decide.mutate({ id: r.expense_id, destino: 'this_month' })}
+              >
+                Incluir neste mês
+              </Button>
+              <Button
+                className="h-11"
+                disabled={decide.isPending}
+                onClick={() => decide.mutate({ id: r.expense_id, destino: 'next_month' })}
+              >
+                Passar para o próximo
+              </Button>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+const REPORT_STATUS_LABEL: Record<string, string> = {
+  draft: 'aberto',
+  submitted: 'enviado',
+  approved: 'aprovado',
+  paid: 'pago',
+  rejected: 'reprovado',
+};
+
 export default function Gestao() {
+  const { isManager, isLoading: authLoading } = useAuth();
   const { data, isLoading, isError } = useAdminOverview();
   const [selectedPerson, setSelectedPerson] = useState<PersonRow | null>(null);
 
@@ -266,8 +364,9 @@ export default function Gestao() {
     [data],
   );
 
-  // Estado de acesso restrito (RPC bloqueia não-admins).
-  if (isError) {
+  // Acesso restrito: a RPC já recusa não-gestor, mas a tela não pode depender
+  // do erro — com a consulta desligada para employee ela mostrava tudo zerado.
+  if ((!authLoading && !isManager) || isError) {
     return (
       <AppShell>
         <PageHeader
@@ -332,6 +431,7 @@ export default function Gestao() {
         </TabsList>
 
         <TabsContent value="financeiro" className="mt-0">
+      <LateExpensesCard rows={data?.fora_do_prazo ?? []} />
       {/* Ciclo atual */}
       <div className="mb-4 md:mb-6 flex items-center gap-2 text-sm text-muted-foreground">
         <CalendarRange className="h-4 w-4 shrink-0" />
@@ -356,8 +456,8 @@ export default function Gestao() {
         {kpis.map((kpi) => (
           <Card key={kpi.label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="o2-eyebrow">{kpi.label}</CardTitle>
-              <kpi.icon className="h-4 w-4 text-muted-foreground hidden sm:block" />
+              <CardTitle className="o2-eyebrow min-w-0 leading-snug">{kpi.label}</CardTitle>
+              <kpi.icon className="h-4 w-4 shrink-0 text-muted-foreground hidden sm:block" />
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -442,6 +542,11 @@ export default function Gestao() {
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <span className="font-sans font-medium">{person.full_name}</span>
+                        {/* Dois cadastros com o mesmo nome (ex.: e-mail pessoal e de equipe) só
+                            se distinguem pelo e-mail. */}
+                        {people.filter((p) => p.full_name === person.full_name).length > 1 && (
+                          <span className="o2-num text-[11px] text-muted-foreground">{person.email}</span>
+                        )}
                         {(person.recusados > 0 || person.excecoes > 0) && (
                           <div className="flex flex-wrap gap-1">
                             {person.recusados > 0 && (

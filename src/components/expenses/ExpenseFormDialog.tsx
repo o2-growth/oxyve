@@ -48,7 +48,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError } from '@/lib/constants';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
@@ -56,6 +56,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
+import { receiptFileProblem } from '@/lib/receipts';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 
 interface ExpenseFormDialogProps {
@@ -78,6 +79,7 @@ export function ExpenseFormDialog({
   const createExpenseInReport = useCreateExpenseInReport();
   const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
+  const foodDailyLimit = (policy as { food_daily_limit_cents?: number | null } | undefined)?.food_daily_limit_cents ?? 3000;
   const { data: costCenters = [] } = useActiveCostCenters();
   const { data: projects = [] } = useActiveProjects();
   const { data: dashboardContext } = useDashboardContext();
@@ -118,6 +120,10 @@ export function ExpenseFormDialog({
           is_event: z.boolean(),
           by_km: z.boolean(),
           distance_km: z.string().optional(),
+          food_days: z
+            .string()
+            .optional()
+            .refine((v) => !v || (/^\d+$/.test(v) && +v >= 1 && +v <= 31), 'Informe de 1 a 31 dias'),
           notes: z.string().optional(),
           cost_center_id: z.string().optional(),
           project_id: policy?.require_project
@@ -151,6 +157,7 @@ export function ExpenseFormDialog({
       is_event: false,
       by_km: false,
       distance_km: '',
+      food_days: '1',
       notes: '',
       cost_center_id: '',
       project_id: '',
@@ -165,6 +172,7 @@ export function ExpenseFormDialog({
   const watchedDistanceKm = form.watch('distance_km');
   const watchedIsEvent = form.watch('is_event');
   const isTransport = selectedCategory?.kind === 'transport';
+  const isFood = selectedCategory?.kind === 'food';
   const kmRateCents = policy?.km_rate_cents ?? 120;
 
   // Fora de categoria de transporte, o modo km não se aplica.
@@ -218,6 +226,7 @@ export function ExpenseFormDialog({
         is_event: expense.is_event ?? false,
         by_km: expense.distance_km != null,
         distance_km: expense.distance_km != null ? String(expense.distance_km) : '',
+        food_days: String(expense.food_days ?? 1),
         notes: expense.notes || '',
         cost_center_id: expense.cost_center_id || '',
         project_id: expense.project_id || '',
@@ -236,6 +245,7 @@ export function ExpenseFormDialog({
         is_event: false,
         by_km: false,
         distance_km: '',
+        food_days: '1',
         notes: '',
         cost_center_id: '',
         project_id: '',
@@ -274,6 +284,12 @@ export function ExpenseFormDialog({
       return;
     }
     setIsConverting(false);
+
+    const problem = await receiptFileProblem(processedFile);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
 
     setReceiptFile(processedFile);
 
@@ -385,15 +401,14 @@ export function ExpenseFormDialog({
         notes: data.notes || null,
         cost_center_id: data.cost_center_id || null,
         project_id: data.project_id || null,
-        receipt_path: null as string | null,
+        food_days: isFood && !data.is_event ? Number(data.food_days || 1) : 1,
       };
 
       if (isEditing && expense) {
-        // Upload receipt if new file
-        if (receiptFile) {
-          payload.receipt_path = await uploadReceipt(expense.id);
-        }
-        await updateExpense.mutateAsync({ id: expense.id, ...payload });
+        // Só manda receipt_path quando há arquivo novo: mandar null em toda edição
+        // apagava o comprovante que já estava anexado.
+        const receiptPatch = receiptFile ? { receipt_path: await uploadReceipt(expense.id) } : {};
+        await updateExpense.mutateAsync({ id: expense.id, ...payload, ...receiptPatch });
       } else if (useCurrentReportFlow) {
         // Create expense in report flow
         const result = await createExpenseInReport.mutateAsync(payload);
@@ -428,7 +443,10 @@ export function ExpenseFormDialog({
     ? `Limite diário: ${formatCurrency(selectedCategory.daily_limit_cents)}`
     : null;
 
-  const displayReport = currentReportForDate || dashboardContext?.current_report;
+  const displayReport = isEditing
+    ? null
+    : currentReportForDate || dashboardContext?.current_report;
+  const cycleClosed = !isEditing && !!currentReportForDate && currentReportForDate.status !== 'draft';
 
   const formContent = (
     <Form {...form}>
@@ -444,7 +462,18 @@ export function ExpenseFormDialog({
           <Alert>
             <AlertDescription className="text-sm">
               Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title})
+              {cycleClosed && (
+                <span className="mt-1 block text-[hsl(var(--status-event))]">
+                  Este relatório já foi enviado. A despesa vai ficar avulsa e o gestor decide se ela
+                  entra neste mês ou no próximo.
+                </span>
+              )}
             </AlertDescription>
+          </Alert>
+        )}
+        {isEditing && expense?.report && (
+          <Alert>
+            <AlertDescription className="text-sm">Relatório: {expense.report.title}</AlertDescription>
           </Alert>
         )}
 
@@ -481,7 +510,7 @@ export function ExpenseFormDialog({
                       mode="single"
                       selected={field.value}
                       onSelect={field.onChange}
-                      disabled={(date) => date > new Date()}
+                      disabled={(date) => date > endOfToday() || date < minExpenseDate()}
                       initialFocus
                       className="pointer-events-auto"
                     />
@@ -746,6 +775,35 @@ export function ExpenseFormDialog({
             errorMessage={receiptValidation.errorMessage}
           />
         </div>
+
+        {isFood && !watchedIsEvent && (
+          <FormField
+            control={form.control}
+            name="food_days"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Dias cobertos por esta nota</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={31}
+                    className="h-11 w-28"
+                    disabled={isReadOnly}
+                    {...field}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  1 = refeição do dia (reembolso até {formatCurrency(foodDailyLimit)}). Marmitas ou compra
+                  para vários dias: informe quantos dias a nota cobre — o teto vira dias ×{' '}
+                  {formatCurrency(foodDailyLimit)}, limitado aos dias úteis do mês.
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <FormField
           control={form.control}

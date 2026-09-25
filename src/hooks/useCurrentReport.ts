@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/constants';
 
 export interface CurrentReport {
   id: string;
@@ -28,10 +29,14 @@ export interface CreateExpenseInReportResult {
     id: string;
     description: string;
     amount_cents: number;
+    reimbursable_cents: number | null;
     date: string;
     is_out_of_policy: boolean;
   };
-  report: CurrentReport;
+  /** null quando `late`: o ciclo já foi enviado e a despesa ficou avulsa. */
+  report: CurrentReport | null;
+  late?: boolean;
+  late_report?: CurrentReport | null;
   is_out_of_policy: boolean;
 }
 
@@ -104,6 +109,7 @@ export function useCreateExpenseInReport() {
       receipt_path?: string | null;
       is_event?: boolean;
       distance_km?: number | null;
+      food_days?: number;
     }) => {
       const { data, error } = await supabase.rpc('create_expense_in_current_report', {
         p_description: input.description,
@@ -119,6 +125,7 @@ export function useCreateExpenseInReport() {
         p_receipt_path: input.receipt_path || undefined,
         p_is_event: input.is_event ?? false,
         p_distance_km: input.distance_km ?? undefined,
+        p_food_days: input.food_days ?? 1,
       });
       if (error) throw error;
       return data as unknown as CreateExpenseInReportResult;
@@ -130,7 +137,18 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       
-      if (data.is_out_of_policy) {
+      const e = data.expense;
+      if (data.late) {
+        toast.warning(
+          `O ${data.late_report?.title ?? 'relatório deste período'} já foi enviado. A despesa ficou avulsa e o gestor vai decidir se entra neste mês ou no próximo.`,
+          { duration: 8000 },
+        );
+      } else if (e && e.reimbursable_cents != null && e.reimbursable_cents < e.amount_cents) {
+        toast.warning(
+          `Despesa adicionada ao ${data.report?.title}. Pelo teto de alimentação, o reembolso será de ${formatCurrency(e.reimbursable_cents)} (nota de ${formatCurrency(e.amount_cents)}).`,
+          { duration: 8000 },
+        );
+      } else if (data.is_out_of_policy) {
         toast.warning('Despesa registrada como exceção — vai para revisão do aprovador.');
       } else {
         // Diz em qual relatório entrou: pela data, a despesa pode cair num ciclo

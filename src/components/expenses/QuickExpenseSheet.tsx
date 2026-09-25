@@ -61,11 +61,11 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useCreateExpenseInReport, type CreateExpenseInReportResult } from '@/hooks/useCurrentReport';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { attachReceipt } from '@/lib/receipts';
+import { attachReceipt, receiptFileProblem } from '@/lib/receipts';
 import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
-import { formatCurrency, parseAmountToCents, amountFieldError } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate } from '@/lib/constants';
 import { O2Rings } from '@/components/brand/O2Rings';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -141,6 +141,8 @@ export function QuickExpenseSheet({
   const [isEvent, setIsEvent] = useState(false);
   // Justificativa obrigatória quando a despesa é marcada como evento (foge do teto).
   const [eventNote, setEventNote] = useState('');
+  // Dias que uma nota de alimentação cobre (marmitas do mês > 1). Teto = dias × limite diário.
+  const [foodDays, setFoodDays] = useState('1');
   // Flash verde discreto quando o OCR entrega os dados (visual apenas).
   const [dataFlash, setDataFlash] = useState(false);
 
@@ -173,6 +175,7 @@ export function QuickExpenseSheet({
       setCategoryId('');
       setIsEvent(false);
       setEventNote('');
+      setFoodDays('1');
       autoOpenedRef.current = false;
       validation.reset();
       form.reset({ date: new Date(), description: '', amount: '' });
@@ -230,6 +233,12 @@ export function QuickExpenseSheet({
       return;
     }
     setIsConverting(false);
+
+    const problem = await receiptFileProblem(processed);
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
 
     setFile(processed);
 
@@ -311,6 +320,7 @@ export function QuickExpenseSheet({
         amount_cents: extracted?.extracted_amount_cents ?? 0,
         category_id: categoryId,
         is_event: isEvent,
+        food_days: isFood && !isEvent ? Math.min(31, Math.max(1, parseInt(foodDays, 10) || 1)) : 1,
         notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
@@ -348,6 +358,7 @@ export function QuickExpenseSheet({
         amount_cents: parseAmountToCents(data.amount),
         category_id: categoryId,
         is_event: isEvent,
+        food_days: isFood && !isEvent ? Math.min(31, Math.max(1, parseInt(foodDays, 10) || 1)) : 1,
         notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
@@ -417,6 +428,24 @@ export function QuickExpenseSheet({
           </SelectContent>
         </Select>
       </div>
+      {isFood && !isEvent && (
+        <div className="space-y-1.5">
+          <Label htmlFor="quick-food-days" className="o2-eyebrow">Dias cobertos pela nota</Label>
+          <Input
+            id="quick-food-days"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={31}
+            value={foodDays}
+            onChange={(e) => setFoodDays(e.target.value)}
+            className="h-11 w-28"
+          />
+          <p className="text-xs text-muted-foreground">
+            1 = refeição do dia. Marmitas ou compra para vários dias: quantos dias a nota cobre.
+          </p>
+        </div>
+      )}
 
       <div className="flex items-start justify-between gap-3 rounded-lg border p-3">
         <div className="space-y-0.5">
@@ -729,7 +758,7 @@ export function QuickExpenseSheet({
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(d) => d > new Date()}
+                          disabled={(d) => d > endOfToday() || d < minExpenseDate()}
                           initialFocus
                           className="pointer-events-auto"
                         />
