@@ -25,6 +25,7 @@ export function useApproveReportRpc() {
     },
     onSuccess: (_, { decision }) => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
@@ -48,6 +49,7 @@ export function useMarkReportPaidRpc() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Relatório marcado como pago!');
     },

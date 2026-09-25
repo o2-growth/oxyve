@@ -134,6 +134,7 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       
@@ -205,6 +206,7 @@ export function useCreateExpenseMultiday() {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       toast.success(`${data.count} despesa(s) criada(s) — uma por dia.`);
@@ -230,6 +232,7 @@ export function useSubmitReportRpc() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
