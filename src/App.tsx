@@ -20,7 +20,6 @@ const Gestao = lazy(() => import("./pages/app/Gestao"));
 const Reports = lazy(() => import("./pages/app/Reports"));
 const ReportDetail = lazy(() => import("./pages/app/ReportDetail"));
 const SettingsProfile = lazy(() => import("./pages/app/SettingsProfile"));
-const SettingsPassword = lazy(() => import("./pages/app/SettingsPassword"));
 const SettingsPolicy = lazy(() => import("./pages/app/SettingsPolicy"));
 const SettingsTeam = lazy(() => import("./pages/app/SettingsTeam"));
 const Advances = lazy(() => import("./pages/app/Advances"));
@@ -73,15 +72,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, isRecoveryMode } = useAuth();
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
   }
 
-  // Sprint 3.2: durante PASSWORD_RECOVERY, manter usuário em /login pra
-  // mostrar form de nova senha em vez de redirecionar pra dashboard.
-  if (user && !isRecoveryMode) {
+  if (user) {
     return <Navigate to="/app/dashboard" replace />;
   }
 
@@ -99,7 +96,6 @@ function AppRoutes() {
       <Route path="/app/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
       <Route path="/app/reports/:id" element={<ProtectedRoute><ReportDetail /></ProtectedRoute>} />
       <Route path="/app/settings/profile" element={<ProtectedRoute><SettingsProfile /></ProtectedRoute>} />
-      <Route path="/app/settings/password" element={<ProtectedRoute><SettingsPassword /></ProtectedRoute>} />
       <Route path="/app/settings/policy" element={<ProtectedRoute><SettingsPolicy /></ProtectedRoute>} />
       <Route path="/app/settings/team" element={<ProtectedRoute><SettingsTeam /></ProtectedRoute>} />
       <Route path="/app/advances" element={<ProtectedRoute><Advances /></ProtectedRoute>} />
