@@ -48,7 +48,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate } from '@/lib/constants';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, formatAmountInput } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
@@ -56,7 +56,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
-import { receiptFileProblem } from '@/lib/receipts';
+import { receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 
 interface ExpenseFormDialogProps {
@@ -96,7 +96,8 @@ export function ExpenseFormDialog({
   const readerRef = useRef<FileReader | null>(null);
 
   const isEditing = !!expense;
-  const isReadOnly = !!(expense && expense.status !== 'draft');
+  // Só leitura: despesa já enviada, ou de outro colaborador (gestor vendo a da equipe).
+  const isReadOnly = !!(expense && (expense.status !== 'draft' || expense.user_id !== profile?.id));
   const hasExistingReceipt = expense?.receipt_path ? true : false;
   const hasReceipt = receiptFile !== null || hasExistingReceipt;
   const categoryRequiresReceipt = selectedCategory?.requires_receipt || false;
@@ -109,7 +110,7 @@ export function ExpenseFormDialog({
       z
         .object({
           date: z.date({ required_error: 'Selecione uma data' }),
-          description: z.string().min(1, 'Descrição é obrigatória'),
+          description: z.string().trim().min(1, 'Descrição é obrigatória').max(200, 'Até 200 caracteres'),
           category_id: z.string().optional(),
           amount: z
             .string()
@@ -402,6 +403,7 @@ export function ExpenseFormDialog({
         cost_center_id: data.cost_center_id || null,
         project_id: data.project_id || null,
         food_days: isFood && !data.is_event ? Number(data.food_days || 1) : 1,
+        receipt_hash: receiptFile ? await receiptHash(receiptFile) : undefined,
       };
 
       if (isEditing && expense) {
@@ -531,6 +533,10 @@ export function ExpenseFormDialog({
                   <Input
                     placeholder="0,00"
                     {...field}
+                    onBlur={(e) => {
+                      field.onChange(formatAmountInput(e.target.value));
+                      field.onBlur();
+                    }}
                     disabled={isReadOnly}
                     readOnly={watchedByKm}
                     className={cn('h-12', watchedByKm && 'bg-muted')}

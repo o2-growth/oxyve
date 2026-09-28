@@ -21,6 +21,7 @@ import { formatCurrency, formatDate, PAYMENT_METHOD_LABELS } from '@/lib/constan
 import { MoreHorizontal, Pencil, Trash2, FileText, Eye, Paperclip, Image, FileIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ExpensesTableProps {
   expenses: Expense[];
@@ -41,6 +42,7 @@ export function ExpensesTable({
   onAddToReport,
   onViewReceipt,
 }: ExpensesTableProps) {
+  const { profile, isManager } = useAuth();
   const allSelected = expenses.length > 0 && expenses.every((e) => selectedIds.has(e.id));
   const someSelected = expenses.some((e) => selectedIds.has(e.id)) && !allSelected;
 
@@ -139,6 +141,9 @@ export function ExpensesTable({
               <TableCell className="max-w-48">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-sans">{expense.description}</span>
+                  {isManager && expense.user_id !== profile?.id && expense.owner?.full_name && (
+                    <span className="block truncate text-[11px] text-muted-foreground">{expense.owner.full_name}</span>
+                  )}
                   {expense.is_event && (
                     <span className={cn(STAMP, 'border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]')}>
                       Evento
@@ -173,12 +178,12 @@ export function ExpensesTable({
               <TableCell className="o2-num text-right font-semibold whitespace-nowrap">
                 {formatCurrency(expense.amount_cents, expense.currency)}
                 {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
-                  <span className="block text-[11px] font-normal text-[hsl(var(--status-event))]" title="Teto de alimentação">
+                  <span className="block text-[11px] font-normal text-muted-foreground" title="Limitado ao teto de alimentação">
                     reembolso {formatCurrency(expense.reimbursable_cents, expense.currency)}
                   </span>
                 )}
                 {expense.late_decision === 'pending' && (
-                  <span className="block text-[11px] font-normal text-[hsl(var(--status-event))]">fora do prazo · com o gestor</span>
+                  <span className="block text-[11px] font-normal text-[hsl(var(--status-event))]">após o envio · com o gestor</span>
                 )}
               </TableCell>
               <TableCell>
@@ -195,16 +200,18 @@ export function ExpensesTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {expense.status === 'draft' && !expense.report ? (
+                    {expense.status === 'draft' && expense.user_id === profile?.id ? (
                       <>
                         <DropdownMenuItem onClick={() => onEdit(expense)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onAddToReport(expense)}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          Adicionar a Relatório
-                        </DropdownMenuItem>
+                        {!expense.report && expense.late_decision !== 'pending' && (
+                          <DropdownMenuItem onClick={() => onAddToReport(expense)}>
+                            <FileText className="mr-2 h-4 w-4" />
+                            Adicionar a Relatório
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={() => onDelete(expense)}
                           className="text-destructive"

@@ -81,6 +81,13 @@ export const minExpenseDate = (): Date => {
   return d;
 };
 
+/** Normaliza o que foi digitado no campo Valor para "1.234,56" ao sair do campo. */
+export const formatAmountInput = (input: string): string => {
+  const cents = parseAmountToCents(input);
+  if (Number.isNaN(cents)) return input;
+  return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
 export const formatDate = (date: string | Date): string => {
   return new Intl.DateTimeFormat('pt-BR').format(parseDateOnly(date));
 };

@@ -17,7 +17,7 @@ export async function attachReceipt(opts: {
   if (uploadError) throw uploadError;
   const { error: updateError } = await supabase
     .from('expenses')
-    .update({ receipt_path: path })
+    .update({ receipt_path: path, receipt_hash: await receiptHash(opts.file) })
     .eq('id', opts.expenseId);
   if (updateError) throw updateError;
   return path;
@@ -43,4 +43,10 @@ export async function receiptFileProblem(file: File): Promise<string | null> {
   } catch {
     return 'Não consegui abrir essa imagem. Tire a foto de novo ou envie outro arquivo.';
   }
+}
+
+/** SHA-256 do arquivo, em hex. O banco bloqueia o mesmo comprovante em duas despesas. */
+export async function receiptHash(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

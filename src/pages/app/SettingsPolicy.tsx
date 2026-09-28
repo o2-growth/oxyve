@@ -169,9 +169,11 @@ export default function SettingsPolicy() {
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                      O ciclo mensal define o período de despesas. Por exemplo, com dia de corte 24, 
-                      o ciclo vai do dia 24 do mês anterior até o dia 23 do mês atual. No dia 24, 
-                      o relatório deve ser enviado para aprovação.
+                      {(() => {
+                        const c = policy?.cycle_cutoff_day ?? 24;
+                        const fim = c === 1 ? 'último dia do mês' : `dia ${c - 1}`;
+                        return `O ciclo começa no dia ${c} de um mês e termina no ${fim} do mês seguinte. O relatório do ciclo vence no dia ${c}, quando o próximo começa.`;
+                      })()}
                     </AlertDescription>
                   </Alert>
 
@@ -194,26 +196,32 @@ export default function SettingsPolicy() {
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground">
-                        Dia do mês em que o ciclo se encerra
+                        Dia em que um ciclo começa e o relatório do anterior vence
                       </p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="enforce-mode">Modo de limites</Label>
-                      <Select
-                        value={policy?.enforce_limits_mode ?? 'warn'}
-                        onValueChange={(value) => handleAutoSave('enforce_limits_mode', value)}
-                      >
-                        <SelectTrigger id="enforce-mode" className="w-48">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="warn">Alertar (permitir)</SelectItem>
-                          <SelectItem value="block">Bloquear</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="food-limit">Teto de alimentação por dia (R$)</Label>
+                      <Input
+                        id="food-limit"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="0.01"
+                        className="h-11 w-32"
+                        defaultValue={((policy?.food_daily_limit_cents ?? 3000) / 100).toFixed(2)}
+                        key={policy?.food_daily_limit_cents ?? 'x'}
+                        onBlur={(e) => {
+                          const cents = Math.round(Number(e.target.value.replace(',', '.')) * 100);
+                          if (Number.isFinite(cents) && cents >= 0 && cents !== policy?.food_daily_limit_cents) {
+                            handleAutoSave('food_daily_limit_cents', cents);
+                          }
+                        }}
+                      />
                       <p className="text-xs text-muted-foreground">
-                        Como agir quando limites diários são excedidos
+                        Nunca bloqueia o lançamento: o reembolso de cada refeição fica limitado a este
+                        valor por dia; nota de vários dias vale dias × teto; o mês vai até dias úteis ×
+                        teto. Evento e viagem ficam fora do teto.
                       </p>
                     </div>
                   </div>
