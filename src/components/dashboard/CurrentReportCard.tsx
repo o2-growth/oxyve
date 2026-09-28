@@ -141,7 +141,7 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
           <div className="flex flex-col sm:flex-row gap-2">
             <Button 
               onClick={onAddExpense} 
-              className="flex-1 h-12 sm:h-10"
+              className="flex-1 h-12 min-h-11 lg:h-10"
             >
               <Plus className="mr-2 h-4 w-4" />
               Adicionar Despesa
@@ -153,7 +153,7 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
                 onClick={() => handleSubmit(current_report)}
                 disabled={submitReport.isPending || (reportExpenses?.count || 0) === 0}
                 className={cn(
-                  "flex-1 h-12 sm:h-10",
+                  "flex-1 h-12 min-h-11 lg:h-10",
                   (isDueToday || isOverdue) && "bg-amber-700 text-white hover:bg-amber-800"
                 )}
               >

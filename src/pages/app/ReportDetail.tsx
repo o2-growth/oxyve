@@ -45,6 +45,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import type { ExportableReport } from '@/lib/exportReport';
 import { ReportHistory } from '@/components/reports/ReportHistory';
+import { ReceiptPreviewDialog } from '@/components/reports/ReceiptPreviewDialog';
+import { useReportEvents, type ReportEvent } from '@/hooks/useReportEvents';
 
 // Sprint 3 — tipagem dos itens do relatório (consumidos via select com joins).
 // Os hooks devolvem `unknown[]` por causa dos relacionamentos dinâmicos do
@@ -99,9 +101,13 @@ interface Row {
   item: ReportItem;
   e: ReportExpense;
   amount: number;
-  /** Quanto dessa despesa entra no reembolso (0 se não reembolsável). */
+  /** Quanto dessa despesa entra no reembolso (0 se não reembolsável ou reprovada). */
   reimb: number;
+  /** Valor coberto pela política (nota limitada ao teto), antes da revisão do gestor. */
+  covered: number;
   capped: boolean;
+  /** Revisão mais recente do gestor reprovou o item: sai do reembolso. */
+  rejected: boolean;
   foodDays: number;
   outOfPolicy: boolean;
   outReason: string | null;
@@ -135,6 +141,7 @@ export default function ReportDetail() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [comment, setComment] = useState('');
   const [removeTarget, setRemoveTarget] = useState<ReportExpense | null>(null);
+  const [receiptTarget, setReceiptTarget] = useState<{ path: string; title: string } | null>(null);
 
   // Individual expense rejection dialog
   const [rejectExpenseId, setRejectExpenseId] = useState<string | null>(null);
@@ -172,22 +179,22 @@ export default function ReportDetail() {
         const amount = e.amount_cents ?? 0;
         const covered = rule?.reimbursable_cents ?? amount;
         const notReimbursable = e.is_reimbursable === false;
+        const rejected = item.review_decision === 'rejected';
         const capped = covered < amount && !rule?.is_event;
-        const outOfPolicy = !!(rule?.is_out_of_policy ?? e.is_out_of_policy);
-        let outReason: string | null = null;
-        if (outOfPolicy && rule?.is_event) {
-          outReason = rule.notes?.trim() ? `Evento: ${rule.notes.trim()}` : 'Evento/viagem';
-        } else if (capped) {
-          outReason = 'Teto de alimentação';
-        } else if (outOfPolicy) {
-          outReason = 'Fora da política';
-        }
+        // Exceção é só evento/viagem. Nota limitada ao teto é uso normal da política
+        // e ganha selo neutro (PolicyBadges), não motivo de exceção.
+        const outOfPolicy = !!rule?.is_event;
+        const outReason = outOfPolicy
+          ? rule?.notes?.trim() ? `Evento: ${rule.notes.trim()}` : 'Evento/viagem'
+          : null;
         return {
           item,
           e,
           amount,
-          reimb: notReimbursable ? 0 : covered,
+          reimb: notReimbursable || rejected ? 0 : covered,
+          covered,
           capped,
+          rejected,
           foodDays: rule?.food_days ?? 1,
           outOfPolicy,
           outReason,
@@ -201,6 +208,26 @@ export default function ReportDetail() {
   const totalCents = report?.total_cents || 0;
   const reimbursableTotal = rows.reduce((s, r) => s + r.reimb, 0);
   const notReimbursedTotal = Math.max(totalCents - reimbursableTotal, 0);
+  // Por que parte do lançado não entra no reembolso — cada centavo com um motivo.
+  const outBreakdown = useMemo(() => {
+    let rejected = 0;
+    let capped = 0;
+    let notReimb = 0;
+    const rejectedRows: Row[] = [];
+    for (const row of rows) {
+      if (row.rejected) {
+        rejected += row.amount;
+        rejectedRows.push(row);
+      } else if (row.notReimbursable) {
+        notReimb += row.amount;
+      } else if (row.capped) {
+        capped += row.amount - row.covered;
+      }
+    }
+    return { rejected, capped, notReimb, rejectedRows };
+  }, [rows]);
+
+  const { data: events } = useReportEvents(id);
 
   const r = report as (typeof report & ReportExtras) | undefined;
   const isOwner = report?.user_id === user?.id;
@@ -300,16 +327,9 @@ export default function ReportDetail() {
     );
   };
 
-  const openReceipt = async (receiptPath: string) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('receipts')
-        .createSignedUrl(receiptPath, 3600);
-      if (error) throw error;
-      window.open(data.signedUrl, '_blank');
-    } catch {
-      toast.error('Erro ao abrir comprovante');
-    }
+  // Comprovante abre num diálogo na própria tela: o aprovador não perde o lugar.
+  const openReceipt = (e: ReportExpense) => {
+    if (e.receipt_path) setReceiptTarget({ path: e.receipt_path, title: e.description });
   };
 
   const buildExportable = (): ExportableReport | null => {
@@ -400,6 +420,27 @@ export default function ReportDetail() {
 
   const actionSize = 'h-11 lg:h-9';
 
+  // Pago: o card de valor passa a dizer quando foi reembolsado.
+  const paidEvent = [...(events ?? [])].reverse().find((ev) => ev.event_type === 'paid');
+  const paidAtIso = report.status === 'paid' ? paidEvent?.created_at ?? report.updated_at : null;
+  const paidAtLabel = paidAtIso ? new Intl.DateTimeFormat('pt-BR').format(new Date(paidAtIso)) : null;
+
+  const timeline = buildTimeline(events ?? [], (report.approvals ?? []) as ReportApproval[]);
+
+  // Motivo do bloqueio dos botões de decisão — sempre escrito, não só no hover.
+  const pendingReview = totalExpenses - reviewedCount;
+  const approveBlockReason = !canApprove
+    ? null
+    : totalExpenses === 0
+      ? 'O relatório não tem despesas.'
+      : !allReviewed
+        ? `Revise ${pendingReview === 1 ? 'a despesa que falta' : `as ${pendingReview} despesas que faltam`} (${reviewedCount} de ${totalExpenses}) para aprovar ou reprovar.`
+        : hasRejected
+          ? 'Há despesa reprovada: para devolver, use "Reprovar relatório".'
+          : null;
+  const rejectBlocked = !allReviewed;
+  const disabledLook = 'disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-40';
+
   return (
     <AppShell>
       <div className="mb-4">
@@ -460,18 +501,18 @@ export default function ReportDetail() {
               <Button
                 variant="outline"
                 onClick={() => setIsRejectOpen(true)}
-                className={cn('gap-2', actionSize)}
-                disabled={!allReviewed || busy}
-                title={!allReviewed ? `Revise ${totalExpenses === 1 ? 'a despesa' : `as ${totalExpenses} despesas`} antes` : undefined}
+                className={cn('gap-2', actionSize, disabledLook)}
+                disabled={rejectBlocked || busy}
+                aria-describedby={rejectBlocked && approveBlockReason ? 'approve-block-reason' : undefined}
               >
                 <XCircle className="h-4 w-4 text-destructive" />
                 {hasRejected ? 'Reprovar relatório' : 'Reprovar'}
               </Button>
               <Button
                 onClick={() => setIsApproveOpen(true)}
-                className={cn('gap-2', actionSize)}
+                className={cn('gap-2', actionSize, disabledLook)}
                 disabled={!allReviewed || hasRejected || busy}
-                title={!allReviewed ? `Revise ${totalExpenses === 1 ? 'a despesa' : `as ${totalExpenses} despesas`} antes` : hasRejected ? 'Há despesas reprovadas' : undefined}
+                aria-describedby={approveBlockReason ? 'approve-block-reason' : undefined}
               >
                 {approveReport.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Aprovar relatório
@@ -515,21 +556,28 @@ export default function ReportDetail() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {approveBlockReason && (
+          <p
+            id="approve-block-reason"
+            className="flex w-full items-start gap-1.5 text-sm text-muted-foreground"
+          >
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            {approveBlockReason}
+          </p>
+        )}
       </div>
 
       {/* KPIs (GAP-G014) — o que se paga é o valor a reembolsar, não o lançado. */}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Card className="col-span-2 min-w-0 lg:col-span-1">
           <CardContent className="p-4">
-            <p className="o2-eyebrow">A reembolsar</p>
+            <p className="o2-eyebrow" data-testid="reimb-label">
+              {paidAtLabel ? `Reembolsado em ${paidAtLabel}` : 'A reembolsar'}
+            </p>
             <p className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
               {formatCurrency(reimbursableTotal)}
             </p>
-            {notReimbursedTotal > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {formatCurrency(notReimbursedTotal)} fora do reembolso (teto ou não reembolsável)
-              </p>
-            )}
+            <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
           </CardContent>
         </Card>
         <Card className="min-w-0">
@@ -574,36 +622,36 @@ export default function ReportDetail() {
                         row.item.review_decision === 'rejected' && 'border-destructive/40 bg-destructive/5'
                       )}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className={cn('font-sans font-medium line-clamp-2', WRAP)} title={row.e.description}>
-                            {row.e.description}
-                          </p>
-                          <p className="o2-num text-[11px] text-muted-foreground">
-                            {formatDate(row.e.date)} • {row.e.category?.name || 'Sem categoria'}
-                          </p>
-                        </div>
-                        <AmountBlock row={row} />
+                      {/* Descrição ocupa a largura toda; valor, status e ações vão na linha de baixo. */}
+                      <div className="w-full min-w-0">
+                        <p className={cn('font-sans font-medium line-clamp-2 break-words', WRAP)} title={row.e.description}>
+                          {row.e.description}
+                        </p>
+                        <p className="o2-num text-[11px] text-muted-foreground">
+                          {formatDate(row.e.date)} • {row.e.category?.name || 'Sem categoria'}
+                        </p>
                       </div>
 
                       <PolicyBadges row={row} />
 
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          <AmountBlock row={row} align="left" />
                           {showReviewStatus && <ExpenseReviewBadge decision={row.item.review_decision} />}
                         </div>
                         <div className="flex flex-wrap gap-1">
-                          {row.e.receipt_path && (
+                          {row.e.receipt_path ? (
                             <Button
                               variant="outline"
-                              className="h-11 gap-1 px-3 text-xs"
-                              onClick={() => openReceipt(row.e.receipt_path as string)}
-                              aria-label="Ver comprovante"
+                              className="h-11 min-w-11 gap-1 px-3 text-xs"
+                              onClick={() => openReceipt(row.e)}
                             >
                               <Paperclip className="h-4 w-4" />
-                              Comprovante
+                              Ver comprovante
                             </Button>
-                          )}
+                          ) : canApprove ? (
+                            <span className="flex h-11 items-center px-1 text-xs text-muted-foreground">Sem comprovante</span>
+                          ) : null}
                           {canApprove && (
                             <>
                               <Button
@@ -662,7 +710,7 @@ export default function ReportDetail() {
                       <TableRow>
                         <TableHead className="w-24 font-mono text-[11px] uppercase tracking-wider">Data</TableHead>
                         <TableHead className="font-mono text-[11px] uppercase tracking-wider">Descrição</TableHead>
-                        <TableHead className="w-14 font-mono text-[11px] uppercase tracking-wider">Anexo</TableHead>
+                        <TableHead className="w-20 font-mono text-[11px] uppercase tracking-wider">Comprovante</TableHead>
                         <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Valor</TableHead>
                         {(canApprove || showReviewStatus) && (
                           <TableHead className="text-center font-mono text-[11px] uppercase tracking-wider">Revisão</TableHead>
@@ -694,17 +742,18 @@ export default function ReportDetail() {
                               <TableCell className="align-top">
                                 {row.e.receipt_path ? (
                                   <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => openReceipt(row.e.receipt_path as string)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 gap-1 px-2 text-xs"
+                                    onClick={() => openReceipt(row.e)}
                                     aria-label="Ver comprovante"
                                     title="Ver comprovante"
                                   >
-                                    <Paperclip className="h-4 w-4" />
+                                    <Paperclip className="h-3.5 w-3.5" />
+                                    Ver
                                   </Button>
                                 ) : (
-                                  <span className="text-muted-foreground">-</span>
+                                  <span className="text-xs text-muted-foreground">Sem</span>
                                 )}
                               </TableCell>
                               <TableCell className="align-top text-right">
@@ -809,8 +858,8 @@ export default function ReportDetail() {
             </CardContent>
           </Card>
 
-          {/* Approval History */}
-          {report.approvals && report.approvals.length > 0 && (
+          {/* Histórico de aprovação — cada transição com autor e data. */}
+          {timeline.length > 0 && (
             <Card className="min-w-0">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
@@ -818,28 +867,34 @@ export default function ReportDetail() {
                   Histórico de aprovação
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {(report.approvals as ReportApproval[]).map((approval) => (
-                  <div key={approval.id} className="flex gap-4">
-                    <div className={cn(
-                      'mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-                      approval.decision === 'approved' ? 'bg-green-500/20 text-green-600' : 'bg-destructive/20 text-destructive'
-                    )}>
-                      {approval.decision === 'approved' ? <CheckCircle2 className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-sans font-medium">
-                        {approval.decision === 'approved' ? 'Aprovado' : 'Devolvido'} por {approval.approver?.full_name || 'Gestor'}
-                      </p>
-                      <p className="o2-num text-xs text-muted-foreground">
-                        {new Date(approval.decided_at).toLocaleString('pt-BR')}
-                      </p>
-                      {approval.comment && (
-                        <p className={cn('mt-2 rounded-lg bg-muted p-3 text-sm', WRAP)}>{approval.comment}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <CardContent>
+                <ol className="space-y-4" data-testid="approval-timeline">
+                  {timeline.map((step) => {
+                    const meta = STEP_META[step.kind];
+                    return (
+                      <li key={step.key} className="flex gap-4">
+                        <div className={cn('mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full', meta.tone)}>
+                          <meta.Icon className="h-4 w-4" aria-hidden="true" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-sans font-medium">
+                            {step.kind === 'submitted' && step.resubmission ? 'Reenviado para aprovação' : meta.label}
+                            {step.actor ? ` por ${step.actor}` : ''}
+                          </p>
+                          <p className="o2-num text-xs text-muted-foreground">
+                            {new Date(step.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                          </p>
+                          {step.comment && (
+                            <p className={cn('mt-2 rounded-lg bg-muted p-3 text-sm', WRAP)}>
+                              {step.kind === 'rejected' && <strong>Motivo: </strong>}
+                              {step.comment}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
               </CardContent>
             </Card>
           )}
@@ -889,9 +944,15 @@ export default function ReportDetail() {
             </div>
             <Separator />
             <div className="flex flex-wrap justify-between gap-2 text-lg font-semibold">
-              <span>A reembolsar</span>
+              <span>{paidAtLabel ? 'Reembolsado' : 'A reembolsar'}</span>
               <span className="o2-num">{formatCurrency(reimbursableTotal)}</span>
             </div>
+            {paidAtLabel && (
+              <p className="-mt-2 text-xs text-muted-foreground">Pago em {paidAtLabel}</p>
+            )}
+            {notReimbursedTotal > 0 && (
+              <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -1021,6 +1082,12 @@ export default function ReportDetail() {
         isLoading={markAsPaid.isPending}
       />
 
+      <ReceiptPreviewDialog
+        path={receiptTarget?.path ?? null}
+        title={receiptTarget?.title}
+        onOpenChange={(open) => !open && setReceiptTarget(null)}
+      />
+
       {/* Report History (GAP-G011) */}
       <ReportHistory reportId={id!} open={isHistoryOpen} onOpenChange={setIsHistoryOpen} />
     </AppShell>
@@ -1046,15 +1113,20 @@ function ExpenseReviewBadge({ decision }: { decision: string | null | undefined 
 }
 
 /** Valor da linha: reembolso vs. lançado quando o teto cortou, e dias cobertos. */
-function AmountBlock({ row }: { row: Row }) {
+function AmountBlock({ row, align = 'right' }: { row: Row; align?: 'left' | 'right' }) {
   const cur = row.e.currency ?? undefined;
   return (
-    <div className="max-w-[11rem] shrink-0 text-right">
-      {row.capped && !row.notReimbursable ? (
+    <div className={cn('max-w-[11rem] shrink-0', align === 'right' ? 'text-right' : 'text-left')}>
+      {row.rejected ? (
         <>
-          <p className="o2-num font-semibold">{formatCurrency(row.reimb, cur)}</p>
+          <p className="o2-num font-semibold text-muted-foreground line-through">{formatCurrency(row.amount, cur)}</p>
+          <p className="text-[11px] text-destructive">Fora do reembolso</p>
+        </>
+      ) : row.capped && !row.notReimbursable ? (
+        <>
+          <p className="o2-num font-semibold">{formatCurrency(row.covered, cur)}</p>
           <p className="o2-num text-[11px] text-muted-foreground">
-            Reembolso {formatCurrency(row.reimb, cur)} de {formatCurrency(row.amount, cur)}
+            Reembolso {formatCurrency(row.covered, cur)} de {formatCurrency(row.amount, cur)}
           </p>
         </>
       ) : (
@@ -1066,41 +1138,154 @@ function AmountBlock({ row }: { row: Row }) {
   );
 }
 
-/** Selos de política: motivo da exceção e lançamento fora do prazo. */
+/**
+ * Selos de política. "Limitado ao teto" é uso normal da regra de alimentação —
+ * selo neutro. Exceção (âmbar) fica só para evento/viagem. "Após o envio" marca
+ * despesa lançada depois do envio do ciclo, aguardando o gestor.
+ */
 function PolicyBadges({ row, className }: { row: Row; className?: string }) {
-  if (!row.outReason && !row.latePending) return null;
-  const capTip = row.capped
-    ? `O teto de alimentação é R$ 30 por dia${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.reimb)}.`
-    : null;
+  const showCap = row.capped && !row.notReimbursable;
+  if (!row.outReason && !row.latePending && !showCap) return null;
+  const capTip = `O teto de alimentação é R$ 30 por dia${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-1', className)}>
+      {showCap && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge variant="secondary" className="cursor-help gap-1 text-xs font-normal" tabIndex={0}>
+              <Info className="h-3 w-3" aria-hidden="true" />
+              Limitado ao teto
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{capTip}</TooltipContent>
+        </Tooltip>
+      )}
       {row.outReason && (
-        capTip ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="outline" className="cursor-help gap-1 border-amber-500/50 text-xs text-amber-700 dark:text-amber-400">
-                <Info className="h-3 w-3" />
-                {row.outReason}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">{capTip}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <Badge
-            variant="outline"
-            className={cn('max-w-full gap-1 border-amber-500/50 text-left text-xs text-amber-700 dark:text-amber-400', WRAP)}
-          >
-            <AlertTriangle className="h-3 w-3 shrink-0" />
-            <span className="line-clamp-2">{row.outReason}</span>
-          </Badge>
-        )
+        <Badge
+          variant="outline"
+          className={cn('max-w-full gap-1 border-amber-500/50 text-left text-xs text-amber-700 dark:text-amber-400', WRAP)}
+        >
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="line-clamp-2">{row.outReason}</span>
+        </Badge>
       )}
       {row.latePending && (
         <Badge variant="outline" className="gap-1 border-blue-500/50 text-xs text-blue-700 dark:text-blue-400">
-          <Clock className="h-3 w-3" />
-          Lançada após o envio — aguarda o gestor
+          <Clock className="h-3 w-3" aria-hidden="true" />
+          Após o envio — aguarda o gestor
         </Badge>
       )}
+    </div>
+  );
+}
+
+type StepKind = 'submitted' | 'rejected' | 'approved' | 'paid';
+interface TimelineStep {
+  key: string;
+  kind: StepKind;
+  at: string;
+  actor: string | null;
+  comment: string | null;
+  resubmission?: boolean;
+}
+
+const STEP_META: Record<StepKind, { label: string; Icon: typeof Send; tone: string }> = {
+  submitted: { label: 'Enviado para aprovação', Icon: Send, tone: 'bg-blue-500/15 text-blue-600' },
+  rejected: { label: 'Devolvido ao autor', Icon: Undo2, tone: 'bg-destructive/20 text-destructive' },
+  approved: { label: 'Aprovado', Icon: CheckCircle2, tone: 'bg-green-500/20 text-green-600' },
+  paid: { label: 'Pago', Icon: Wallet, tone: 'bg-emerald-500/20 text-emerald-700' },
+};
+
+/**
+ * Trilha do relatório: as transições vêm de `report_events` (autor e data de cada
+ * uma); o motivo da devolução/comentário da aprovação vem de `report_approvals`,
+ * casado pela decisão mais próxima no tempo. Sem eventos (legado), cai nas aprovações.
+ */
+function buildTimeline(events: ReportEvent[], approvals: ReportApproval[]): TimelineStep[] {
+  const used = new Set<string>();
+  const matchApproval = (decision: 'approved' | 'rejected', at: string) => {
+    const t = new Date(at).getTime();
+    let best: ReportApproval | null = null;
+    let bestDiff = Infinity;
+    for (const a of approvals) {
+      if (a.decision !== decision || used.has(a.id)) continue;
+      const diff = Math.abs(new Date(a.decided_at).getTime() - t);
+      if (diff < bestDiff) {
+        best = a;
+        bestDiff = diff;
+      }
+    }
+    // Mesma transação no banco: segundos de diferença, no máximo.
+    if (best && bestDiff <= 5 * 60 * 1000) {
+      used.add(best.id);
+      return best;
+    }
+    return null;
+  };
+
+  const steps: TimelineStep[] = [];
+  let submittedBefore = false;
+  for (const ev of events) {
+    if (!['submitted', 'rejected', 'approved', 'paid'].includes(ev.event_type)) continue;
+    const kind = ev.event_type as StepKind;
+    const approval = kind === 'approved' || kind === 'rejected' ? matchApproval(kind, ev.created_at) : null;
+    steps.push({
+      key: ev.id,
+      kind,
+      at: ev.created_at,
+      actor: ev.actor?.full_name ?? approval?.approver?.full_name ?? null,
+      comment: approval?.comment?.trim() || null,
+      resubmission: kind === 'submitted' && submittedBefore,
+    });
+    if (kind === 'submitted') submittedBefore = true;
+  }
+  // Decisões sem evento correspondente (dados antigos) entram pela tabela de aprovações.
+  for (const a of approvals) {
+    if (used.has(a.id)) continue;
+    steps.push({
+      key: a.id,
+      kind: a.decision,
+      at: a.decided_at,
+      actor: a.approver?.full_name ?? null,
+      comment: a.comment?.trim() || null,
+    });
+  }
+  return steps.sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
+}
+
+/** "R$ X fora do reembolso" com o motivo de cada parcela. */
+function OutOfReimbursement({
+  total,
+  breakdown,
+}: {
+  total: number;
+  breakdown: { rejected: number; capped: number; notReimb: number; rejectedRows: Row[] };
+}) {
+  if (total <= 0) return null;
+  return (
+    <div className="mt-1 space-y-1 text-xs text-muted-foreground" data-testid="out-of-reimbursement">
+      <p>
+        <span className="o2-num font-medium text-foreground">{formatCurrency(total)}</span> fora do reembolso
+      </p>
+      <ul className="space-y-0.5">
+        {breakdown.rejectedRows.map((row) => (
+          <li key={row.item.id} className={WRAP}>
+            <span className="o2-num">{formatCurrency(row.amount)}</span> reprovado —{' '}
+            <span className="text-foreground">{row.e.description}</span>
+            {row.item.review_comment ? `: ${row.item.review_comment}` : ''}
+          </li>
+        ))}
+        {breakdown.capped > 0 && (
+          <li>
+            <span className="o2-num">{formatCurrency(breakdown.capped)}</span> acima do teto de alimentação (R$ 30/dia)
+          </li>
+        )}
+        {breakdown.notReimb > 0 && (
+          <li>
+            <span className="o2-num">{formatCurrency(breakdown.notReimb)}</span> em despesas não reembolsáveis
+          </li>
+        )}
+      </ul>
     </div>
   );
 }
