@@ -36,8 +36,9 @@ const EVENT_LABEL: Record<ReportEventType, string> = {
   created: 'Relatório criado',
   submitted: 'Enviado para aprovação',
   approved: 'Aprovado',
-  rejected: 'Reprovado',
-  paid: 'Marcado como pago',
+  // Reprovação é total e devolve o relatório como rascunho ao autor.
+  rejected: 'Devolvido ao autor',
+  paid: 'Pago',
   expense_added: 'Despesa adicionada',
   expense_removed: 'Despesa removida',
   comment: 'Comentário',
@@ -53,7 +54,30 @@ function eventIcon(type: ReportEventType) {
     case 'expense_added': return <PlusCircle className="h-4 w-4 text-primary" />;
     case 'expense_removed': return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     case 'comment': return <MessageSquare className="h-4 w-4 text-muted-foreground" />;
+    default: return <HistoryIcon className="h-4 w-4 text-muted-foreground" />;
   }
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Rascunho',
+  submitted: 'Em aprovação',
+  approved: 'Aprovado',
+  rejected: 'Devolvido',
+  paid: 'Pago',
+};
+
+/** Detalhe legível do evento (antes era o JSON cru). */
+function eventDetail(data: Record<string, unknown> | null | undefined): string | null {
+  if (!data) return null;
+  const parts: string[] = [];
+  const from = typeof data.from === 'string' ? data.from : null;
+  const to = typeof data.to === 'string' ? data.to : null;
+  if (from && to) parts.push(`${STATUS_LABEL[from] ?? from} → ${STATUS_LABEL[to] ?? to}`);
+  const comment = typeof data.comment === 'string' ? data.comment.trim() : '';
+  if (comment) parts.push(`Motivo: ${comment}`);
+  const description = typeof data.description === 'string' ? data.description.trim() : '';
+  if (description) parts.push(description);
+  return parts.length ? parts.join(' • ') : null;
 }
 
 export function ReportHistory({ reportId, open, onOpenChange }: ReportHistoryProps) {
@@ -97,11 +121,10 @@ export function ReportHistory({ reportId, open, onOpenChange }: ReportHistoryPro
                     {event.actor?.full_name ? `Por ${event.actor.full_name} • ` : ''}
                     {format(parseISO(event.created_at), "dd MMM yyyy 'às' HH:mm", { locale: ptBR })}
                   </p>
-                  {/* Detalhes JSON minimalistas */}
-                  {event.data && Object.keys(event.data).length > 0 && (
-                    <pre className="mt-2 rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground overflow-x-auto">
-                      {JSON.stringify(event.data, null, 2)}
-                    </pre>
+                  {eventDetail(event.data) && (
+                    <p className="mt-1 text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                      {eventDetail(event.data)}
+                    </p>
                   )}
                 </li>
               ))}

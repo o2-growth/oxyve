@@ -49,7 +49,7 @@ export function TopBar() {
     <header className="flex h-14 md:h-16 items-center justify-between border-b border-border bg-card px-4 md:px-6">
       <div className="flex items-center gap-3">
         {/* Sidebar trigger - desktop only (mobile usa BottomNav) */}
-        <SidebarTrigger className="hidden lg:flex h-8 w-8" />
+        <SidebarTrigger className="hidden lg:flex h-10 w-10" aria-label="Recolher ou expandir menu" />
         {/* Metadados de sessão — mono, toque "instrumento" (desktop) */}
         <div className="hidden lg:flex items-center gap-2">
           <span className="o2-live-dot" aria-hidden="true" />
