@@ -166,7 +166,10 @@ export function ExpenseTypesList() {
                   )}
                 </TableCell>
                 <TableCell>
-                  {type.daily_limit_cents ? (
+                  {type.kind === 'food' ? (
+                    // Alimentação segue o teto da política (acima), não um limite por tipo.
+                    <span>Teto da política</span>
+                  ) : type.daily_limit_cents ? (
                     formatCurrency(type.daily_limit_cents)
                   ) : (
                     <span className="text-muted-foreground">Sem limite</span>

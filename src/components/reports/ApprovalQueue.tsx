@@ -29,6 +29,8 @@ import { Eye, CheckCircle2, XCircle, AlertTriangle, Loader2, FileText, Clock } f
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
+const despesas = (n: number) => `${n} ${n === 1 ? 'despesa' : 'despesas'}`;
+
 export function ApprovalQueue() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
@@ -40,6 +42,9 @@ export function ApprovalQueue() {
   const [comment, setComment] = useState('');
 
   const selectedReport = reports?.find(r => r.id === selectedReportId);
+  const dialogSummary = selectedReport
+    ? `${selectedReport.title} — ${formatCurrency(selectedReport.reimbursable_cents ?? 0)} a reembolsar (${formatCurrency(selectedReport.total_cents ?? 0)} lançado)`
+    : '';
 
   const openApprove = (reportId: string) => {
     setSelectedReportId(reportId);
@@ -112,11 +117,17 @@ export function ApprovalQueue() {
                     )}
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-lg">
-                      {formatCurrency(report.total_cents || 0)}
+                    <p className="o2-eyebrow">A reembolsar</p>
+                    <p className="o2-num font-bold text-lg">
+                      {formatCurrency(report.reimbursable_cents ?? 0)}
                     </p>
+                    {(report.total_cents ?? 0) !== (report.reimbursable_cents ?? 0) && (
+                      <p className="o2-num text-xs text-muted-foreground">
+                        {formatCurrency(report.total_cents ?? 0)} lançado
+                      </p>
+                    )}
                     <p className="text-xs text-muted-foreground">
-                      {report.expense_count} despesa(s)
+                      {despesas(report.expense_count ?? 0)}
                     </p>
                   </div>
                 </div>
@@ -132,27 +143,30 @@ export function ApprovalQueue() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="h-11 flex-1"
                     onClick={() => navigate(`/app/reports/${report.id}`)}
+                    aria-label={`Revisar despesas de ${report.title}`}
                   >
-                    <Eye className="mr-1 h-4 w-4" />
-                    Ver
+                    <Eye className="mr-1 h-4 w-4" aria-hidden="true" />
+                    Revisar
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="h-11 flex-1"
                     onClick={() => openReject(report.id)}
+                    aria-label={`Reprovar ${report.title}`}
                   >
-                    <XCircle className="mr-1 h-4 w-4 text-destructive" />
+                    <XCircle className="mr-1 h-4 w-4 text-destructive" aria-hidden="true" />
                     Reprovar
                   </Button>
                   <Button
                     size="sm"
-                    className="flex-1"
+                    className="h-11 flex-1"
                     onClick={() => openApprove(report.id)}
+                    aria-label={`Aprovar ${report.title}`}
                   >
-                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                    <CheckCircle2 className="mr-1 h-4 w-4" aria-hidden="true" />
                     Aprovar
                   </Button>
                 </div>
@@ -169,7 +183,7 @@ export function ApprovalQueue() {
                 {decision === 'approved' ? 'Aprovar Relatório' : 'Reprovar Relatório'}
               </DialogTitle>
               <DialogDescription>
-                {selectedReport?.title} - {formatCurrency(selectedReport?.total_cents || 0)}
+                {dialogSummary}
               </DialogDescription>
             </DialogHeader>
 
@@ -217,7 +231,7 @@ export function ApprovalQueue() {
               <TableHead>Colaborador</TableHead>
               <TableHead>Período</TableHead>
               <TableHead>Despesas</TableHead>
-              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">A reembolsar</TableHead>
               <TableHead className="text-center">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -242,9 +256,14 @@ export function ApprovalQueue() {
                     ? `${formatDate(report.start_date)} - ${formatDate(report.end_date)}`
                     : '-'}
                 </TableCell>
-                <TableCell>{report.expense_count}</TableCell>
-                <TableCell className="text-right font-semibold">
-                  {formatCurrency(report.total_cents || 0)}
+                <TableCell className="o2-num">{report.expense_count}</TableCell>
+                <TableCell className="text-right">
+                  <p className="o2-num font-semibold">{formatCurrency(report.reimbursable_cents ?? 0)}</p>
+                  {(report.total_cents ?? 0) !== (report.reimbursable_cents ?? 0) && (
+                    <p className="o2-num text-xs text-muted-foreground">
+                      {formatCurrency(report.total_cents ?? 0)} lançado
+                    </p>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-center gap-1">
@@ -252,22 +271,28 @@ export function ApprovalQueue() {
                       variant="ghost"
                       size="sm"
                       onClick={() => navigate(`/app/reports/${report.id}`)}
+                      aria-label={`Revisar despesas de ${report.title}`}
+                      title="Revisar despesas"
                     >
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-4 w-4" aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => openReject(report.id)}
+                      aria-label={`Reprovar ${report.title}`}
+                      title="Reprovar"
                     >
-                      <XCircle className="h-4 w-4 text-destructive" />
+                      <XCircle className="h-4 w-4 text-destructive" aria-hidden="true" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => openApprove(report.id)}
+                      aria-label={`Aprovar ${report.title}`}
+                      title="Aprovar"
                     >
-                      <CheckCircle2 className="h-4 w-4" />
+                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </TableCell>
@@ -285,7 +310,7 @@ export function ApprovalQueue() {
               {decision === 'approved' ? 'Aprovar Relatório' : 'Reprovar Relatório'}
             </DialogTitle>
             <DialogDescription>
-              {selectedReport?.title} - {formatCurrency(selectedReport?.total_cents || 0)}
+              {dialogSummary}
             </DialogDescription>
           </DialogHeader>
 

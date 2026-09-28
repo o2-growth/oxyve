@@ -13,6 +13,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { MoreVertical, Pencil, Trash2, FileText, Eye, Paperclip, Image, FileIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -33,6 +34,11 @@ export function ExpenseCard({
   onAddToReport,
   onViewReceipt,
 }: ExpenseCardProps) {
+  const { profile, isManager } = useAuth();
+  const isOwn = expense.user_id === profile?.id;
+  // Gestor vê as despesas da empresa: as dos outros mostram o dono e abrem só leitura.
+  const showOwner = isManager && !isOwn;
+
   const getReceiptIcon = (path: string | null) => {
     if (!path) return null;
     
@@ -46,7 +52,8 @@ export function ExpenseCard({
     return <Paperclip className="h-4 w-4 text-muted-foreground" />;
   };
 
-  const isDraft = expense.status === 'draft' && !expense.report;
+  // Rascunho próprio edita e exclui, esteja ou não num relatório (aberto ou devolvido).
+  const isDraft = expense.status === 'draft' && isOwn;
 
   // Carimbo de auditoria — chip pill mono uppercase âmbar.
   const STAMP =
@@ -84,17 +91,22 @@ export function ExpenseCard({
                   {expense.is_out_of_policy && (
                     <span
                       className={cn(STAMP, 'status-out-of-policy')}
-                      title={
-                        expense.is_event
-                          ? 'Evento: fora do teto, o aprovador confere a observação.'
-                          : 'Acima do teto de alimentação: reembolso limitado ao teto.'
-                      }
+                      title="Evento: fora do teto, o aprovador confere a observação."
                     >
-                      {expense.is_event ? 'Exc · Evento' : 'Acima do teto'}
+                      Exc · Evento
+                    </span>
+                  )}
+                  {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
+                    <span
+                      className={cn(STAMP, 'border border-border text-muted-foreground')}
+                      title="Reembolso limitado ao teto de alimentação da política."
+                    >
+                      Limitado ao teto
                     </span>
                   )}
                 </div>
                 <p className="o2-num text-[11px] text-muted-foreground mt-0.5">
+                  {showOwner && expense.owner?.full_name ? `${expense.owner.full_name} • ` : ''}
                   {formatDate(expense.date)} • {expense.category?.name || 'Sem tipo'}
                 </p>
               </div>
@@ -124,10 +136,12 @@ export function ExpenseCard({
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onAddToReport(expense)}>
-                          <FileText className="mr-2 h-4 w-4" />
-                          Adicionar a Relatório
-                        </DropdownMenuItem>
+                        {!expense.report && expense.late_decision !== 'pending' && (
+                          <DropdownMenuItem onClick={() => onAddToReport(expense)}>
+                            <FileText className="mr-2 h-4 w-4" />
+                            Adicionar a Relatório
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={() => onDelete(expense)}
                           className="text-destructive"
@@ -168,7 +182,7 @@ export function ExpenseCard({
                     className={cn(STAMP, 'border border-[hsl(var(--status-event)/0.4)] text-[hsl(var(--status-event))]')}
                     title="Lançada depois do envio do relatório do mês. O gestor decide se entra neste mês ou no próximo."
                   >
-                    Fora do prazo · com o gestor
+                    Após o envio · com o gestor
                   </span>
                 )}
               </div>
@@ -178,7 +192,7 @@ export function ExpenseCard({
                 </p>
                 {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
                   <p
-                    className="o2-num text-[11px] text-[hsl(var(--status-event))]"
+                    className="o2-num text-[11px] text-muted-foreground"
                     title={
                       expense.food_days > 1
                         ? `Teto de alimentação para ${expense.food_days} dias`

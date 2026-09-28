@@ -1,3 +1,4 @@
+import { useAuth } from '@/contexts/AuthContext';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -41,6 +42,7 @@ const TAB_CONFIG: { value: ExpenseTab; label: string; emptyMessage: string }[] =
 ];
 
 export default function Expenses() {
+  const { isManager } = useAuth();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<ExpenseTab>('all');
@@ -169,8 +171,8 @@ export default function Expenses() {
   return (
     <AppShell>
       <PageHeader
-        title="Despesas"
-        description="Gerencie suas despesas e comprovantes"
+        title={isManager ? 'Despesas da empresa' : 'Despesas'}
+        description={isManager ? 'Todas as despesas da O2, com o nome de quem lançou' : 'Gerencie suas despesas e comprovantes'}
         actions={
           <div className="hidden md:flex items-center gap-2">
             {selectedIds.size > 0 && (
@@ -238,14 +240,15 @@ export default function Expenses() {
       )}
 
       {/* Tabs with counters - scrollable on mobile */}
-      <div className="mb-4 md:mb-6 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto">
+      {/* A máscara esmaece a borda direita no celular: sinal de que as abas continuam. */}
+      <div className="mb-4 md:mb-6 -mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto [mask-image:linear-gradient(to_right,black_85%,transparent)] md:[mask-image:none]">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="inline-flex h-auto gap-1 p-1 min-w-max">
             {TAB_CONFIG.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="gap-1.5 font-mono uppercase tracking-[0.08em] text-[11px] data-[state=active]:shadow-sm whitespace-nowrap"
+                className="min-h-11 md:min-h-0 gap-1.5 font-mono uppercase tracking-[0.08em] text-[11px] data-[state=active]:shadow-sm whitespace-nowrap"
               >
                 {tab.label}
                 {counts && (
@@ -273,9 +276,10 @@ export default function Expenses() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar despesas..."
+            aria-label="Buscar despesas"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-10"
+            className="pl-10 h-11 md:h-10"
           />
         </div>
 

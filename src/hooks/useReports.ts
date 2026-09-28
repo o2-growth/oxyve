@@ -17,7 +17,8 @@ export interface Report {
   reimbursable_cents?: number;
   expense_count?: number;
   submitted_at?: string | null;
-  submitted_late?: boolean;
+  submitted_late?: boolean | null;
+  last_rejection_comment?: string | null;
   user?: { full_name: string | null } | null;
 }
 
@@ -78,6 +79,8 @@ type ReportRow = {
   start_date: string | null;
   end_date: string | null;
   status: Report['status'];
+  last_rejection_comment?: string | null;
+  submitted_late?: boolean | null;
   created_at: string;
   updated_at: string;
   user: { full_name: string | null } | { full_name: string | null }[] | null;
@@ -135,6 +138,8 @@ export function useReports(filters?: { status?: string }) {
           start_date: row.start_date,
           end_date: row.end_date,
           status: row.status,
+          last_rejection_comment: row.last_rejection_comment ?? null,
+          submitted_late: row.submitted_late ?? null,
           created_at: row.created_at,
           updated_at: row.updated_at,
           total_cents,

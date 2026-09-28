@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -11,13 +11,12 @@ interface ReportCardProps {
 }
 
 export function ReportCard({ report }: ReportCardProps) {
-  const navigate = useNavigate();
-
   return (
-    <Card 
-      className="cursor-pointer transition-colors hover:bg-muted/50 active:bg-muted"
-      onClick={() => navigate(`/app/reports/${report.id}`)}
+    <Link
+      to={`/app/reports/${report.id}`}
+      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
+    <Card className="transition-colors hover:bg-muted/50 active:bg-muted">
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -48,18 +47,26 @@ export function ReportCard({ report }: ReportCardProps) {
             </div>
             
             <p className="text-xs text-muted-foreground mt-1">
-              {report.expense_count} despesa(s)
+              {report.expense_count === 1 ? '1 despesa' : `${report.expense_count ?? 0} despesas`}
             </p>
           </div>
           
           <div className="flex items-center gap-2 shrink-0">
-            <p className="font-bold text-lg">
-              {formatCurrency(report.total_cents || 0)}
-            </p>
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            <div className="text-right">
+              <p className="o2-num font-bold text-lg">
+                {formatCurrency(report.reimbursable_cents ?? report.total_cents ?? 0)}
+              </p>
+              {report.reimbursable_cents != null && (report.total_cents ?? 0) !== report.reimbursable_cents && (
+                <p className="o2-num text-xs text-muted-foreground">
+                  de {formatCurrency(report.total_cents ?? 0)} lançado
+                </p>
+              )}
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
           </div>
         </div>
       </CardContent>
     </Card>
+    </Link>
   );
 }

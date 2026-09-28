@@ -40,6 +40,9 @@ export interface Expense {
   cost_center?: { name: string; code: string | null } | null;
   project?: { name: string; code: string | null } | null;
   report?: ExpenseReport | null;
+  /** Dono da despesa — o admin vê as da empresa inteira. */
+  owner?: { full_name: string | null } | null;
+  receipt_hash?: string | null;
 }
 
 export interface ExpenseInput {
@@ -121,6 +124,7 @@ export function useExpenses(filters?: ExpenseFilters) {
         .from('expenses')
         .select(`
           *,
+          owner:profiles!user_id(full_name),
           category:expense_categories(name),
           cost_center:cost_centers(name, code),
           project:projects(name, code)

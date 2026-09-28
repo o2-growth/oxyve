@@ -88,12 +88,13 @@ function MemberRow({ member }: { member: OrgMember }) {
         <Select
           value={member.role ?? undefined}
           disabled={setUserRole.isPending}
-          onValueChange={(value) =>
-            setUserRole.mutate({
-              p_user_id: member.user_id,
-              p_role: value as OrgRole,
-            })
-          }
+          onValueChange={(value) => {
+            // Papel dá acesso a dinheiro (aprovar, pagar): confirma antes de trocar.
+            const label = ROLE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+            if (window.confirm(`Mudar ${member.full_name || member.email} para ${label}?`)) {
+              setUserRole.mutate({ p_user_id: member.user_id, p_role: value as OrgRole });
+            }
+          }}
         >
           <SelectTrigger className="h-9 w-[150px] text-muted-foreground">
             <SelectValue placeholder="Definir papel" />

@@ -9,8 +9,10 @@ import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
 import { formatCurrency, formatDate } from '@/lib/constants';
-import { FileText, TrendingUp, Clock, CheckCircle2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { FileText, TrendingUp, Clock, CheckCircle2, Undo2, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CurrentReportCard } from '@/components/dashboard/CurrentReportCard';
 import { ExpenseFormDialog } from '@/components/expenses/ExpenseFormDialog';
@@ -18,7 +20,6 @@ import { PushPermissionPrompt } from '@/components/notifications/PushPermissionP
 
 export default function Dashboard() {
   const { profile, isManager } = useAuth();
-  const navigate = useNavigate();
   
   const { data: expenses, isLoading: expensesLoading } = useExpenses();
   const { data: reports, isLoading: reportsLoading } = useReports();
@@ -49,6 +50,28 @@ export default function Dashboard() {
   const { data: adminOverview } = useAdminOverview();
   const latePending = adminOverview?.fora_do_prazo?.length ?? 0;
 
+  // Relatório do próprio usuário devolvido pelo gestor: vira faixa no topo do Início.
+  // `useReports` descarta last_rejection_comment no mapeamento, então lemos direto.
+  const { data: returnedReports } = useQuery({
+    queryKey: ['reports', 'returned', profile?.id],
+    enabled: !!profile?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('id, title, last_rejection_comment, returned_at')
+        .eq('user_id', profile!.id)
+        .eq('status', 'draft')
+        .not('last_rejection_comment', 'is', null)
+        .order('returned_at', { ascending: false, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []).filter((r) => (r.last_rejection_comment ?? '').trim() !== '');
+    },
+  });
+
+  // Gestor/admin: a RLS devolve relatórios da empresa; cada linha diz de quem é.
+  const recentReports = reports?.slice(0, 5) ?? [];
+  const periodExpenses = expenses?.filter((e) => e.report?.id === currentReportId).slice(0, 5) ?? [];
+
   const pendingApproval = isManager
     ? reports?.filter((r) => r.status === 'submitted' && r.user_id !== profile?.id).length || 0
     : 0;
@@ -64,6 +87,25 @@ export default function Dashboard() {
       <div className="mb-4">
         <PushPermissionPrompt />
       </div>
+
+      {/* Devolução do gestor: o colaborador vê antes de qualquer outra coisa. */}
+      {returnedReports?.map((ret) => (
+        <Link
+          key={ret.id}
+          to={`/app/reports/${ret.id}`}
+          data-testid="returned-report-banner"
+          className="mb-4 flex min-h-11 flex-col gap-2 rounded-lg border border-destructive/60 bg-destructive/10 px-4 py-3 text-sm transition-colors hover:bg-destructive/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex min-w-0 items-start gap-2 [overflow-wrap:anywhere]">
+            <Undo2 className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+            <span>
+              Seu relatório <strong>{ret.title}</strong> foi devolvido:{' '}
+              {(ret.last_rejection_comment ?? '').trim().replace(/[.!?…]+$/, '')}
+            </span>
+          </span>
+          <span className="shrink-0 font-medium text-destructive">Corrigir e reenviar →</span>
+        </Link>
+      ))}
 
       {/* Aprovador: o que espera decisão vem antes do próprio relatório. */}
       {pendingApproval > 0 && (
@@ -86,7 +128,7 @@ export default function Dashboard() {
         >
           <span>
             <strong className="o2-num">{latePending}</strong>{' '}
-            {latePending === 1 ? 'despesa lançada fora do prazo aguarda' : 'despesas lançadas fora do prazo aguardam'} sua decisão
+            {latePending === 1 ? 'despesa lançada após o envio aguarda' : 'despesas lançadas após o envio aguardam'} sua decisão
           </span>
           <span className="font-medium">Decidir →</span>
         </Link>
@@ -106,7 +148,7 @@ export default function Dashboard() {
         <Card className="o2-rise" style={{ animationDelay: '0ms' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between">
-              <span className="o2-eyebrow">Período Atual</span>
+              <span className="o2-eyebrow">{isManager ? 'Seu período atual' : 'Período atual'}</span>
               <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </div>
             {isLoading ? (
@@ -123,7 +165,7 @@ export default function Dashboard() {
               </div>
             )}
             <p className="mt-1.5 text-xs text-muted-foreground">
-              {currentReportExpenses?.count || 0} despesas
+              {(currentReportExpenses?.count || 0) === 1 ? '1 despesa' : `${currentReportExpenses?.count || 0} despesas`}
             </p>
           </CardContent>
         </Card>
@@ -132,7 +174,7 @@ export default function Dashboard() {
         <Card className="o2-rise" style={{ animationDelay: '60ms' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between">
-              <span className="o2-eyebrow">Rascunhos</span>
+              <span className="o2-eyebrow">{isManager ? 'Seus rascunhos' : 'Rascunhos'}</span>
               <Clock className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </div>
             {isLoading ? (
@@ -150,7 +192,7 @@ export default function Dashboard() {
         <Card className="o2-rise" style={{ animationDelay: '120ms' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between">
-              <span className="o2-eyebrow">Enviados</span>
+              <span className="o2-eyebrow">{isManager ? 'Seus enviados' : 'Enviados'}</span>
               <FileText className="h-4 w-4 text-muted-foreground hidden sm:block" />
             </div>
             {isLoading ? (
@@ -168,7 +210,7 @@ export default function Dashboard() {
         <Card className="o2-rise" style={{ animationDelay: '180ms' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between">
-              <span className="o2-eyebrow">Aprovados</span>
+              <span className="o2-eyebrow">{isManager ? 'Seus aprovados' : 'Aprovados'}</span>
               <CheckCircle2 className="h-4 w-4 text-primary hidden sm:block" />
             </div>
             {isLoading ? (
@@ -187,8 +229,10 @@ export default function Dashboard() {
       <div className="mt-6 md:mt-8 grid gap-4 md:gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base sm:text-lg">Despesas do Período</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Despesas do relatório atual</CardDescription>
+            <CardTitle className="text-base sm:text-lg">
+              {isManager ? 'Suas despesas do período' : 'Despesas do período'}
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Despesas do seu relatório atual</CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -202,42 +246,64 @@ export default function Dashboard() {
                 Nenhuma despesa neste período
               </p>
             ) : (
-              <div className="space-y-2">
-                {expenses
-                  ?.filter((e) => e.report?.id === currentReportId)
-                  .slice(0, 5)
-                  .map((expense) => (
-                    <div
+              <ul className="space-y-2">
+                {periodExpenses.map((expense) => {
+                  const capped =
+                    !expense.is_event &&
+                    expense.reimbursable_cents != null &&
+                    expense.reimbursable_cents < expense.amount_cents;
+                  return (
+                    <li
                       key={expense.id}
                       className="flex items-center justify-between rounded-lg border p-3"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium truncate text-sm">{expense.description}</p>
-                          {expense.is_out_of_policy && (
-                            <span className="shrink-0 text-xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive">
-                              Fora da política
+                        <p className="font-medium truncate text-sm" title={expense.description}>
+                          {expense.description}
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                          <span className="o2-num">{formatDate(expense.date)}</span>
+                          {isManager && expense.owner?.full_name && (
+                            <span className="truncate">• {expense.owner.full_name}</span>
+                          )}
+                          {expense.is_event && (
+                            <span className="shrink-0 rounded border border-amber-500/50 px-1.5 py-0.5 text-amber-700 dark:text-amber-400">
+                              Evento
+                            </span>
+                          )}
+                          {capped && (
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                              Limitado ao teto
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(expense.date)}
-                        </p>
                       </div>
-                      <p className="font-semibold text-sm sm:text-base shrink-0 ml-2">
-                        {formatCurrency(expense.amount_cents, expense.currency)}
-                      </p>
-                    </div>
-                  ))}
-              </div>
+                      <div className="ml-2 shrink-0 text-right">
+                        <p className="o2-num font-semibold text-sm sm:text-base">
+                          {formatCurrency(capped ? expense.reimbursable_cents ?? 0 : expense.amount_cents, expense.currency)}
+                        </p>
+                        {capped && (
+                          <p className="o2-num text-[11px] text-muted-foreground">
+                            de {formatCurrency(expense.amount_cents, expense.currency)}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base sm:text-lg">Relatórios Recentes</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Seus últimos 5 relatórios</CardDescription>
+            <CardTitle className="text-base sm:text-lg">
+              {isManager ? 'Relatórios recentes da empresa' : 'Relatórios recentes'}
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              {isManager ? 'Os 5 últimos relatórios da empresa' : 'Seus últimos 5 relatórios'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -246,30 +312,41 @@ export default function Dashboard() {
                   <Skeleton key={i} className="h-14 w-full" />
                 ))}
               </div>
-            ) : reports?.length === 0 ? (
+            ) : recentReports.length === 0 ? (
               <p className="text-center text-muted-foreground py-6 text-sm">
                 Nenhum relatório encontrado
               </p>
             ) : (
-              <div className="space-y-2">
-                {reports?.slice(0, 5).map((report) => (
-                  <div
-                    key={report.id}
-                    className="flex cursor-pointer items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 active:bg-muted"
-                    onClick={() => navigate(`/app/reports/${report.id}`)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate text-sm">{report.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {report.expense_count} despesa(s)
-                      </p>
-                    </div>
-                    <p className="font-semibold text-sm sm:text-base shrink-0 ml-2">
-                      {formatCurrency(report.total_cents || 0)}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <ul className="space-y-2">
+                {recentReports.map((report) => {
+                  const reimb = report.reimbursable_cents ?? report.total_cents ?? 0;
+                  const total = report.total_cents ?? 0;
+                  const owner = report.user_id === profile?.id ? 'Você' : report.user?.full_name || 'Colaborador';
+                  return (
+                    <li key={report.id}>
+                      <Link
+                        to={`/app/reports/${report.id}`}
+                        className="flex min-h-11 items-center justify-between gap-2 rounded-lg border p-3 transition-colors hover:bg-muted/50 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate text-sm">{report.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {isManager && <>{owner} • </>}
+                            {report.expense_count === 1 ? '1 despesa' : `${report.expense_count ?? 0} despesas`}
+                          </p>
+                        </div>
+                        <div className="ml-2 shrink-0 text-right">
+                          <p className="o2-num font-semibold text-sm sm:text-base">{formatCurrency(reimb)}</p>
+                          {reimb !== total && (
+                            <p className="o2-num text-[11px] text-muted-foreground">de {formatCurrency(total)}</p>
+                          )}
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </CardContent>
         </Card>

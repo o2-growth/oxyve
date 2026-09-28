@@ -280,6 +280,7 @@ export type Database = {
           org_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
           project_id: string | null
+          receipt_hash: string | null
           receipt_path: string | null
           reimbursable_cents: number | null
           status: Database["public"]["Enums"]["expense_status"]
@@ -305,6 +306,7 @@ export type Database = {
           org_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           project_id?: string | null
+          receipt_hash?: string | null
           receipt_path?: string | null
           reimbursable_cents?: number | null
           status?: Database["public"]["Enums"]["expense_status"]
@@ -330,6 +332,7 @@ export type Database = {
           org_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
           project_id?: string | null
+          receipt_hash?: string | null
           receipt_path?: string | null
           reimbursable_cents?: number | null
           status?: Database["public"]["Enums"]["expense_status"]
@@ -363,6 +366,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_user_id_profiles_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -882,6 +892,7 @@ export type Database = {
           p_notes?: string
           p_payment_method?: string
           p_project_id?: string
+          p_receipt_hash?: string
           p_receipt_path?: string
         }
         Returns: Json

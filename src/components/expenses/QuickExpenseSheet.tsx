@@ -61,7 +61,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useCreateExpenseInReport, type CreateExpenseInReportResult } from '@/hooks/useCurrentReport';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { attachReceipt, receiptFileProblem } from '@/lib/receipts';
+import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
@@ -83,7 +83,7 @@ export interface QuickExpenseSheetProps {
 
 const formSchema = z.object({
   date: z.date({ required_error: 'Selecione uma data' }),
-  description: z.string().min(1, 'Descrição é obrigatória'),
+  description: z.string().trim().min(1, 'Descrição é obrigatória').max(200, 'Até 200 caracteres'),
   amount: z
     .string()
     .min(1, 'Valor é obrigatório')
@@ -324,6 +324,7 @@ export function QuickExpenseSheet({
         notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
+        receipt_hash: file ? await receiptHash(file) : null,
       });
       await saveReceipt(result);
       onCreated?.();
@@ -362,6 +363,7 @@ export function QuickExpenseSheet({
         notes: isEvent ? eventNote.trim() : undefined,
         payment_method: 'personal_card',
         is_reimbursable: true,
+        receipt_hash: file ? await receiptHash(file) : null,
       });
       await saveReceipt(result);
       onCreated?.();
