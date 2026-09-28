@@ -85,6 +85,9 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
+        // Leitura de valor não pode variar entre chamadas: o mesmo cupom já saiu
+        // R$ 189,00 numa leitura e R$ 189,10 na seguinte.
+        temperature: 0,
         messages: [
           {
             role: "system",
