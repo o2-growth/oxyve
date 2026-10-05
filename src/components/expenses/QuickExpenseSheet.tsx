@@ -83,7 +83,9 @@ export interface QuickExpenseSheetProps {
 
 const formSchema = z.object({
   date: z.date({ required_error: 'Selecione uma data' }),
-  description: z.string().trim().min(1, 'Descrição é obrigatória').max(200, 'Até 200 caracteres'),
+  // Opcional: vazia vira estabelecimento ou categoria. Obrigatória só para nota de
+  // alimentação de vários dias (checado no submit, que conhece a categoria).
+  description: z.string().trim().max(200, 'Até 200 caracteres'),
   amount: z
     .string()
     .min(1, 'Valor é obrigatório')
@@ -308,10 +310,13 @@ export function QuickExpenseSheet({
       goToEdit();
       return;
     }
-    const description =
-      extracted?.extracted_date
-        ? `Despesa ${format(new Date(extracted.extracted_date + 'T00:00:00'), 'dd/MM/yyyy')}`
-        : 'Despesa';
+    const multiDay = isFood && !isEvent && (parseInt(foodDays, 10) || 1) > 1;
+    if (multiDay) {
+      toast.error('Nota de vários dias: descreva as refeições em "Editar detalhes".');
+      goToEdit();
+      return;
+    }
+    const description = autoDescription(extracted?.extracted_supplier, selectedCategory?.name, extracted?.extracted_date);
 
     try {
       const result = await createExpense.mutateAsync({
@@ -344,6 +349,10 @@ export function QuickExpenseSheet({
       toast.error('Descreva o motivo da exceção de evento na observação.');
       return;
     }
+    if (isFood && !isEvent && (parseInt(foodDays, 10) || 1) > 1 && data.description.trim().length < 3) {
+      form.setError('description', { message: 'Descreva as refeições (ex.: 20 marmitas do mês).' });
+      return;
+    }
     const blocks = receiptPolicyBlocks(
       validation.result,
       format(data.date, 'yyyy-MM-dd'),
@@ -355,7 +364,9 @@ export function QuickExpenseSheet({
     try {
       const result = await createExpense.mutateAsync({
         date: format(data.date, 'yyyy-MM-dd'),
-        description: data.description,
+        description:
+          data.description.trim() ||
+          autoDescription(validation.result?.extracted_supplier, selectedCategory?.name, format(data.date, 'yyyy-MM-dd')),
         amount_cents: parseAmountToCents(data.amount),
         category_id: categoryId,
         is_event: isEvent,
@@ -697,7 +708,7 @@ export function QuickExpenseSheet({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descrição</FormLabel>
+                  <FormLabel>Descrição <span className="font-normal text-muted-foreground">(opcional, exceto nota de vários dias)</span></FormLabel>
                   <FormControl>
                     <Input
                       placeholder="Ex: Almoço com cliente"
@@ -825,6 +836,13 @@ export function QuickExpenseSheet({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Descrição quando a pessoa não escreve: estabelecimento da nota, senão categoria + data. */
+function autoDescription(supplier?: string | null, category?: string | null, date?: string | null): string {
+  if (supplier?.trim()) return supplier.trim().slice(0, 200);
+  const dia = date ? ` ${date.slice(8, 10)}/${date.slice(5, 7)}` : '';
+  return `${category ?? 'Despesa'}${dia}`;
 }
 
 const CONFIDENCE_LABELS: Record<string, string> = { high: 'Alta', medium: 'Média', low: 'Baixa' };

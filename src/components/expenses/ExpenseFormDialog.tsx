@@ -110,7 +110,7 @@ export function ExpenseFormDialog({
       z
         .object({
           date: z.date({ required_error: 'Selecione uma data' }),
-          description: z.string().trim().min(1, 'Descrição é obrigatória').max(200, 'Até 200 caracteres'),
+          description: z.string().trim().max(200, 'Até 200 caracteres'),
           category_id: z.string().optional(),
           amount: z
             .string()
@@ -133,6 +133,19 @@ export function ExpenseFormDialog({
         })
         // Exceção de evento (libera o teto diário) exige justificativa escrita.
         .superRefine((val, ctx) => {
+          // Descrição só é exigida onde o aprovador precisa de contexto: nota de
+          // alimentação que cobre vários dias e reembolso de deslocamento por km.
+          const kind = categories?.find((c) => c.id === val.category_id)?.kind;
+          const multiDayFood = kind === 'food' && !val.is_event && Number(val.food_days || 1) > 1;
+          if ((multiDayFood || val.by_km) && val.description.trim().length < 3) {
+            ctx.addIssue({
+              path: ['description'],
+              code: z.ZodIssueCode.custom,
+              message: multiDayFood
+                ? 'Descreva as refeições (ex.: 20 marmitas do mês).'
+                : 'Descreva o deslocamento (origem, destino e motivo).',
+            });
+          }
           if (val.is_event && (!val.notes || val.notes.trim().length < 3)) {
             ctx.addIssue({
               path: ['notes'],
@@ -141,7 +154,7 @@ export function ExpenseFormDialog({
             });
           }
         }),
-    [policy?.require_project]
+    [policy?.require_project, categories]
   );
 
   type FormData = z.infer<typeof formSchema>;
@@ -174,6 +187,9 @@ export function ExpenseFormDialog({
   const watchedIsEvent = form.watch('is_event');
   const isTransport = selectedCategory?.kind === 'transport';
   const isFood = selectedCategory?.kind === 'food';
+  const watchedFoodDays = form.watch('food_days');
+  const descriptionRequired =
+    form.watch('by_km') || (isFood && !form.watch('is_event') && Number(watchedFoodDays || 1) > 1);
   const kmRateCents = policy?.km_rate_cents ?? 120;
 
   // Fora de categoria de transporte, o modo km não se aplica.
@@ -259,9 +275,10 @@ export function ExpenseFormDialog({
   const triggerValidation = useCallback((file: File) => {
     const dateVal = form.getValues('date');
     const amountStr = form.getValues('amount');
-    if (!dateVal || !amountStr) return;
-    const formDate = format(dateVal, 'yyyy-MM-dd');
-    const formAmountCents = parseAmountToCents(amountStr) || 0;
+    // Antes saía aqui sem valor digitado — e quem anexava a nota primeiro nunca
+    // tinha a leitura. Valor 0 = "só extrair", sem acusar divergência.
+    const formDate = format(dateVal ?? new Date(), 'yyyy-MM-dd');
+    const formAmountCents = parseAmountToCents(amountStr || '') || 0;
     receiptValidation.validate(file, formDate, formAmountCents);
   }, [form, receiptValidation]);
 
@@ -339,6 +356,40 @@ export function ExpenseFormDialog({
     // watchedDate / watchedAmount mantidos para reagir ao input do usuário.
   }, [watchedDate, watchedAmount, receiptFile, receiptValidation.status, triggerValidation]);
 
+  // Preenche valor, data e descrição com o que a nota diz — uma vez por arquivo, sem
+  // sobrescrever o que a pessoa já digitou. A data decide o ciclo: nota de 24/09 entra
+  // no relatório de setembro, não no do dia em que foi lançada.
+  const autofilledRef = useRef<File | null>(null);
+  useEffect(() => {
+    const r = receiptValidation.result;
+    if (!r || !receiptFile || isEditing || autofilledRef.current === receiptFile) return;
+    autofilledRef.current = receiptFile;
+    const filled: string[] = [];
+    if (r.extracted_amount_cents && r.extracted_amount_cents > 0 && !form.getValues('amount')) {
+      form.setValue('amount', formatAmountInput(String(r.extracted_amount_cents / 100)), { shouldValidate: true });
+      filled.push('valor');
+    }
+    if (r.extracted_date) {
+      const d = parseISO(r.extracted_date);
+      const current = form.getValues('date');
+      if (d <= endOfToday() && d >= minExpenseDate()) {
+        if (!current || format(current, 'yyyy-MM-dd') !== r.extracted_date) {
+          form.setValue('date', d, { shouldValidate: true });
+          filled.push('data');
+        }
+      } else {
+        toast.warning(
+          `A nota é de ${format(d, 'dd/MM/yyyy')}, fora da janela de lançamento (até 20 dias atrás).`,
+        );
+      }
+    }
+    if (r.extracted_supplier && !form.getValues('description')) {
+      form.setValue('description', r.extracted_supplier.slice(0, 200));
+      filled.push('estabelecimento');
+    }
+    if (filled.length) toast.success(`Preenchido pela nota: ${filled.join(', ')}. Confira antes de salvar.`);
+  }, [receiptValidation.result, receiptFile, isEditing, form]);
+
   const uploadReceipt = async (expenseId: string): Promise<string | null> => {
     if (!receiptFile || !profile?.org_id) return null;
 
@@ -389,7 +440,9 @@ export function ExpenseFormDialog({
 
       const payload = {
         date: format(data.date, 'yyyy-MM-dd'),
-        description: data.description,
+        description:
+          data.description.trim() ||
+          `${selectedCategory?.name ?? 'Despesa'} ${format(data.date, 'dd/MM')}`,
         category_id: data.category_id || null,
         amount_cents: amountCents,
         payment_method: data.payment_method,
@@ -559,10 +612,23 @@ export function ExpenseFormDialog({
           name="description"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Descrição</FormLabel>
+              <FormLabel>
+                Descrição
+                {descriptionRequired ? (
+                  <span className="text-destructive"> *</span>
+                ) : (
+                  <span className="font-normal text-muted-foreground"> (opcional)</span>
+                )}
+              </FormLabel>
               <FormControl>
                 <Input
-                  placeholder="Ex: Almoço com cliente"
+                  placeholder={
+                    descriptionRequired
+                      ? watchedByKm
+                        ? 'Ex: Escritório → cliente Zaffari, reunião de fechamento'
+                        : 'Ex: 20 marmitas do mês'
+                      : 'Ex: Almoço com cliente'
+                  }
                   {...field}
                   disabled={isReadOnly}
                   className="h-12"
