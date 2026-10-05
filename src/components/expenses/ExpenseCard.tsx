@@ -187,8 +187,10 @@ export function ExpenseCard({
                 )}
               </div>
               <div className="text-right">
+                {/* Número principal é o valor lançado (o que será reembolsado); a nota
+                    fica como referência quando o teto cortou. */}
                 <p className="o2-num text-lg font-semibold tracking-tight text-foreground">
-                  {formatCurrency(expense.amount_cents, expense.currency)}
+                  {formatCurrency(expense.reimbursable_cents ?? expense.amount_cents, expense.currency)}
                 </p>
                 {expense.reimbursable_cents != null && expense.reimbursable_cents < expense.amount_cents && (
                   <p
@@ -199,7 +201,7 @@ export function ExpenseCard({
                         : 'Teto de alimentação por dia'
                     }
                   >
-                    reembolso {formatCurrency(expense.reimbursable_cents, expense.currency)}
+                    nota {formatCurrency(expense.amount_cents, expense.currency)}
                   </p>
                 )}
                 {expense.food_days > 1 && (

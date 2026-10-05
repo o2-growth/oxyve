@@ -48,7 +48,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, formatAmountInput } from '@/lib/constants';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
@@ -581,7 +581,7 @@ export function ExpenseFormDialog({
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Valor (R$)</FormLabel>
+                <FormLabel>{isFood && !watchedIsEvent ? 'Valor da nota (R$)' : 'Valor (R$)'}</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="0,00"
@@ -601,6 +601,20 @@ export function ExpenseFormDialog({
                     Calculado: km × {formatCurrency(kmRateCents)}
                   </p>
                 )}
+                {isFood && !watchedIsEvent && parseAmountToCents(field.value || '') > 0 && (() => {
+                  const nota = parseAmountToCents(field.value || '');
+                  const lancado = previewFoodCents(nota, foodDailyLimit, Number(watchedFoodDays || 1));
+                  return (
+                    <p className="text-sm">
+                      Valor lançado: <strong className="o2-num">{formatCurrency(lancado)}</strong>
+                      {lancado < nota && (
+                        <span className="text-xs text-muted-foreground">
+                          {' '}— teto de {formatCurrency(foodDailyLimit)}/dia
+                        </span>
+                      )}
+                    </p>
+                  );
+                })()}
                 <FormMessage />
               </FormItem>
             )}
