@@ -88,6 +88,13 @@ export const formatAmountInput = (input: string): string => {
   return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
+/**
+ * Prévia do valor lançado de alimentação: menor entre a nota e dias × teto diário.
+ * O banco (tg_expenses_regras) ainda desconta o que o dia/mês já usou; a prévia não.
+ */
+export const previewFoodCents = (noteCents: number, dailyLimitCents: number, days = 1): number =>
+  Math.min(noteCents, Math.max(1, days) * dailyLimitCents);
+
 export const formatDate = (date: string | Date): string => {
   return new Intl.DateTimeFormat('pt-BR').format(parseDateOnly(date));
 };

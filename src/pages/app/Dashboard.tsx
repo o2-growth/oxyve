@@ -41,7 +41,8 @@ export default function Dashboard() {
   const currentReportExpenses = currentReportId ? {
     total_cents: expenses
       ?.filter((e) => e.report?.id === currentReportId)
-      .reduce((sum, e) => sum + e.amount_cents, 0) || 0,
+      // Total do relatório = valor lançado (com o teto), não a soma das notas.
+      .reduce((sum, e) => sum + (e.reimbursable_cents ?? e.amount_cents), 0) || 0,
     count: expenses
       ?.filter((e) => e.report?.id === currentReportId)
       .length || 0,

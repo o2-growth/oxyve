@@ -62,10 +62,11 @@ import { useCreateExpenseInReport, type CreateExpenseInReportResult } from '@/ho
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
+import { useExpensePolicy } from '@/hooks/usePolicy';
 import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
-import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents } from '@/lib/constants';
 import { O2Rings } from '@/components/brand/O2Rings';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -150,6 +151,8 @@ export function QuickExpenseSheet({
 
   const validation = useValidateReceipt();
   const createExpense = useCreateExpenseInReport();
+  const { data: policy } = useExpensePolicy();
+  const foodDailyLimit = (policy as { food_daily_limit_cents?: number | null } | undefined)?.food_daily_limit_cents ?? 3000;
   const queryClient = useQueryClient();
   const { profile } = useAuth();
   const { data: categories = [] } = useActiveExpenseTypes();
@@ -611,13 +614,28 @@ export function QuickExpenseSheet({
             ) : extractedSummary ? (
               <div className="space-y-1.5 text-sm">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="o2-eyebrow">Valor</span>
+                  <span className="o2-eyebrow">{isFood && !isEvent ? 'Nota' : 'Valor'}</span>
                   <span className="o2-num font-medium">
                     {extractedSummary.amount != null
                       ? formatCurrency(extractedSummary.amount)
                       : 'não detectado'}
                   </span>
                 </div>
+                {isFood && !isEvent && extractedSummary.amount != null && (
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="o2-eyebrow">Valor lançado</span>
+                    <span className="o2-num font-semibold text-foreground">
+                      {formatCurrency(
+                        previewFoodCents(extractedSummary.amount, foodDailyLimit, parseInt(foodDays, 10) || 1),
+                      )}
+                      {extractedSummary.amount > foodDailyLimit * (parseInt(foodDays, 10) || 1) && (
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          teto {formatCurrency(foodDailyLimit)}/dia
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Data</span>
                   <span className="o2-num font-medium">
@@ -727,7 +745,7 @@ export function QuickExpenseSheet({
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Valor (R$)</FormLabel>
+                    <FormLabel>{isFood && !isEvent ? 'Valor da nota (R$)' : 'Valor (R$)'}</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="0,00"
