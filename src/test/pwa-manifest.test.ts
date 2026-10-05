@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 // Sprint 4 — garantir que public/manifest.json continua válido após edits.
-// Lovable e Sprint 5 podem mexer aqui; o teste falha cedo se quebrar.
+// O teste falha cedo se o manifest quebrar.
 
 interface ManifestIcon {
   src: string;

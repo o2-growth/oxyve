@@ -4,10 +4,9 @@
  * (vide migration 20260430170000). RLS garante que cada usuário só lê
  * suas próprias notificações.
  *
- * Como `notifications` ainda não está no types.ts gerado pelo Lovable,
- * usamos `(supabase as any).from('notifications')` em call sites — quando
- * o Lovable regenerar, podemos trocar para tipagem forte sem mudar API
- * pública desse módulo.
+ * Os call sites usam `(supabase as any).from('notifications')` de quando a
+ * tabela não estava no types.ts; ela já está (`supabase gen types`), então
+ * dá para trocar por tipagem forte sem mudar a API pública deste módulo.
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';

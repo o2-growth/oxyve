@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
@@ -15,7 +14,6 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
-    mode === "development" && componentTagger(),
     // Sprint 4 — PWA Foundation (DEC-009).
     // Mantemos `manifest: false` porque o `public/manifest.json` é controlado
     // manualmente (shortcuts, display_override, lang, id). O plugin gera só o SW.
@@ -31,7 +29,7 @@ export default defineConfig(({ mode }) => ({
         "icon-maskable-512.png",
       ],
       devOptions: {
-        // SW só em prod build — evita interferência no HMR do Lovable.
+        // SW só em prod build — evita interferência no HMR do dev server.
         enabled: false,
       },
       workbox: {

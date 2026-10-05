@@ -1,5 +1,5 @@
 /**
- * Config separada pra smoke test em produção (oxyve.lovable.app).
+ * Config separada pra smoke test em produção (oxyve.vercel.app).
  * Não inicia dev server. Uso ad-hoc:
  *   SMOKE_EMAIL=... SMOKE_PASSWORD=... bunx playwright test --config=playwright-prod.config.ts
  */
@@ -15,7 +15,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: 'https://oxyve.lovable.app',
+    baseURL: 'https://oxyve.vercel.app',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
