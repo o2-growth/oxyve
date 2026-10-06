@@ -91,7 +91,7 @@ export function MoreSheet({ open, onOpenChange }: MoreSheetProps) {
           <div className="my-1 h-px bg-border" aria-hidden="true" />
 
           <MoreRow icon={Wallet} label="Adiantamentos" onClick={() => go('/app/advances')} />
-          {isAdmin && (
+          {isManager && (
             <MoreRow icon={LineChart} label="Gestão" onClick={() => go('/app/gestao')} />
           )}
           <MoreRow icon={Settings} label="Configurações" onClick={() => go('/app/settings/profile')} />

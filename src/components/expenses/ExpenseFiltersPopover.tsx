@@ -4,7 +4,9 @@ import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -13,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { groupBySector } from '@/lib/categoryGroups';
 import { Switch } from '@/components/ui/switch';
 import { Filter, X } from 'lucide-react';
 import { useCategories, useProjects } from '@/hooks/useExpenses';
@@ -96,10 +99,15 @@ export function ExpenseFiltersPopover({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {categories?.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
+                  {groupBySector(categories ?? []).map((g) => (
+                    <SelectGroup key={g.sector}>
+                      <SelectLabel>{g.sector}</SelectLabel>
+                      {g.items.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>

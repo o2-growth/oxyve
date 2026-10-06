@@ -46,7 +46,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon, Loader2, PartyPopper, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/constants';
-import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
+import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
+import { groupBySector } from '@/lib/categoryGroups';
 import { useCreateExpenseMultiday } from '@/hooks/useCurrentReport';
 
 interface MultiDayExpenseDialogProps {
@@ -55,26 +56,6 @@ interface MultiDayExpenseDialogProps {
   onCreated?: () => void;
 }
 
-const KIND_LABEL: Record<string, string> = {
-  food: 'Alimentação',
-  transport: 'Transporte',
-  other: 'Outros',
-};
-const KIND_ORDER = ['food', 'transport', 'other'];
-
-function groupByKind(types: ExpenseType[]) {
-  const groups = new Map<string, ExpenseType[]>();
-  for (const t of types) {
-    const k = t.kind ?? 'other';
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(t);
-  }
-  return KIND_ORDER.filter((k) => groups.has(k)).map((k) => ({
-    kind: k,
-    label: KIND_LABEL[k] ?? k,
-    items: groups.get(k)!,
-  }));
-}
 
 const schema = z
   .object({
@@ -110,7 +91,7 @@ export function MultiDayExpenseDialog({
 }: MultiDayExpenseDialogProps) {
   const { data: categories = [] } = useActiveExpenseTypes();
   const createMultiday = useCreateExpenseMultiday();
-  const grouped = useMemo(() => groupByKind(categories), [categories]);
+  const grouped = useMemo(() => groupBySector(categories), [categories]);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -192,8 +173,8 @@ export function MultiDayExpenseDialog({
                     </FormControl>
                     <SelectContent>
                       {grouped.map((g) => (
-                        <SelectGroup key={g.kind}>
-                          <SelectLabel>{g.label}</SelectLabel>
+                        <SelectGroup key={g.sector}>
+                          <SelectLabel>{g.sector}</SelectLabel>
                           {g.items.map((c) => (
                             <SelectItem key={c.id} value={c.id}>
                               {c.name}
