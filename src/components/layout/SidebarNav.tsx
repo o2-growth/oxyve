@@ -39,7 +39,8 @@ const mainNavItems = [
   { to: '/app/advances', icon: Wallet, label: 'Adiantamentos' },
 ];
 
-// Item exclusivo de admin — visibilidade condicionada por useAuth().isAdmin.
+// Gestão: gestor e admin (a página e as RPCs aceitam os dois; as abas de
+// cadastro dentro dela são só de admin).
 const adminNavItem = { to: '/app/gestao', icon: LineChart, label: 'Gestão' };
 
 const secondaryNavItems = [
@@ -51,11 +52,11 @@ const secondaryNavItems = [
 export function SidebarNav() {
   const location = useLocation();
   const { state, toggleSidebar } = useSidebar();
-  const { isAdmin } = useAuth();
+  const { isManager } = useAuth();
   const isCollapsed = state === 'collapsed';
 
   // "Gestão" só aparece para admin (backend já bloqueia a RPC de não-admins).
-  const navItems = isAdmin ? [...mainNavItems, adminNavItem] : mainNavItems;
+  const navItems = isManager ? [...mainNavItems, adminNavItem] : mainNavItems;
 
   const isActive = (to: string, matchPrefix?: string) => {
     if (matchPrefix) {

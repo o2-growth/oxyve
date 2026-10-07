@@ -63,7 +63,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { useExpensePolicy } from '@/hooks/usePolicy';
-import { useActiveExpenseTypes, type ExpenseType } from '@/hooks/useExpenseTypes';
+import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
+import { groupBySector } from '@/lib/categoryGroups';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents } from '@/lib/constants';
@@ -95,26 +96,6 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-const KIND_LABEL: Record<string, string> = {
-  food: 'Alimentação',
-  transport: 'Transporte',
-  other: 'Outros',
-};
-const KIND_ORDER = ['food', 'transport', 'other'];
-
-function groupByKind(types: ExpenseType[]) {
-  const groups = new Map<string, ExpenseType[]>();
-  for (const t of types) {
-    const k = t.kind ?? 'other';
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(t);
-  }
-  return KIND_ORDER.filter((k) => groups.has(k)).map((k) => ({
-    kind: k,
-    label: KIND_LABEL[k] ?? k,
-    items: groups.get(k)!,
-  }));
-}
 
 
 
@@ -157,7 +138,7 @@ export function QuickExpenseSheet({
   const { profile } = useAuth();
   const { data: categories = [] } = useActiveExpenseTypes();
 
-  const grouped = useMemo(() => groupByKind(categories), [categories]);
+  const grouped = useMemo(() => groupBySector(categories), [categories]);
   const selectedCategory = categories.find((c) => c.id === categoryId);
   const isFood = selectedCategory?.kind === 'food';
 
@@ -432,8 +413,8 @@ export function QuickExpenseSheet({
           </SelectTrigger>
           <SelectContent>
             {grouped.map((g) => (
-              <SelectGroup key={g.kind}>
-                <SelectLabel>{g.label}</SelectLabel>
+              <SelectGroup key={g.sector}>
+                <SelectLabel>{g.sector}</SelectLabel>
                 {g.items.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}

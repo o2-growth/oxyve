@@ -30,7 +30,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -46,6 +48,7 @@ import {
   Expense,
 } from '@/hooks/useExpenses';
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
+import { groupBySector } from '@/lib/categoryGroups';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
 import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents } from '@/lib/constants';
@@ -672,15 +675,20 @@ export function ExpenseFormDialog({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {categories?.filter(c => c.is_active).map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                        {cat.daily_limit_cents && (
-                          <span className="text-muted-foreground ml-1">
-                            (até {formatCurrency(cat.daily_limit_cents)}/dia)
-                          </span>
-                        )}
-                      </SelectItem>
+                    {groupBySector(categories?.filter(c => c.is_active) ?? []).map((g) => (
+                      <SelectGroup key={g.sector}>
+                        <SelectLabel>{g.sector}</SelectLabel>
+                        {g.items.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
+                            {cat.daily_limit_cents && (
+                              <span className="text-muted-foreground ml-1">
+                                (até {formatCurrency(cat.daily_limit_cents)}/dia)
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>

@@ -1,16 +1,19 @@
+/**
+ * PWA — roda contra o build de produção (:4173), porque o service worker
+ * só é gerado no build.
+ */
 import { test, expect } from '@playwright/test';
 
-test('PWA — service worker registra e app funciona', async ({ page }) => {
+test.use({ baseURL: 'http://localhost:4173' });
+
+test('build de produção: service worker registra e o login renderiza sem erro', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
   await page.goto('/login', { waitUntil: 'networkidle' });
-  await page.waitForLoadState('networkidle');
 
-  // Espera SW registrar (até 10s).
   const swActive = await page.evaluate(async () => {
     if (!('serviceWorker' in navigator)) return false;
-    // pollar registration por até 10s
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -19,18 +22,10 @@ test('PWA — service worker registra e app funciona', async ({ page }) => {
     }
     return false;
   });
-  console.log('[PWA] SW registered:', swActive);
   expect(swActive).toBe(true);
 
-  // Manifest link presente.
-  const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
-  expect(manifestHref).toBe('/manifest.json');
-
-  // Theme color presente.
-  const themeColor = await page.locator('meta[name="theme-color"]').getAttribute('content');
-  expect(themeColor).toBe('#3b82f6');
-
-  // App ainda renderiza (não quebrou).
-  await expect(page.locator('input[type="email"]')).toBeVisible();
-  expect(errors.filter((e) => /forwardRef|undefined/.test(e))).toEqual([]);
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.json');
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#3A3A3A');
+  await expect(page.getByRole('button', { name: /entrar com google/i })).toBeVisible();
+  expect(errors).toEqual([]);
 });

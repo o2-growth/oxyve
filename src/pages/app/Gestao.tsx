@@ -344,7 +344,7 @@ const REPORT_STATUS_LABEL: Record<string, string> = {
 };
 
 export default function Gestao() {
-  const { isManager, isLoading: authLoading } = useAuth();
+  const { isAdmin, isManager, isLoading: authLoading } = useAuth();
   const { data, isLoading, isError } = useAdminOverview();
   const [selectedPerson, setSelectedPerson] = useState<PersonRow | null>(null);
 
@@ -422,12 +422,17 @@ export default function Gestao() {
           <TabsTrigger value="financeiro" className="font-mono text-[11px] uppercase tracking-wider">
             Financeiro
           </TabsTrigger>
-          <TabsTrigger value="usuarios" className="font-mono text-[11px] uppercase tracking-wider">
-            Usuários
-          </TabsTrigger>
-          <TabsTrigger value="categorias" className="font-mono text-[11px] uppercase tracking-wider">
-            Categorias
-          </TabsTrigger>
+          {/* Cadastros: só admin (set_user_role e a escrita em expense_categories exigem admin). */}
+          {isAdmin && (
+            <>
+              <TabsTrigger value="usuarios" className="font-mono text-[11px] uppercase tracking-wider">
+                Usuários
+              </TabsTrigger>
+              <TabsTrigger value="categorias" className="font-mono text-[11px] uppercase tracking-wider">
+                Categorias
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         <TabsContent value="financeiro" className="mt-0">
@@ -655,13 +660,17 @@ export default function Gestao() {
       />
         </TabsContent>
 
-        <TabsContent value="usuarios" className="mt-0">
-          <GestaoUsuarios />
-        </TabsContent>
+        {isAdmin && (
+          <>
+            <TabsContent value="usuarios" className="mt-0">
+              <GestaoUsuarios />
+            </TabsContent>
 
-        <TabsContent value="categorias" className="mt-0">
-          <GestaoCategorias />
-        </TabsContent>
+            <TabsContent value="categorias" className="mt-0">
+              <GestaoCategorias />
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </AppShell>
   );
