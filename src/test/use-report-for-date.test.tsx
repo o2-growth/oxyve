@@ -34,7 +34,7 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'u1' }, profile: { id: 'u1', org_id: 'o1' } }),
 }));
 
-import { useReportForDate, cycleForDate } from '@/hooks/useCurrentReport';
+import { useReportForDate, cycleForDate, DEFAULT_CYCLE_CUTOFF_DAY } from '@/hooks/useCurrentReport';
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -94,5 +94,16 @@ describe('cycleForDate (espelha get_or_create_report_for_date)', () => {
 
   it('virada de ano', () => {
     expect(cycleForDate('2026-12-30', 24)).toMatchObject({ cycle_key: '2027-01', title: 'Relatório Jan 2027' });
+  });
+
+  it('sem dia de corte na política usa 25, como o banco (COALESCE 25)', () => {
+    expect(DEFAULT_CYCLE_CUTOFF_DAY).toBe(25);
+    // 24/10 ainda é do ciclo que fecha em 24/10 com corte 25 (com 24 abriria o de Nov).
+    expect(cycleForDate('2026-10-24', null)).toMatchObject({
+      start_date: '2026-09-25',
+      end_date: '2026-10-24',
+      cycle_key: '2026-10',
+    });
+    expect(cycleForDate('2026-10-25')).toMatchObject({ start_date: '2026-10-25', cycle_key: '2026-11' });
   });
 });

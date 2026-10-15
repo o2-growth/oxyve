@@ -73,11 +73,19 @@ const ymd = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
+ * Dia de corte quando a política não tem um: o banco usa COALESCE(cycle_cutoff_day, 25)
+ * em get_or_create_report_for_date e get_or_create_current_report (o default da coluna
+ * também é 25). Com 24 aqui, a tela buscava o relatório de outro ciclo.
+ */
+export const DEFAULT_CYCLE_CUTOFF_DAY = 25;
+
+/**
  * Limites do ciclo que contém `date` (YYYY-MM-DD), com a mesma conta de
  * get_or_create_report_for_date: começa no dia de corte, termina na véspera do corte
  * seguinte e leva o mês do vencimento no título. Só para exibir — quem cria é o banco.
  */
-export function cycleForDate(date: string, cutoffDay: number) {
+export function cycleForDate(date: string, cutoffDayInput?: number | null) {
+  const cutoffDay = cutoffDayInput || DEFAULT_CYCLE_CUTOFF_DAY;
   const [y, m, d] = date.split('-').map(Number);
   const start = d >= cutoffDay ? new Date(y, m - 1, cutoffDay) : new Date(y, m - 2, cutoffDay);
   const due = new Date(start.getFullYear(), start.getMonth() + 1, cutoffDay);
@@ -97,7 +105,8 @@ export function cycleForDate(date: string, cutoffDay: number) {
  * no formulário (e o vazio vencido virava alerta de "relatório atrasado"). A criação
  * fica com create_expense_in_current_report, ao salvar. null = ainda não existe.
  */
-export function useReportForDate(date: string | null, cutoffDay: number) {
+export function useReportForDate(date: string | null, cutoffDayInput?: number | null) {
+  const cutoffDay = cutoffDayInput || DEFAULT_CYCLE_CUTOFF_DAY;
   const { user } = useAuth();
 
   return useQuery({

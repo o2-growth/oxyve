@@ -51,7 +51,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
-import { useDashboardContext, useCreateExpenseInReport, useReportForDate, cycleForDate, CurrentReport } from '@/hooks/useCurrentReport';
+import { useDashboardContext, useCreateExpenseInReport, useReportForDate, cycleForDate, CurrentReport, DEFAULT_CYCLE_CUTOFF_DAY } from '@/hooks/useCurrentReport';
 import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, parseDecimalBR, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents, MAX_EXPENSE_AGE_DAYS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
@@ -240,7 +240,7 @@ export function ExpenseFormDialog({
       ? format(watchedDate, 'yyyy-MM-dd')
       : null;
   // O ciclo depende do dia de corte da política: só busca depois que ela carregou.
-  const cycleCutoffDay = policy?.cycle_cutoff_day ?? 24;
+  const cycleCutoffDay = policy?.cycle_cutoff_day ?? DEFAULT_CYCLE_CUTOFF_DAY;
   const reportForDateQuery = useReportForDate(policy ? dateStrForQuery : null, cycleCutoffDay);
   const currentReportForDate: CurrentReport | null = reportForDateQuery.data ?? null;
 
