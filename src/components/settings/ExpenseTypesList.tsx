@@ -39,7 +39,8 @@ import { useActiveDepartments } from '@/hooks/useDepartments';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, parseOptionalLimitCents } from '@/lib/constants';
+import { toast } from 'sonner';
 
 export function ExpenseTypesList() {
   const { data: types, isLoading } = useExpenseTypes();
@@ -85,9 +86,12 @@ export function ExpenseTypesList() {
   const handleSubmit = async () => {
     if (!name.trim()) return;
 
-    const dailyLimitCents = dailyLimit
-      ? Math.round(parseFloat(dailyLimit.replace(',', '.')) * 100)
-      : null;
+    // parseFloat lia "1.234,56" como R$ 1,23 e texto inválido virava NaN no banco.
+    const dailyLimitCents = parseOptionalLimitCents(dailyLimit);
+    if (dailyLimitCents === 'invalid') {
+      toast.error('Limite diário inválido. Use um valor como 30,00 ou deixe vazio.');
+      return;
+    }
 
     const payload = {
       name,

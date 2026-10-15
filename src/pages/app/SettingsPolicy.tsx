@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { parseOptionalLimitCents } from '@/lib/constants';
 
 const CURRENCIES = [
   { value: 'BRL', label: 'Real (BRL)' },
@@ -49,10 +50,9 @@ type PolicyPatch = Partial<Pick<ExpensePolicy, PolicyField>>;
 
 /** Converte o texto do input (R$) em centavos; null se vazio ou inválido. */
 function parseFoodLimitCents(raw: string): number | null {
-  const text = raw.trim().replace(',', '.');
-  if (!text) return null;
-  const cents = Math.round(Number(text) * 100);
-  return Number.isFinite(cents) ? cents : null;
+  // Mesma leitura pt-BR do valor da despesa ("30,00", "30.00", "1.500").
+  const cents = parseOptionalLimitCents(raw);
+  return typeof cents === 'number' ? cents : null;
 }
 
 export default function SettingsPolicy() {

@@ -64,6 +64,18 @@ export const parseAmountToCents = (input: string): number => {
   return Number.isNaN(n) ? NaN : Math.round(n * 100);
 };
 
+/**
+ * Limite opcional digitado em R$ (teto diário de categoria/tipo). Vazio = sem
+ * limite (null); texto inválido ou negativo = 'invalid'. Mesma leitura pt-BR do
+ * valor da despesa: "1.500" é mil e quinhentos, não R$ 1,50.
+ */
+export const parseOptionalLimitCents = (input: string | null | undefined): number | null | 'invalid' => {
+  const raw = (input ?? '').trim();
+  if (!raw) return null;
+  const cents = parseAmountToCents(raw);
+  return Number.isNaN(cents) ? 'invalid' : cents;
+};
+
 // Teto de sanidade: R$ 1 milhão por lançamento.
 export const MAX_EXPENSE_CENTS = 100_000_000;
 

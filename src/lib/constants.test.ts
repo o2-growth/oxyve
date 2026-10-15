@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAmountToCents, parseDecimalBR, formatAmountInput, amountFieldError } from './constants';
+import { parseAmountToCents, parseDecimalBR, formatAmountInput, amountFieldError, parseOptionalLimitCents } from './constants';
 
 describe('parseAmountToCents', () => {
   it.each([
@@ -43,5 +43,26 @@ describe('parseDecimalBR (km)', () => {
 
   it('devolve NaN para texto', () => {
     expect(parseDecimalBR('abc')).toBeNaN();
+  });
+});
+
+describe('parseOptionalLimitCents', () => {
+  it('vazio é sem limite', () => {
+    expect(parseOptionalLimitCents('')).toBeNull();
+    expect(parseOptionalLimitCents('   ')).toBeNull();
+    expect(parseOptionalLimitCents(undefined)).toBeNull();
+  });
+  it.each([
+    ['30,00', 3000],
+    ['30.00', 3000],
+    ['1.234,56', 123456],
+    ['1.500', 150000],
+    ['0', 0],
+  ])('"%s" → %i centavos', (input, cents) => {
+    expect(parseOptionalLimitCents(input)).toBe(cents);
+  });
+  it('texto ou negativo é inválido (antes virava NaN no banco)', () => {
+    expect(parseOptionalLimitCents('abc')).toBe('invalid');
+    expect(parseOptionalLimitCents('-5')).toBe('invalid');
   });
 });
