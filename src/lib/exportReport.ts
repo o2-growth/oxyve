@@ -6,7 +6,11 @@
  *
  * Colunas exigidas pelo CTO charter / VExpenses parity:
  *   Data | Descrição | Tipo (categoria) | Centro de custos
- *   | Forma de pagamento | Valor
+ *   | Forma de pagamento | Valor da nota | Valor reembolsável | Situação
+ *
+ * Nota e reembolsável ficam separados: o pagamento usa o reembolsável (teto,
+ * reprovada na revisão e não reembolsável zerados), e quem concilia pelo arquivo
+ * precisa ver o mesmo número da tela.
  *
  * O XLSX gera 2 sheets: "Despesas" + "Resumo" (com totais).
  */
@@ -22,8 +26,20 @@ export interface ExportableExpenseRow {
   costCenter: string | null;
   paymentMethod: string;
   amountCents: number;
+  /** Quanto entra no reembolso. Sem informar, vale o valor da nota. */
+  reimbursableCents?: number;
+  situation?: ExpenseSituation;
   currency?: string | null;
 }
+
+export type ExpenseSituation = 'ok' | 'capped' | 'rejected' | 'not_reimbursable';
+
+export const SITUATION_LABELS: Record<ExpenseSituation, string> = {
+  ok: 'Reembolsável',
+  capped: 'Limitada ao teto',
+  rejected: 'Reprovada na revisão',
+  not_reimbursable: 'Não reembolsável',
+};
 
 export interface ExportableReport {
   title: string;
@@ -33,6 +49,12 @@ export interface ExportableReport {
   endDate?: string | null;
   totalCents: number;
   reimbursableCents?: number;
+  /** Por que parte do lançado não entra no reembolso (mesma conta da tela). */
+  breakdown?: {
+    rejectedCents: number;
+    cappedCents: number;
+    notReimbursableCents: number;
+  };
   expenses: ExportableExpenseRow[];
 }
 
@@ -42,7 +64,9 @@ const HEADERS = [
   'Tipo',
   'Centro de custos',
   'Forma de pagamento',
-  'Valor',
+  'Valor da nota',
+  'Valor reembolsável',
+  'Situação',
 ] as const;
 
 function formatDateBR(iso: string): string {
@@ -76,6 +100,8 @@ export function buildRows(report: ExportableReport): string[][] {
     e.costCenter || '-',
     paymentLabel(e.paymentMethod),
     amountString(e.amountCents, e.currency),
+    amountString(e.reimbursableCents ?? e.amountCents, e.currency),
+    SITUATION_LABELS[e.situation ?? 'ok'],
   ]);
   return [HEADERS as unknown as string[], ...body];
 }
@@ -97,6 +123,15 @@ export function generateXlsx(report: ExportableReport): XLSX.WorkBook {
   const rows = buildRows(report);
   const ws = XLSX.utils.aoa_to_sheet(rows);
 
+  const cur = report.expenses[0]?.currency || 'BRL';
+  const reimb = report.reimbursableCents ?? 0;
+  const out: (string | number)[][] = report.breakdown
+    ? [
+        ['Reprovado na revisão', amountString(report.breakdown.rejectedCents, cur)],
+        ['Acima do teto', amountString(report.breakdown.cappedCents, cur)],
+        ['Não reembolsável', amountString(report.breakdown.notReimbursableCents, cur)],
+      ]
+    : [['Fora do reembolso', amountString(report.totalCents - reimb, cur)]];
   const summary: (string | number)[][] = [
     ['Relatório', report.title],
     ['Autor', report.authorName || '-'],
@@ -105,12 +140,9 @@ export function generateXlsx(report: ExportableReport): XLSX.WorkBook {
       ? `${formatDateBR(report.startDate)} - ${formatDateBR(report.endDate)}`
       : '-'],
     ['Despesas', report.expenses.length],
-    ['Total', amountString(report.totalCents, report.expenses[0]?.currency || 'BRL')],
-    ['Reembolsável', amountString(report.reimbursableCents ?? 0, report.expenses[0]?.currency || 'BRL')],
-    ['Não reembolsável', amountString(
-      report.totalCents - (report.reimbursableCents ?? 0),
-      report.expenses[0]?.currency || 'BRL'
-    )],
+    ['Total lançado (notas)', amountString(report.totalCents, cur)],
+    ['Reembolsável', amountString(reimb, cur)],
+    ...out,
   ];
   const wsSummary = XLSX.utils.aoa_to_sheet(summary);
 

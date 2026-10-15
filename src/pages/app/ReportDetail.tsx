@@ -355,14 +355,24 @@ export default function ReportDetail() {
 
   const buildExportable = (): ExportableReport | null => {
     if (!report) return null;
-    const expenses = rows.map(({ e }) => ({
-      date: e.date,
-      description: e.description,
-      category: e.category?.name ?? null,
-      costCenter: e.cost_center?.name ?? null,
-      paymentMethod: e.payment_method ?? 'other',
-      amountCents: e.amount_cents ?? 0,
-      currency: e.currency ?? 'BRL',
+    // Arquivo com os mesmos números da tela: nota e reembolsável lado a lado, e o
+    // motivo de cada linha que não entra (ou entra só em parte) no reembolso.
+    const expenses = rows.map((row) => ({
+      date: row.e.date,
+      description: row.e.description,
+      category: row.e.category?.name ?? null,
+      costCenter: row.e.cost_center?.name ?? null,
+      paymentMethod: row.e.payment_method ?? 'other',
+      amountCents: row.amount,
+      reimbursableCents: row.reimb,
+      situation: row.rejected
+        ? ('rejected' as const)
+        : row.notReimbursable
+          ? ('not_reimbursable' as const)
+          : row.capped
+            ? ('capped' as const)
+            : ('ok' as const),
+      currency: row.e.currency ?? 'BRL',
     }));
     return {
       title: report.title,
@@ -372,6 +382,11 @@ export default function ReportDetail() {
       endDate: r?.end_date ?? null,
       totalCents,
       reimbursableCents: reimbursableTotal,
+      breakdown: {
+        rejectedCents: outBreakdown.rejected,
+        cappedCents: outBreakdown.capped,
+        notReimbursableCents: outBreakdown.notReimb,
+      },
       expenses,
     };
   };

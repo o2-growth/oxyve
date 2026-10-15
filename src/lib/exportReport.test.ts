@@ -60,7 +60,9 @@ describe('buildRows', () => {
       'Tipo',
       'Centro de custos',
       'Forma de pagamento',
-      'Valor',
+      'Valor da nota',
+      'Valor reembolsável',
+      'Situação',
     ]);
   });
 
@@ -136,5 +138,60 @@ describe('sanitizeFilename', () => {
   it('limita a 80 caracteres', () => {
     const long = 'a'.repeat(200);
     expect(sanitizeFilename(long).length).toBeLessThanOrEqual(80);
+  });
+});
+
+// Relatório com os quatro casos: normal, teto, reprovada na revisão e não reembolsável.
+const mixedReport: ExportableReport = {
+  title: 'Relatório Out 2026',
+  status: 'submitted',
+  totalCents: 6000 + 2000 + 5000 + 1000,
+  reimbursableCents: 3000 + 2000,
+  breakdown: { rejectedCents: 5000, cappedCents: 3000, notReimbursableCents: 1000 },
+  expenses: [
+    { date: '2026-10-01', description: 'Almoço', category: 'Alimentação', costCenter: null, paymentMethod: 'personal_card', amountCents: 6000, reimbursableCents: 3000, situation: 'capped' },
+    { date: '2026-10-02', description: 'Uber', category: 'Transporte', costCenter: null, paymentMethod: 'personal_card', amountCents: 2000, reimbursableCents: 2000, situation: 'ok' },
+    { date: '2026-10-03', description: 'Hotel', category: null, costCenter: null, paymentMethod: 'personal_card', amountCents: 5000, reimbursableCents: 0, situation: 'rejected' },
+    { date: '2026-10-04', description: 'Táxi empresa', category: null, costCenter: null, paymentMethod: 'corporate_card', amountCents: 1000, reimbursableCents: 0, situation: 'not_reimbursable' },
+  ],
+};
+
+const centsOf = (s: string) => Number(s.replace(/[^\d]/g, ''));
+
+describe('valores da nota x reembolsável (E4)', () => {
+  it('cada linha traz nota, reembolsável e situação', () => {
+    const rows = buildRows(mixedReport);
+    expect(rows[1].slice(5)).toEqual([expect.stringMatching(/60,00/), expect.stringMatching(/30,00/), 'Limitada ao teto']);
+    expect(rows[2][7]).toBe('Reembolsável');
+    expect(rows[3].slice(6)).toEqual([expect.stringMatching(/0,00/), 'Reprovada na revisão']);
+    expect(rows[4][7]).toBe('Não reembolsável');
+  });
+
+  it('soma da coluna reembolsável bate com o total reembolsável', () => {
+    const rows = buildRows(mixedReport).slice(1);
+    const soma = rows.reduce((s, r) => s + centsOf(r[6]), 0);
+    expect(soma).toBe(mixedReport.reimbursableCents);
+    const somaNotas = rows.reduce((s, r) => s + centsOf(r[5]), 0);
+    expect(somaNotas).toBe(mixedReport.totalCents);
+  });
+
+  it('linha sem reembolsável informado cai no valor da nota', () => {
+    const rows = buildRows(sampleReport);
+    expect(rows[1][6]).toBe(rows[1][5]);
+  });
+
+  it('Resumo separa reprovado, teto e não reembolsável', () => {
+    const wb = generateXlsx(mixedReport);
+    const resumo = wb.Sheets['Resumo'];
+    const linhas: Record<string, string> = {};
+    for (let i = 1; i <= 20; i++) {
+      const a = resumo[`A${i}`]?.v;
+      if (typeof a === 'string') linhas[a] = String(resumo[`B${i}`]?.v ?? '');
+    }
+    expect(linhas['Total lançado (notas)']).toMatch(/140,00/);
+    expect(linhas['Reembolsável']).toMatch(/50,00/);
+    expect(linhas['Reprovado na revisão']).toMatch(/50,00/);
+    expect(linhas['Acima do teto']).toMatch(/30,00/);
+    expect(linhas['Não reembolsável']).toMatch(/10,00/);
   });
 });

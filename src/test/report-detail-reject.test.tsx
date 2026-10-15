@@ -72,6 +72,10 @@ vi.mock('@/components/layout/AppShell', () => ({
 vi.mock('@/components/reports/ReportHistory', () => ({ ReportHistory: () => null }));
 vi.mock('@/components/reports/ReceiptPreviewDialog', () => ({ ReceiptPreviewDialog: () => null }));
 
+const downloadReportCsv = vi.fn();
+vi.mock('@/lib/exportReport', () => ({ downloadReportCsv: (r: unknown) => downloadReportCsv(r) }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
 import ReportDetail from '@/pages/app/ReportDetail';
 
 function renderDetail() {
@@ -117,5 +121,25 @@ describe('ReportDetail — reprovar relatório', () => {
     const items = await screen.findAllByText(/acima do teto de alimentação/);
     expect(items[0].textContent).toMatch(/R\$\s?35,00\/dia/);
     expect(document.body.textContent).not.toMatch(/R\$\s?30\/dia/);
+  });
+});
+
+describe('ReportDetail — exportação', () => {
+  afterEach(() => cleanup());
+
+  it('CSV recebe nota, reembolsável e situação com os totais da tela', async () => {
+    renderDetail();
+    await screen.findAllByText(/acima do teto de alimentação/);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Mais ações' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /CSV/ }));
+    await vi.waitFor(() => expect(downloadReportCsv).toHaveBeenCalled());
+    const arg = downloadReportCsv.mock.calls[0][0];
+    expect(arg.totalCents).toBe(11000);
+    expect(arg.reimbursableCents).toBe(3500);
+    expect(arg.breakdown).toEqual({ rejectedCents: 5000, cappedCents: 2500, notReimbursableCents: 0 });
+    expect(arg.expenses.map((e: { situation: string; reimbursableCents: number }) => [e.situation, e.reimbursableCents])).toEqual([
+      ['capped', 3500],
+      ['rejected', 0],
+    ]);
   });
 });
