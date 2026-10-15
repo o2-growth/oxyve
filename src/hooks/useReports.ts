@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { reimbursableOf, summarizeReview, type ReviewSummary } from '@/components/reports/reportRules';
+import type { PaymentInfo } from '@/components/payments/PaymentDetails';
 
 export interface Report {
   id: string;
@@ -27,7 +28,7 @@ export interface Report {
   possible_duplicate_count?: number;
   /** Itens reprovados na revisão, para o rascunho do motivo da devolução. */
   rejected_items?: Array<{ description: string; date: string; comment: string | null }>;
-  user?: { full_name: string | null } | null;
+  user?: ({ full_name: string | null } & PaymentInfo) | null;
 }
 
 export interface ReportWithItems extends Report {
@@ -203,9 +204,11 @@ export function useReport(id: string) {
         .single();
       if (error) throw error;
 
+      // PIX e banco de quem recebe: o admin confere ao marcar como pago (decisão 4).
+      // A RLS de profiles já mostra esses dados ao dono e a gestores/admins.
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, pix_key, pix_key_type, bank_name, bank_branch, bank_account')
         .eq('id', report.user_id)
         .single();
 

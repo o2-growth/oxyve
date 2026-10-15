@@ -25,6 +25,7 @@ import { buildRejectionDraft } from '@/components/reports/reportRules';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { POSSIBLE_DUPLICATE_LABEL, possibleDuplicateHint } from '@/lib/possibleDuplicate';
+import { PaymentDetails } from '@/components/payments/PaymentDetails';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
@@ -1131,7 +1132,10 @@ export default function ReportDetail() {
         confirmLabel="Confirmar pagamento"
         onConfirm={handleMarkPaid}
         isLoading={markAsPaid.isPending}
-      />
+      >
+        {/* Decisão 4: o admin vê para onde vai o dinheiro antes de confirmar. */}
+        <PaymentDetails person={report.user} />
+      </ConfirmDialog>
 
       <ReceiptPreviewDialog
         path={receiptTarget?.path ?? null}
