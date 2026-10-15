@@ -20,6 +20,8 @@ import { useReport, useRemoveExpenseFromReport } from '@/hooks/useReports';
 import { useSubmitReportRpc } from '@/hooks/useCurrentReport';
 import { useApproveReportRpc, useMarkReportPaidRpc } from '@/hooks/useReportActions';
 import { useReviewExpense } from '@/hooks/useReviewExpense';
+import { useExpensePolicy } from '@/hooks/usePolicy';
+import { buildRejectionDraft } from '@/components/reports/reportRules';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { cn } from '@/lib/utils';
@@ -133,6 +135,9 @@ export default function ReportDetail() {
   const markAsPaid = useMarkReportPaidRpc();
   const removeExpense = useRemoveExpenseFromReport();
   const reviewExpense = useReviewExpense();
+  // Teto de alimentação vem da política (editável em Configurações), não de texto fixo.
+  const { data: policy } = useExpensePolicy();
+  const foodDailyLimit = policy?.food_daily_limit_cents ?? null;
 
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
@@ -279,14 +284,14 @@ export default function ReportDetail() {
   };
 
   const handleRejectExpense = async () => {
-    if (!rejectExpenseId || !rejectExpenseComment) return;
+    if (!rejectExpenseId || !rejectExpenseComment.trim()) return;
     await run(
       () =>
         reviewExpense.mutateAsync({
           expenseId: rejectExpenseId,
           reportId: id!,
           decision: 'rejected',
-          comment: rejectExpenseComment,
+          comment: rejectExpenseComment.trim(),
         }),
       () => {
         setRejectExpenseId(null);
@@ -306,10 +311,26 @@ export default function ReportDetail() {
       }
     );
 
+  // O banco apaga a revisão por item ao devolver: o motivo de cada item reprovado
+  // já vem no texto (editável), senão o autor não sabe o que corrigir.
+  const openRejectReport = () => {
+    setComment(
+      buildRejectionDraft(
+        outBreakdown.rejectedRows.map((row) => ({
+          description: row.e.description,
+          date: row.e.date,
+          comment: row.item.review_comment,
+        })),
+      ),
+    );
+    setIsRejectOpen(true);
+  };
+
   const handleReject = async () => {
-    if (!comment) return;
+    // Só espaços não é motivo: o banco recusaria e o usuário veria erro em vez do aviso.
+    if (!comment.trim()) return;
     await run(
-      () => approveReport.mutateAsync({ reportId: id!, decision: 'rejected', comment }),
+      () => approveReport.mutateAsync({ reportId: id!, decision: 'rejected', comment: comment.trim() }),
       () => {
         setIsRejectOpen(false);
         setComment('');
@@ -334,14 +355,24 @@ export default function ReportDetail() {
 
   const buildExportable = (): ExportableReport | null => {
     if (!report) return null;
-    const expenses = rows.map(({ e }) => ({
-      date: e.date,
-      description: e.description,
-      category: e.category?.name ?? null,
-      costCenter: e.cost_center?.name ?? null,
-      paymentMethod: e.payment_method ?? 'other',
-      amountCents: e.amount_cents ?? 0,
-      currency: e.currency ?? 'BRL',
+    // Arquivo com os mesmos números da tela: nota e reembolsável lado a lado, e o
+    // motivo de cada linha que não entra (ou entra só em parte) no reembolso.
+    const expenses = rows.map((row) => ({
+      date: row.e.date,
+      description: row.e.description,
+      category: row.e.category?.name ?? null,
+      costCenter: row.e.cost_center?.name ?? null,
+      paymentMethod: row.e.payment_method ?? 'other',
+      amountCents: row.amount,
+      reimbursableCents: row.reimb,
+      situation: row.rejected
+        ? ('rejected' as const)
+        : row.notReimbursable
+          ? ('not_reimbursable' as const)
+          : row.capped
+            ? ('capped' as const)
+            : ('ok' as const),
+      currency: row.e.currency ?? 'BRL',
     }));
     return {
       title: report.title,
@@ -351,6 +382,11 @@ export default function ReportDetail() {
       endDate: r?.end_date ?? null,
       totalCents,
       reimbursableCents: reimbursableTotal,
+      breakdown: {
+        rejectedCents: outBreakdown.rejected,
+        cappedCents: outBreakdown.capped,
+        notReimbursableCents: outBreakdown.notReimb,
+      },
       expenses,
     };
   };
@@ -500,7 +536,7 @@ export default function ReportDetail() {
             <>
               <Button
                 variant="outline"
-                onClick={() => setIsRejectOpen(true)}
+                onClick={openRejectReport}
                 className={cn('gap-2', actionSize, disabledLook)}
                 disabled={rejectBlocked || busy}
                 aria-describedby={rejectBlocked && approveBlockReason ? 'approve-block-reason' : undefined}
@@ -509,7 +545,10 @@ export default function ReportDetail() {
                 {hasRejected ? 'Reprovar relatório' : 'Reprovar'}
               </Button>
               <Button
-                onClick={() => setIsApproveOpen(true)}
+                onClick={() => {
+                  setComment('');
+                  setIsApproveOpen(true);
+                }}
                 className={cn('gap-2', actionSize, disabledLook)}
                 disabled={!allReviewed || hasRejected || busy}
                 aria-describedby={approveBlockReason ? 'approve-block-reason' : undefined}
@@ -577,7 +616,7 @@ export default function ReportDetail() {
             <p className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
               {formatCurrency(reimbursableTotal)}
             </p>
-            <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
+            <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} foodDailyLimit={foodDailyLimit} />
           </CardContent>
         </Card>
         <Card className="min-w-0">
@@ -632,7 +671,7 @@ export default function ReportDetail() {
                         </p>
                       </div>
 
-                      <PolicyBadges row={row} />
+                      <PolicyBadges row={row} foodDailyLimit={foodDailyLimit} />
 
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -737,7 +776,7 @@ export default function ReportDetail() {
                                   {row.e.description}
                                 </p>
                                 <p className="text-xs text-muted-foreground">{row.e.category?.name || 'Sem categoria'}</p>
-                                <PolicyBadges row={row} className="mt-1" />
+                                <PolicyBadges row={row} foodDailyLimit={foodDailyLimit} className="mt-1" />
                               </TableCell>
                               <TableCell className="align-top">
                                 {row.e.receipt_path ? (
@@ -951,7 +990,7 @@ export default function ReportDetail() {
               <p className="-mt-2 text-xs text-muted-foreground">Pago em {paidAtLabel}</p>
             )}
             {notReimbursedTotal > 0 && (
-              <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
+              <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} foodDailyLimit={foodDailyLimit} />
             )}
           </CardContent>
         </Card>
@@ -1020,7 +1059,7 @@ export default function ReportDetail() {
             onChange={(e) => setComment(e.target.value)}
             className="min-h-[100px]"
           />
-          {!comment && (
+          {!comment.trim() && (
             <p className="flex items-center gap-1 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
               Informe o motivo da reprovação
@@ -1028,7 +1067,7 @@ export default function ReportDetail() {
           )}
           <DialogFooter className="gap-2">
             <Button className="h-11 lg:h-10" variant="outline" onClick={() => setIsRejectOpen(false)} disabled={approveReport.isPending}>Cancelar</Button>
-            <Button className="h-11 lg:h-10" variant="destructive" onClick={handleReject} disabled={approveReport.isPending || !comment}>
+            <Button className="h-11 lg:h-10" variant="destructive" onClick={handleReject} disabled={approveReport.isPending || !comment.trim()}>
               {approveReport.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reprovar e devolver
             </Button>
@@ -1050,7 +1089,7 @@ export default function ReportDetail() {
             className="min-h-[100px]"
             autoFocus
           />
-          {!rejectExpenseComment && (
+          {!rejectExpenseComment.trim() && (
             <p className="flex items-center gap-1 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
               O motivo é obrigatório
@@ -1062,7 +1101,7 @@ export default function ReportDetail() {
               className="h-11 lg:h-10"
               variant="destructive"
               onClick={handleRejectExpense}
-              disabled={reviewExpense.isPending || !rejectExpenseComment}
+              disabled={reviewExpense.isPending || !rejectExpenseComment.trim()}
             >
               {reviewExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reprovar despesa
@@ -1143,10 +1182,19 @@ function AmountBlock({ row, align = 'right' }: { row: Row; align?: 'left' | 'rig
  * selo neutro. Exceção (âmbar) fica só para evento/viagem. "Após o envio" marca
  * despesa lançada depois do envio do ciclo, aguardando o gestor.
  */
-function PolicyBadges({ row, className }: { row: Row; className?: string }) {
+function PolicyBadges({
+  row,
+  foodDailyLimit,
+  className,
+}: {
+  row: Row;
+  foodDailyLimit: number | null;
+  className?: string;
+}) {
   const showCap = row.capped && !row.notReimbursable;
   if (!row.outReason && !row.latePending && !showCap) return null;
-  const capTip = `O teto de alimentação é R$ 30 por dia${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
+  const teto = foodDailyLimit != null ? `é ${formatCurrency(foodDailyLimit)} por dia` : 'é diário';
+  const capTip = `O teto de alimentação ${teto}${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-1', className)}>
       {showCap && (
@@ -1257,9 +1305,11 @@ function buildTimeline(events: ReportEvent[], approvals: ReportApproval[]): Time
 function OutOfReimbursement({
   total,
   breakdown,
+  foodDailyLimit,
 }: {
   total: number;
   breakdown: { rejected: number; capped: number; notReimb: number; rejectedRows: Row[] };
+  foodDailyLimit: number | null;
 }) {
   if (total <= 0) return null;
   return (
@@ -1277,7 +1327,8 @@ function OutOfReimbursement({
         ))}
         {breakdown.capped > 0 && (
           <li>
-            <span className="o2-num">{formatCurrency(breakdown.capped)}</span> acima do teto de alimentação (R$ 30/dia)
+            <span className="o2-num">{formatCurrency(breakdown.capped)}</span> acima do teto de alimentação
+            {foodDailyLimit != null ? ` (${formatCurrency(foodDailyLimit)}/dia)` : ''}
           </li>
         )}
         {breakdown.notReimb > 0 && (

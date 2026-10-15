@@ -7,8 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
  *
  * Consome a RPC `get_admin_financial_overview` (sem args). Todos os valores
  * monetários vêm em CENTAVOS — usar `formatCurrency` (@/lib/constants) para
- * exibir. O backend bloqueia não-admins: a RPC retorna erro, tratado na UI
- * como "Acesso restrito aos administradores".
+ * exibir. O backend bloqueia não-gestores com "Acesso restrito"; a UI só mostra
+ * acesso restrito para esse erro (isPermissionError) — rede/servidor vira
+ * "tentar de novo".
  */
 
 export interface AdminCycle {

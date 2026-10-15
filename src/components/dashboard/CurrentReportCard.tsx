@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -5,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { buildSubmitConfirmText } from '@/components/reports/reportRules';
 import { useDashboardContext, useSubmitReportRpc, CurrentReport } from '@/hooks/useCurrentReport';
 import { formatCurrency } from '@/lib/constants';
 import { Plus, Send, Clock, AlertTriangle, Loader2 } from 'lucide-react';
@@ -24,6 +27,8 @@ interface CurrentReportCardProps {
 export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentReportCardProps) {
   const { data: context, isLoading } = useDashboardContext();
   const submitReport = useSubmitReportRpc();
+  // Envio não tem volta pelo app: pede confirmação com o que vai ser enviado.
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -44,7 +49,7 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
   const { current_report, pending_due_report, days_until_due, today } = context;
 
   const handleSubmit = (report: CurrentReport) => {
-    submitReport.mutate(report.id);
+    submitReport.mutate(report.id, { onSettled: () => setConfirmOpen(false) });
   };
 
   // Check due status
@@ -150,7 +155,7 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
             {current_report.status === 'draft' && (
               <Button 
                 variant={isDueToday || isOverdue ? "default" : "outline"}
-                onClick={() => handleSubmit(current_report)}
+                onClick={() => setConfirmOpen(true)}
                 disabled={submitReport.isPending || (reportExpenses?.count || 0) === 0}
                 className={cn(
                   "flex-1 h-12 min-h-11 lg:h-10",
@@ -174,6 +179,23 @@ export function CurrentReportCard({ onAddExpense, reportExpenses }: CurrentRepor
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title="Enviar para aprovação"
+        description={buildSubmitConfirmText({
+          title: current_report.title,
+          count: reportExpenses?.count || 0,
+          reimbursableCents: reportExpenses?.total_cents || 0,
+          startDate: current_report.start_date,
+          endDate: current_report.end_date,
+          today,
+        })}
+        confirmLabel="Enviar"
+        onConfirm={() => handleSubmit(current_report)}
+        isLoading={submitReport.isPending}
+      />
     </div>
   );
 }

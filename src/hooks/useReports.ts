@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { reimbursableOf, summarizeReview, type ReviewSummary } from '@/components/reports/reportRules';
 
 export interface Report {
   id: string;
@@ -19,6 +20,11 @@ export interface Report {
   submitted_at?: string | null;
   submitted_late?: boolean | null;
   last_rejection_comment?: string | null;
+  returned_at?: string | null;
+  /** Revisão item a item do gestor (expense_reviews) — a Fila decide com isso. */
+  review?: ReviewSummary;
+  /** Itens reprovados na revisão, para o rascunho do motivo da devolução. */
+  rejected_items?: Array<{ description: string; date: string; comment: string | null }>;
   user?: { full_name: string | null } | null;
 }
 
@@ -65,6 +71,9 @@ export interface ReportInput {
  * narrow no shape final. Após Aria-6 (regen types), revisitar.
  */
 type ItemExpense = {
+  id?: string;
+  description?: string | null;
+  date?: string | null;
   amount_cents: number | null;
   reimbursable_cents: number | null;
   is_reimbursable: boolean | null;
@@ -80,13 +89,16 @@ type ReportRow = {
   end_date: string | null;
   status: Report['status'];
   last_rejection_comment?: string | null;
+  returned_at?: string | null;
   submitted_late?: boolean | null;
   created_at: string;
   updated_at: string;
   user: { full_name: string | null } | { full_name: string | null }[] | null;
   items: Array<{
+    expense_id?: string;
     expense: ItemExpense | ItemExpense[] | null;
   }>;
+  reviews?: Array<{ expense_id: string; decision: string | null; comment: string | null }> | null;
 };
 
 function pickFirst<T>(value: T | T[] | null | undefined): T | null {
@@ -105,7 +117,8 @@ export function useReports(filters?: { status?: string }) {
         .select(
           `*,
           user:profiles!user_id(full_name),
-          items:report_items(expense:expenses(amount_cents, reimbursable_cents, is_reimbursable, status))`
+          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status)),
+          reviews:expense_reviews(expense_id, decision, comment)`
         )
         .order('created_at', { ascending: false });
 
@@ -120,15 +133,29 @@ export function useReports(filters?: { status?: string }) {
 
       return rows.map((row): Report => {
         const items = row.items ?? [];
+        const reviews = row.reviews ?? [];
+        const reviewById = new Map(reviews.map((r) => [r.expense_id, r]));
+        const expenseIds: string[] = [];
+        const rejected_items: NonNullable<Report['rejected_items']> = [];
         let total_cents = 0;
         let reimbursable_cents = 0;
         for (const item of items) {
           const expense = pickFirst(item.expense);
-          // Reprovada não conta; reembolsável é o valor já com o teto de alimentação.
+          const expenseId = item.expense_id ?? expense?.id;
+          if (expenseId) expenseIds.push(expenseId);
+          // Reprovada (legado) não conta em nada.
           if (!expense || expense.status === 'rejected') continue;
-          const amount = expense.amount_cents ?? 0;
-          total_cents += amount;
-          if (expense.is_reimbursable) reimbursable_cents += expense.reimbursable_cents ?? amount;
+          total_cents += expense.amount_cents ?? 0;
+          // Mesma conta do Detalhe: teto, não reembolsável e reprovada na revisão.
+          const review = expenseId ? reviewById.get(expenseId) : undefined;
+          reimbursable_cents += reimbursableOf(expense, review?.decision);
+          if (review?.decision === 'rejected') {
+            rejected_items.push({
+              description: expense.description ?? 'Despesa',
+              date: expense.date ?? '',
+              comment: review.comment,
+            });
+          }
         }
         return {
           id: row.id,
@@ -139,12 +166,15 @@ export function useReports(filters?: { status?: string }) {
           end_date: row.end_date,
           status: row.status,
           last_rejection_comment: row.last_rejection_comment ?? null,
+          returned_at: row.returned_at ?? null,
           submitted_late: row.submitted_late ?? null,
           created_at: row.created_at,
           updated_at: row.updated_at,
           total_cents,
           reimbursable_cents,
           expense_count: items.length,
+          review: summarizeReview(expenseIds, reviews),
+          rejected_items,
           user: pickFirst(row.user),
         };
       });
@@ -389,6 +419,10 @@ export function useRemoveExpenseFromReport() {
     onSuccess: (_, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      // A despesa volta a ser avulsa: lista e contadores de Despesas mudam também.
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
       toast.success('Despesa removida do relatório!');
     },
     onError: (error) => {

@@ -6,7 +6,7 @@
  * smoke-failures (import quebrado, autoTable não anexando, etc).
  */
 import { describe, it, expect } from 'vitest';
-import { generateReportPdf } from './exportReportPdf';
+import { generateReportPdf, aggregateByCategory } from './exportReportPdf';
 import type { ExportableReport } from './exportReport';
 
 const fixture: ExportableReport = {
@@ -56,5 +56,20 @@ describe('exportReportPdf', () => {
     const blob = generateReportPdf(empty);
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.size).toBeGreaterThan(500);
+  });
+});
+
+describe('aggregateByCategory', () => {
+  it('soma o reembolsável e deixa a reprovada de fora', () => {
+    const buckets = aggregateByCategory({
+      title: 'x',
+      totalCents: 14000,
+      reimbursableCents: 3000,
+      expenses: [
+        { date: '2026-10-01', description: 'Almoço', category: 'Alimentação', costCenter: null, paymentMethod: 'cash', amountCents: 6000, reimbursableCents: 3000, situation: 'capped' },
+        { date: '2026-10-02', description: 'Jantar', category: 'Alimentação', costCenter: null, paymentMethod: 'cash', amountCents: 8000, reimbursableCents: 0, situation: 'rejected' },
+      ],
+    });
+    expect(buckets).toEqual([{ name: 'Alimentação', totalCents: 3000, count: 1 }]);
   });
 });

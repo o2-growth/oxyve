@@ -8,6 +8,7 @@ import { useAdminOverview } from '@/hooks/useAdminOverview';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
+import { isAwaitingApprovalBy, isReturnedReport, reimbursableOf } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { FileText, TrendingUp, Clock, CheckCircle2, Undo2, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -41,8 +42,9 @@ export default function Dashboard() {
   const currentReportExpenses = currentReportId ? {
     total_cents: expenses
       ?.filter((e) => e.report?.id === currentReportId)
-      // Total do relatório = valor lançado (com o teto), não a soma das notas.
-      .reduce((sum, e) => sum + (e.reimbursable_cents ?? e.amount_cents), 0) || 0,
+      // Total do relatório = a reembolsar (com o teto, sem não reembolsável), a
+      // mesma conta do Detalhe — não a soma das notas.
+      .reduce((sum, e) => sum + reimbursableOf(e), 0) || 0,
     count: expenses
       ?.filter((e) => e.report?.id === currentReportId)
       .length || 0,
@@ -74,7 +76,7 @@ export default function Dashboard() {
   const periodExpenses = expenses?.filter((e) => e.report?.id === currentReportId).slice(0, 5) ?? [];
 
   const pendingApproval = isManager
-    ? reports?.filter((r) => r.status === 'submitted' && r.user_id !== profile?.id).length || 0
+    ? reports?.filter((r) => isAwaitingApprovalBy(r, profile?.id)).length || 0
     : 0;
 
   return (
@@ -330,7 +332,14 @@ export default function Dashboard() {
                         className="flex min-h-11 items-center justify-between gap-2 rounded-lg border p-3 transition-colors hover:bg-muted/50 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate text-sm">{report.title}</p>
+                          <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                            <span className="truncate">{report.title}</span>
+                            {isReturnedReport(report) && (
+                              <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                                Devolvido
+                              </span>
+                            )}
+                          </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {isManager && <>{owner} • </>}
                             {report.expense_count === 1 ? '1 despesa' : `${report.expense_count ?? 0} despesas`}
