@@ -1,7 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { bootstrapUser } from '@/hooks/useBootstrap';
+import { removeDevicePushSubscription } from '@/hooks/usePushNotifications';
+import { clearRuntimeCaches } from '@/lib/pwaCache';
 
 // Sprint 1 — GAP-G021/G022: campos bancários + CPF/CNPJ adicionados ao profile.
 // Os types gerados pelo Supabase ainda não incluem essas colunas (regen
@@ -45,6 +48,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -191,10 +195,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     bootstrappedUserId.current = null;
+    // Antes do signOut: apagar a linha de push exige a sessão (RLS). Sem isso o
+    // aparelho segue recebendo notificações de quem saiu.
+    try {
+      await removeDevicePushSubscription();
+    } catch (err) {
+      console.warn('signOut: limpeza do push falhou', err);
+    }
     await supabase.auth.signOut();
     setProfile(null);
     setRoles([]);
     setBootstrapError(null);
+    // Dados do usuário que saiu não podem aparecer para o próximo do aparelho:
+    // nem no cache do React Query nem no Cache Storage do service worker.
+    queryClient.clear();
+    try {
+      await clearRuntimeCaches();
+    } catch (err) {
+      console.warn('signOut: limpeza do cache falhou', err);
+    }
   };
 
   const isAdmin = roles.some((r) => r.role === 'admin');

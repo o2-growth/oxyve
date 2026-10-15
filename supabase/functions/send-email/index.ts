@@ -2,12 +2,15 @@
 // Fallback log-only se RESEND_API_KEY não estiver configurada — não bloqueia
 // o fluxo. Auth via JWT (mesmo padrão de validate-receipt).
 //
-// POST { to, subject, html, text } -> 200 { sent: bool, simulated: bool }
+// POST { to, subject, html, text, link? } -> 200 { sent: bool, simulated: bool }
+// `link` (relativo, vindo da notificação) vira URL absoluta com APP_URL e entra
+// no texto e no HTML.
 //
 // Idempotência: caller decide. Aqui só fazemos best-effort de delivery.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildEmailContent, DEFAULT_APP_URL } from "./content.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,6 +23,7 @@ interface SendEmailPayload {
   subject: string;
   html?: string;
   text?: string;
+  link?: string | null;
   // `from` NÃO é aceito do payload — é fixado server-side (anti-spoofing).
 }
 
@@ -119,6 +123,12 @@ serve(async (req) => {
       );
     }
 
+    const APP_URL = Deno.env.get("APP_URL") || DEFAULT_APP_URL;
+    const content = buildEmailContent(
+      { subject: payload.subject, text: payload.text, html: payload.html, link: payload.link },
+      APP_URL,
+    );
+
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -129,8 +139,8 @@ serve(async (req) => {
         from: FROM,
         to: Array.isArray(payload.to) ? payload.to : [payload.to],
         subject: payload.subject,
-        html: payload.html,
-        text: payload.text,
+        html: content.html,
+        text: content.text,
       }),
     });
 

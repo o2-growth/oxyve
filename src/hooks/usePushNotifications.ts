@@ -64,6 +64,63 @@ function bufferToBase64Url(buffer: ArrayBuffer | null): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+const SIGN_OUT_PUSH_TIMEOUT_MS = 3000;
+
+/**
+ * Logout: tira este aparelho da lista de push do usuário que está saindo.
+ * Apaga a linha pelo endpoint ANTES do signOut (o RLS precisa da sessão) e
+ * depois cancela a inscrição no navegador, para o próximo usuário do aparelho
+ * não receber notificações do anterior.
+ *
+ * Nunca lança e tem teto de tempo: falha aqui não pode impedir o logout.
+ * Usa getRegistration() em vez de `ready`, que nunca resolve sem SW (dev).
+ */
+export async function removeDevicePushSubscription(): Promise<void> {
+  if (!isSupported()) return;
+
+  const work = (async () => {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const pushSub = await reg?.pushManager.getSubscription();
+    if (!pushSub) return;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from('push_subscriptions')
+        .delete()
+        .eq('endpoint', pushSub.endpoint);
+      if (error) console.warn('[push] logout: erro apagando subscription', error);
+    } catch (err) {
+      console.warn('[push] logout: erro apagando subscription', err);
+    }
+
+    // Mesmo sem apagar a linha, cancelar no aparelho invalida o endpoint: o
+    // send-push recebe 410 e o aparelho deixa de receber.
+    await pushSub.unsubscribe();
+    try {
+      window.sessionStorage.setItem(SESSION_CACHE_KEY, '0');
+    } catch {
+      /* noop */
+    }
+  })();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      console.warn('[push] logout: limpeza de push passou do tempo, seguindo com o logout');
+      resolve();
+    }, SIGN_OUT_PUSH_TIMEOUT_MS);
+  });
+
+  try {
+    await Promise.race([work, timeout]);
+  } catch (err) {
+    console.warn('[push] logout: limpeza de push falhou', err);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface UsePushNotificationsResult {
   supported: boolean;
   permission: PushPermission;
@@ -144,6 +201,9 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
       // 3) Subscribe (ou reusa existente).
       let pushSub = await reg.pushManager.getSubscription();
+      // Só desfazemos no erro a inscrição criada nesta chamada; a que já existia
+      // estava funcionando e pode ter linha válida no banco.
+      const createdNow = !pushSub;
       if (!pushSub) {
         // Cast: PushManager.subscribe espera BufferSource com ArrayBuffer
         // estrito; Uint8Array<ArrayBufferLike> conflita com TS lib.dom recente.
@@ -176,11 +236,13 @@ export function usePushNotifications(): UsePushNotificationsResult {
 
       if (error) {
         console.error('[push] erro persistindo subscription', error);
-        // Subscription criada localmente mas não foi pro banco — desfaz.
-        try {
-          await pushSub.unsubscribe();
-        } catch {
-          /* noop */
+        if (createdNow) {
+          // Subscription criada agora mas não foi pro banco — desfaz.
+          try {
+            await pushSub.unsubscribe();
+          } catch {
+            /* noop */
+          }
         }
         return false;
       }

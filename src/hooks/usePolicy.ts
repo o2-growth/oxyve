@@ -72,12 +72,37 @@ export function useUpdateExpensePolicy() {
       if (error) throw error;
       return data;
     },
+    // Otimista: a tela de política mostra a escolha na hora, sem esperar o
+    // refetch (o switch "voltava" e convidava a clicar de novo).
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ['expense-policy'] });
+      const previous = queryClient.getQueryData<ExpensePolicy>(['expense-policy']);
+      const { id: _id, ...updates } = input;
+      if (previous) {
+        queryClient.setQueryData<ExpensePolicy>(['expense-policy'], { ...previous, ...updates });
+      }
+      return { previous, fields: Object.keys(updates) as (keyof ExpensePolicy)[] };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expense-policy'] });
       toast.success('Política atualizada!');
     },
-    onError: (error) => {
+    onError: (error, _input, context) => {
+      // Desfaz só os campos desta chamada: outra alteração em andamento fica.
+      if (context?.previous) {
+        const previous = context.previous;
+        queryClient.setQueryData<ExpensePolicy>(['expense-policy'], (current) => {
+          if (!current) return previous;
+          const restored = { ...current };
+          for (const field of context.fields) {
+            (restored as Record<string, unknown>)[field] = previous[field];
+          }
+          return restored;
+        });
+      }
       toast.error('Erro ao atualizar política: ' + error.message);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['expense-policy'] });
     },
   });
 }

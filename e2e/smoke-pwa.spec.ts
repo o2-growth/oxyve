@@ -4,7 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.use({ baseURL: 'http://localhost:4173' });
+// PWA_BASE_URL: o playwright-prod.config.ts aponta para produção.
+test.use({ baseURL: process.env.PWA_BASE_URL ?? 'http://localhost:4173' });
 
 test('build de produção: service worker registra e o login renderiza sem erro', async ({ page }) => {
   const errors: string[] = [];
@@ -28,4 +29,16 @@ test('build de produção: service worker registra e o login renderiza sem erro'
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#3A3A3A');
   await expect(page.getByRole('button', { name: /entrar com google/i })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('service worker não guarda respostas do Supabase nem imagens de outra origem', async ({ request }) => {
+  const sw = await (await request.get('/sw.js')).text();
+  expect(sw).not.toContain('supabase-rest');
+  expect(sw).not.toContain('supabase-functions');
+  expect(sw).toContain('images-v2');
+  expect(sw).toContain('self.location.origin');
+  // O handler de push segue importado e apaga os caches antigos na ativação.
+  expect(sw).toContain('push-handler.js');
+  const handler = await (await request.get('/push-handler.js')).text();
+  expect(handler).toContain("'supabase-rest'");
 });

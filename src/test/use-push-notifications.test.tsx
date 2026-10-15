@@ -88,15 +88,17 @@ beforeEach(() => {
   globalThis.PushManager = function () {};
 
   // navigator.serviceWorker
+  const registration = {
+    pushManager: {
+      subscribe: subscribeMock,
+      getSubscription: getSubscriptionMock,
+    },
+  };
   Object.defineProperty(globalThis.navigator, 'serviceWorker', {
     configurable: true,
     value: {
-      ready: Promise.resolve({
-        pushManager: {
-          subscribe: subscribeMock,
-          getSubscription: getSubscriptionMock,
-        },
-      }),
+      ready: Promise.resolve(registration),
+      getRegistration: vi.fn().mockResolvedValue(registration),
     },
   });
 
@@ -113,7 +115,7 @@ afterEach(() => {
 });
 
 // Import depois de mocks.
-import { usePushNotifications } from '@/hooks/usePushNotifications';
+import { usePushNotifications, removeDevicePushSubscription } from '@/hooks/usePushNotifications';
 
 describe('usePushNotifications', () => {
   it('expõe supported=true e permission inicial quando APIs estão presentes', async () => {
@@ -180,5 +182,109 @@ describe('usePushNotifications', () => {
 
     expect(supabaseDeleteEqMock).toHaveBeenCalledTimes(1);
     expect(result.current.subscribed).toBe(false);
+  });
+
+  it('subscribe() não desfaz a inscrição já existente quando o upsert falha', async () => {
+    // Aparelho já inscrito (ex.: permissão resetada com a inscrição viva).
+    fakeSubscription = makeFakeSub();
+    const existente = fakeSubscription;
+    supabaseInsertMock.mockResolvedValueOnce({
+      error: { code: '42703', message: 'record "new" has no field "updated_at"' },
+    });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => usePushNotifications());
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    await act(async () => {
+      await result.current.subscribe();
+    });
+
+    expect(subscribeMock).not.toHaveBeenCalled();
+    expect(existente.unsubscribe).not.toHaveBeenCalled();
+    expect(result.current.subscribed).toBe(true);
+    expect(errSpy).toHaveBeenCalled();
+    errSpy.mockRestore();
+  });
+
+  it('subscribe() desfaz a inscrição criada agora quando o upsert falha', async () => {
+    supabaseInsertMock.mockResolvedValueOnce({ error: { code: '42501', message: 'rls' } });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => usePushNotifications());
+
+    await act(async () => {
+      const ok = await result.current.subscribe();
+      expect(ok).toBe(false);
+    });
+
+    expect(subscribeMock).toHaveBeenCalledTimes(1);
+    expect(fakeSubscription?.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(result.current.subscribed).toBe(false);
+    errSpy.mockRestore();
+  });
+});
+
+describe('removeDevicePushSubscription (logout)', () => {
+  it('apaga a linha do endpoint e cancela a inscrição do aparelho', async () => {
+    fakeSubscription = makeFakeSub();
+    const sub = fakeSubscription;
+
+    await removeDevicePushSubscription();
+
+    expect(supabaseDeleteEqMock).toHaveBeenCalledWith('endpoint', sub.endpoint);
+    expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('oxyve.pushSubscribed')).toBe('0');
+  });
+
+  it('apaga a linha antes de cancelar (ainda com sessão válida)', async () => {
+    fakeSubscription = makeFakeSub();
+    const ordem: string[] = [];
+    supabaseDeleteEqMock.mockImplementationOnce(async () => {
+      ordem.push('delete');
+      return { error: null };
+    });
+    (fakeSubscription.unsubscribe as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      ordem.push('unsubscribe');
+      return true;
+    });
+
+    await removeDevicePushSubscription();
+
+    expect(ordem).toEqual(['delete', 'unsubscribe']);
+  });
+
+  it('não lança quando o banco falha e ainda cancela no aparelho', async () => {
+    fakeSubscription = makeFakeSub();
+    const sub = fakeSubscription;
+    supabaseDeleteEqMock.mockRejectedValueOnce(new Error('offline'));
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(removeDevicePushSubscription()).resolves.toBeUndefined();
+    expect(sub.unsubscribe).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+  });
+
+  it('não faz nada sem inscrição nem sem service worker registrado', async () => {
+    await removeDevicePushSubscription();
+    expect(supabaseDeleteEqMock).not.toHaveBeenCalled();
+
+    (navigator.serviceWorker.getRegistration as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      undefined,
+    );
+    await expect(removeDevicePushSubscription()).resolves.toBeUndefined();
+  });
+
+  it('não trava o logout se o service worker não responder', async () => {
+    vi.useFakeTimers();
+    (navigator.serviceWorker.getRegistration as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      new Promise(() => {}),
+    );
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const p = removeDevicePushSubscription();
+    await vi.advanceTimersByTimeAsync(5000);
+    await expect(p).resolves.toBeUndefined();
+    vi.useRealTimers();
+    warnSpy.mockRestore();
   });
 });
