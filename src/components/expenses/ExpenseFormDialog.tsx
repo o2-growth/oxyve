@@ -50,7 +50,7 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
-import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
+import { useDashboardContext, useCreateExpenseInReport, useReportForDate, cycleForDate, CurrentReport } from '@/hooks/useCurrentReport';
 import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, parseDecimalBR, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents, MAX_EXPENSE_AGE_DAYS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
@@ -232,7 +232,7 @@ export function ExpenseFormDialog({
     }
   }, [watchedCategoryId, categories]);
 
-  // B4 — Buscar relatório para a data selecionada via useQuery (sem race).
+  // B4 — Relatório da data selecionada via useQuery (sem race). Só leitura (D2).
   const dateStrForQuery =
     useCurrentReportFlow && watchedDate && !isEditing
       ? format(watchedDate, 'yyyy-MM-dd')
@@ -518,9 +518,16 @@ export function ExpenseFormDialog({
     ? `Limite diário: ${formatCurrency(selectedCategory.daily_limit_cents)}`
     : null;
 
+  // Ciclo da data ainda sem relatório: mostra o período calculado e avisa que o
+  // relatório nasce ao salvar (antes ele era criado só por escolher a data).
+  const cycleCutoffDay = (policy as { cycle_cutoff_day?: number | null } | undefined)?.cycle_cutoff_day ?? 24;
+  const reportToBeCreated =
+    !isEditing && !!dateStrForQuery && reportForDateQuery.isFetched && !currentReportForDate;
   const displayReport = isEditing
     ? null
-    : currentReportForDate || dashboardContext?.current_report;
+    : currentReportForDate ||
+      (reportToBeCreated && dateStrForQuery ? cycleForDate(dateStrForQuery, cycleCutoffDay) : null) ||
+      dashboardContext?.current_report;
   const cycleClosed = !isEditing && !!currentReportForDate && currentReportForDate.status !== 'draft';
 
   const formContent = (
@@ -536,7 +543,8 @@ export function ExpenseFormDialog({
         {useCurrentReportFlow && displayReport && (
           <Alert>
             <AlertDescription className="text-sm">
-              Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title})
+              Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title}
+              {reportToBeCreated ? ', será criado ao salvar' : ''})
               {cycleClosed && (
                 <span className="mt-1 block text-[hsl(var(--status-event))]">
                   Este relatório já foi enviado. A despesa vai ficar avulsa e o gestor decide se ela

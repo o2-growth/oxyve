@@ -42,7 +42,8 @@ vi.mock('@/hooks/useExpenses', () => ({
   useUpdateExpense: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
-vi.mock('@/hooks/useCurrentReport', () => ({
+vi.mock('@/hooks/useCurrentReport', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useCurrentReport')>()),
   useDashboardContext: () => ({ data: undefined }),
   useReportForDate: () => ({ data: null, isFetched: true }),
   useCreateExpenseInReport: () => ({ mutateAsync, isPending: false }),
@@ -145,5 +146,10 @@ describe('ExpenseFormDialog', () => {
       expect.objectContaining({ reportId: 'r1', expenseId: 'e1', orgId: 'o1', userId: 'u1' }),
     );
     expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/sem comprovante/i), expect.anything());
+  });
+
+  it('data sem relatório do ciclo mostra o período e avisa que será criado ao salvar', () => {
+    render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
+    expect(screen.getByText(/será criado ao salvar/)).toBeInTheDocument();
   });
 });
