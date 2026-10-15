@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { isPermissionError } from '@/lib/permissionError';
 
 export function useReviewExpense() {
   const queryClient = useQueryClient();
@@ -42,6 +43,14 @@ export function useReviewExpense() {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
     },
     onError: (error) => {
+      // A policy de UPDATE só deixa quem revisou alterar a própria revisão: com dois
+      // aprovadores, o erro de RLS cru não diz nada a quem tentou.
+      if (isPermissionError(error)) {
+        toast.error(
+          'Outro aprovador já revisou esta despesa e só ele pode alterar a revisão. Peça a ele, ou devolva o relatório com o motivo.',
+        );
+        return;
+      }
       toast.error('Erro ao salvar revisão: ' + error.message);
     },
   });
