@@ -418,13 +418,19 @@ export function useDeleteExpenses() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase.from('expenses').delete().in('id', ids);
+      // A RLS ignora em silêncio o que não pode ser excluído (0 linhas, sem erro);
+      // o select devolve o que saiu de fato para o aviso não mentir.
+      const { data, error } = await supabase.from('expenses').delete().in('id', ids).select('id');
       if (error) throw error;
+      return { deleted: data?.length ?? 0, requested: ids.length };
     },
-    onSuccess: () => {
+    onSuccess: ({ deleted, requested }) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
-      toast.success('Despesas excluídas!');
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      if (deleted === requested) toast.success('Despesas excluídas!');
+      else if (deleted === 0) toast.error('Nenhuma despesa foi excluída. Só rascunhos seus podem ser excluídos.');
+      else toast.warning(`${deleted} de ${requested} despesas excluídas. As demais não podem ser excluídas.`);
     },
     onError: (error) => {
       toast.error('Erro ao excluir despesas: ' + error.message);

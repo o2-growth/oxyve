@@ -14,12 +14,15 @@ import { useReports, useCreateReport, useAddExpenseToReport, useAddExpensesToRep
 import { Expense } from '@/hooks/useExpenses';
 import { Loader2, Plus } from 'lucide-react';
 import { formatCurrency } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AddToReportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   expense?: Expense | null;
   expenseIds?: string[];
+  /** Depois de adicionar (a tela limpa a seleção em lote). */
+  onAdded?: () => void;
 }
 
 export function AddToReportDialog({
@@ -27,12 +30,17 @@ export function AddToReportDialog({
   onOpenChange,
   expense,
   expenseIds,
+  onAdded,
 }: AddToReportDialogProps) {
+  const { profile } = useAuth();
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [selectedReportId, setSelectedReportId] = useState<string>('');
   const [newReportTitle, setNewReportTitle] = useState('');
 
-  const { data: reports, isLoading: reportsLoading } = useReports({ status: 'draft' });
+  const { data: allDrafts, isLoading: reportsLoading } = useReports({ status: 'draft' });
+  // Gestor recebe os rascunhos da empresa pela RLS; só os próprios aceitam despesa
+  // (os outros davam erro de RLS e a lista vinha cheia de títulos iguais).
+  const reports = allDrafts?.filter((r) => r.user_id === profile?.id);
   const createReport = useCreateReport();
   const addExpenseToReport = useAddExpenseToReport();
   const addExpensesToReport = useAddExpensesToReport();
@@ -69,6 +77,7 @@ export function AddToReportDialog({
       });
     }
 
+    onAdded?.();
     onOpenChange(false);
     setMode('existing');
     setSelectedReportId('');
