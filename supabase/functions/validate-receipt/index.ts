@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  GENERIC_ERROR_MESSAGE,
+  PAYLOAD_TOO_LARGE_MESSAGE,
+  isDeclaredBodyTooLarge,
+  isImageTooLarge,
+} from "./limits.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,7 +58,23 @@ serve(async (req) => {
       );
     }
 
+    // Recusa corpo grande antes de ler (quando o cliente declara o tamanho) e
+    // de novo depois do parse (upload sem Content-Length).
+    if (isDeclaredBodyTooLarge(req.headers.get("content-length"))) {
+      return new Response(
+        JSON.stringify({ error: PAYLOAD_TOO_LARGE_MESSAGE }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { image_base64, mime_type } = await req.json();
+
+    if (isImageTooLarge(image_base64)) {
+      return new Response(
+        JSON.stringify({ error: PAYLOAD_TOO_LARGE_MESSAGE }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!image_base64 || !mime_type) {
       return new Response(
@@ -188,7 +210,7 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ error: "Erro ao analisar comprovante" }),
+        JSON.stringify({ error: GENERIC_ERROR_MESSAGE }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -213,9 +235,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
+    // Detalhe só no log do servidor; o cliente recebe texto genérico.
     console.error("validate-receipt error:", e);
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ error: GENERIC_ERROR_MESSAGE }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
