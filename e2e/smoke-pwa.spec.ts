@@ -4,7 +4,8 @@
  */
 import { test, expect } from '@playwright/test';
 
-test.use({ baseURL: 'http://localhost:4173' });
+// PWA_BASE_URL: o playwright-prod.config.ts aponta para produção.
+test.use({ baseURL: process.env.PWA_BASE_URL ?? 'http://localhost:4173' });
 
 test('build de produção: service worker registra e o login renderiza sem erro', async ({ page }) => {
   const errors: string[] = [];
