@@ -67,7 +67,7 @@ import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
-import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents, formatAmountInput } from '@/lib/constants';
 import { O2Rings } from '@/components/brand/O2Rings';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -378,6 +378,8 @@ export function QuickExpenseSheet({
       description: '',
       amount: centsToInput(extracted?.extracted_amount_cents ?? null),
     });
+    // "Digitar sem foto" pode vir de "Aguardando câmera..."; sem isso o Voltar caía nele.
+    setWaitingForCamera(false);
     setStep('edit');
   };
 
@@ -452,7 +454,7 @@ export function QuickExpenseSheet({
           </Label>
           <p className="text-xs text-muted-foreground">
             {isFood
-              ? 'Libera o teto de R$ 30/dia. Vai para revisão do aprovador.'
+              ? `Libera o teto de ${formatCurrency(foodDailyLimit)}/dia. Vai para revisão do aprovador.`
               : 'Refeição/despesa de evento aprovado pela Diretoria.'}
           </p>
         </div>
@@ -652,6 +654,8 @@ export function QuickExpenseSheet({
               onClick={handleQuickSave}
               disabled={
                 isSaving ||
+                // Sem foto o salvar rápido não tem o que salvar (handleQuickSave sai calado).
+                !file ||
                 validation.status === 'validating' ||
                 !categoryId ||
                 (isEvent && eventNote.trim().length < 3)
@@ -733,6 +737,11 @@ export function QuickExpenseSheet({
                         className="h-12"
                         inputMode="decimal"
                         {...field}
+                        // Mostra como o valor foi lido ("1.500" → "1.500,00") antes de salvar.
+                        onBlur={() => {
+                          field.onChange(formatAmountInput(field.value));
+                          field.onBlur();
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -788,7 +797,8 @@ export function QuickExpenseSheet({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setStep('review')}
+                // Sem foto não há review: voltar para lá mostrava um "Salvar" que não salvava.
+                onClick={() => setStep(file ? 'review' : 'capture')}
                 disabled={isSaving}
                 className="h-12"
               >

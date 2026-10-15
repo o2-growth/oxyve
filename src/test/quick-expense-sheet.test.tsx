@@ -132,4 +132,28 @@ describe('QuickExpenseSheet — state machine', () => {
     expect(screen.queryByTestId('step-review')).toBeNull();
     expect(screen.queryByTestId('step-edit')).toBeNull();
   });
+
+  it('"Digitar sem foto" → "Voltar" volta para a captura, não para um review sem foto', () => {
+    render(<QuickExpenseSheet open={true} onOpenChange={() => {}} />, { wrapper });
+
+    fireEvent.click(screen.getByText('Digitar sem foto'));
+    expect(screen.getByTestId('step-edit')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Voltar'));
+    expect(screen.getByTestId('step-capture')).toBeInTheDocument();
+    expect(screen.queryByTestId('quick-save-btn')).toBeNull();
+  });
+
+  it('review sem foto deixa "Salvar despesa" desabilitado', () => {
+    render(<QuickExpenseSheet open={true} onOpenChange={() => {}} initialStep="review" />, { wrapper });
+    expect(screen.getByTestId('quick-save-btn')).toBeDisabled();
+  });
+
+  it('reformata o valor ao sair do campo ("1.500" → "1.500,00")', () => {
+    render(<QuickExpenseSheet open={true} onOpenChange={() => {}} initialStep="edit" />, { wrapper });
+    const input = screen.getByLabelText(/Valor/i) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '1.500' } });
+    fireEvent.blur(input);
+    expect(input.value).toBe('1.500,00');
+  });
 });
