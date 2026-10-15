@@ -24,3 +24,27 @@ export function isDeclaredBodyTooLarge(contentLength: string | null): boolean {
 export function isImageTooLarge(imageBase64: unknown): boolean {
   return typeof imageBase64 === "string" && imageBase64.length > MAX_IMAGE_BASE64_CHARS;
 }
+
+// Cota por usuário (consume_receipt_validation_quota, migration 20261015121000):
+// cada leitura chama a OpenAI e custa; o banco conta por hora e diz se pode.
+export const QUOTA_RPC = "consume_receipt_validation_quota";
+
+export const RATE_LIMIT_MESSAGE =
+  "Limite de leituras automáticas atingido. Preencha data e valor à mão — a despesa pode ser salva normalmente.";
+
+export const OPENAI_BUSY_MESSAGE =
+  "Leitura automática ocupada agora. Preencha data e valor à mão ou tente de novo em instantes.";
+
+export type QuotaOutcome = "allowed" | "exceeded" | "unavailable";
+
+/**
+ * Interpreta o retorno da RPC. A função ainda não existir no banco (deploy da
+ * função antes da migration: PGRST202/42883) não pode derrubar a leitura, então
+ * libera; qualquer outro erro recusa para não abrir a cota.
+ */
+export function quotaOutcome(res: { data: unknown; error: { code?: string } | null }): QuotaOutcome {
+  if (res.error) {
+    return res.error.code === "PGRST202" || res.error.code === "42883" ? "allowed" : "unavailable";
+  }
+  return res.data === true ? "allowed" : "exceeded";
+}
