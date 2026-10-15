@@ -212,7 +212,7 @@ export function useReport(id: string) {
         .eq('id', report.user_id)
         .single();
 
-      const { data: items } = await supabase
+      const { data: items, error: itemsError } = await supabase
         .from('report_items')
         .select(
           `id,
@@ -225,6 +225,9 @@ export function useReport(id: string) {
            )`
         )
         .eq('report_id', id);
+      // Sem isto, um erro (ex.: front publicado antes da migration de
+      // possible_duplicate_of) mostrava o relatório vazio, como se não tivesse itens.
+      if (itemsError) throw itemsError;
 
       const { data: approvals } = await supabase
         .from('report_approvals')

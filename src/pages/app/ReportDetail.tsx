@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -136,7 +136,7 @@ export default function ReportDetail() {
   const queryClient = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
 
-  const { data: report, isLoading } = useReport(id!);
+  const { data: report, isLoading, isError, refetch } = useReport(id!);
   const submitReport = useSubmitReportRpc();
   const approveReport = useApproveReportRpc();
   const markAsPaid = useMarkReportPaidRpc();
@@ -444,6 +444,15 @@ export default function ReportDetail() {
       <AppShell>
         <Skeleton className="h-8 w-64 mb-4" />
         <Skeleton className="h-64 w-full" />
+      </AppShell>
+    );
+  }
+
+  // Falha de rede/banco não é "não encontrado": oferece tentar de novo.
+  if (!report && isError) {
+    return (
+      <AppShell>
+        <LoadError onRetry={() => refetch()} />
       </AppShell>
     );
   }
