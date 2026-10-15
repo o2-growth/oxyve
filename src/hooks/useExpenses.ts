@@ -449,11 +449,13 @@ export function useCategories() {
   });
 }
 
+// Só ativos: chave igual à de useActiveCostCenters (usePolicy). Com ['cost-centers'] puro
+// ela colidia com a lista completa de Configurações e escondia os inativos de lá.
 export function useCostCenters() {
   const { profile } = useAuth();
 
   return useQuery({
-    queryKey: ['cost-centers'],
+    queryKey: ['cost-centers', 'active'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('cost_centers')
@@ -467,11 +469,12 @@ export function useCostCenters() {
   });
 }
 
+// Só ativos: mesma chave de useActiveProjects (ver useCostCenters acima).
 export function useProjects() {
   const { profile } = useAuth();
 
   return useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', 'active'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('projects')
