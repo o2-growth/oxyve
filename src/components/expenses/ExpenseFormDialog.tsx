@@ -422,7 +422,7 @@ export function ExpenseFormDialog({
   };
 
   // A despesa já foi gravada quando isto roda. Se o upload falhar, fecha o diálogo:
-  // reenviar o form criaria a despesa de novo e bateria na regra de duplicidade.
+  // reenviar o form criaria a despesa de novo (e ela viraria possível duplicidade).
   const uploadAfterSave = async (expenseId: string, reportId: string | null | undefined, failMessage: string) => {
     try {
       await uploadReceipt(expenseId, reportId);

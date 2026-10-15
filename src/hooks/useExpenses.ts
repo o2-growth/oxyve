@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { possibleDuplicateWarning } from '@/lib/possibleDuplicate';
 
 export interface ExpenseReport {
   id: string;
@@ -43,6 +44,8 @@ export interface Expense {
   /** Dono da despesa — o admin vê as da empresa inteira. */
   owner?: { full_name: string | null } | null;
   receipt_hash?: string | null;
+  /** Despesa mais antiga do mesmo usuário com mesma data+valor+categoria (o banco calcula). */
+  possible_duplicate_of?: string | null;
 }
 
 export interface ExpenseInput {
@@ -357,10 +360,12 @@ export function useCreateExpense() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
-      toast.success('Despesa criada com sucesso!');
+      // O trigger também marca o INSERT direto: avisa em vez do sucesso simples.
+      if (data?.possible_duplicate_of) toast.warning(possibleDuplicateWarning(data), { duration: 10000 });
+      else toast.success('Despesa criada com sucesso!');
     },
     onError: (error) => {
       toast.error('Erro ao criar despesa: ' + error.message);
@@ -382,11 +387,14 @@ export function useUpdateExpense() {
       if (error) throw error;
       return data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
       queryClient.invalidateQueries({ queryKey: ['expense', variables.id] });
-      toast.success('Despesa atualizada!');
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+      // Editar data, valor ou categoria recalcula a duplicidade no banco.
+      if (data?.possible_duplicate_of) toast.warning(possibleDuplicateWarning(data), { duration: 10000 });
+      else toast.success('Despesa atualizada!');
     },
     onError: (error) => {
       toast.error('Erro ao atualizar despesa: ' + error.message);

@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/constants';
+import { possibleDuplicateWarning } from '@/lib/possibleDuplicate';
+import { decisionErrorMessage } from '@/lib/businessError';
 
 export interface CurrentReport {
   id: string;
@@ -32,12 +34,23 @@ export interface CreateExpenseInReportResult {
     reimbursable_cents: number | null;
     date: string;
     is_out_of_policy: boolean;
+    possible_duplicate_of?: string | null;
   };
   /** null quando `late`: o ciclo já foi enviado e a despesa ficou avulsa. */
   report: CurrentReport | null;
   late?: boolean;
   late_report?: CurrentReport | null;
   is_out_of_policy: boolean;
+  /** Mesma data+valor+categoria de outra despesa sua: salva, mas o gestor vê o alerta. */
+  possible_duplicate?: boolean;
+  possible_duplicate_of?: string | null;
+}
+
+export interface CreateExpenseMultidayResult {
+  count: number;
+  expenses: CreateExpenseInReportResult[];
+  /** Quantos dias coincidiram com outra despesa (data+valor+categoria). */
+  possible_duplicates?: number;
 }
 
 export function useCurrentReport() {
@@ -182,6 +195,9 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['report-for-date'] });
 
       const e = data.expense;
+      // Não bloqueia (decisão 3): avisa quem lança, o gestor vê o selo na revisão.
+      const isDuplicate = !!data.possible_duplicate || !!e?.possible_duplicate_of;
+      if (isDuplicate) toast.warning(possibleDuplicateWarning(e), { duration: 10000 });
       if (data.late) {
         toast.warning(
           `O ${data.late_report?.title ?? 'relatório deste período'} já foi enviado. A despesa ficou avulsa e o gestor vai decidir se entra neste mês ou no próximo.`,
@@ -194,7 +210,7 @@ export function useCreateExpenseInReport() {
         );
       } else if (data.is_out_of_policy) {
         toast.warning('Despesa registrada como exceção — vai para revisão do aprovador.');
-      } else {
+      } else if (!isDuplicate) {
         // Diz em qual relatório entrou: pela data, a despesa pode cair num ciclo
         // diferente do que o Início está mostrando.
         toast.success(data.report?.title ? `Despesa adicionada ao ${data.report.title}.` : 'Despesa criada!');
@@ -203,9 +219,10 @@ export function useCreateExpenseInReport() {
     onError: (error) => {
       // Mensagens do motor de política (RAISE EXCEPTION) já são legíveis para o
       // usuário — mostra direto, sem o prefixo genérico de erro.
+      // Comprovante repetido ("Este comprovante já foi lançado...") também é P0001.
       const msg = error.message || 'Não foi possível criar a despesa.';
-      const isPolicyBlock = /limite|política|politica|período|periodo|relatório|relatorio/i.test(msg);
-      toast.error(isPolicyBlock ? msg : 'Erro ao criar despesa: ' + msg);
+      const isPolicyBlock = /limite|política|politica|período|periodo|relatório|relatorio|comprovante/i.test(msg);
+      toast.error(isPolicyBlock ? msg : decisionErrorMessage(error, 'Erro ao criar despesa: '));
     },
   });
 }
@@ -243,7 +260,7 @@ export function useCreateExpenseMultiday() {
         p_is_event: input.is_event ?? false,
       });
       if (error) throw error;
-      return data as unknown as { count: number; expenses: unknown[] };
+      return data as unknown as CreateExpenseMultidayResult;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
@@ -253,12 +270,22 @@ export function useCreateExpenseMultiday() {
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       queryClient.invalidateQueries({ queryKey: ['report-for-date'] });
-      toast.success(`${data.count} despesa(s) criada(s) — uma por dia.`);
+      const dups =
+        data.possible_duplicates ??
+        (data.expenses ?? []).filter((x) => x?.possible_duplicate || x?.expense?.possible_duplicate_of).length;
+      if (dups > 0) {
+        toast.warning(
+          `${data.count} despesa(s) criada(s) — uma por dia. ${dups === 1 ? '1 dia já tinha' : `${dups} dias já tinham`} despesa com mesma data, valor e categoria: foram salvas e o gestor verá o alerta de possível duplicidade.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(`${data.count} despesa(s) criada(s) — uma por dia.`);
+      }
     },
     onError: (error) => {
       const msg = error.message || 'Não foi possível criar as despesas.';
       const isPolicyBlock = /limite|política|politica|período|periodo|data/i.test(msg);
-      toast.error(isPolicyBlock ? msg : 'Erro ao criar despesas: ' + msg);
+      toast.error(isPolicyBlock ? msg : decisionErrorMessage(error, 'Erro ao criar despesas: '));
     },
   });
 }
