@@ -32,7 +32,8 @@ import {
   isAwaitingApprovalBy,
 } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
-import { Eye, CheckCircle2, XCircle, AlertTriangle, Loader2, FileText, Clock } from 'lucide-react';
+import { Eye, CheckCircle2, XCircle, AlertTriangle, Loader2, FileText, Clock, Copy } from 'lucide-react';
+import { POSSIBLE_DUPLICATE_LABEL } from '@/lib/possibleDuplicate';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -386,13 +387,25 @@ function ReviewStatus({ report, className }: { report: Report; className?: strin
   return (
     <p
       className={cn(
-        'flex items-center gap-1 text-xs',
+        'flex flex-wrap items-center gap-1 text-xs',
         state.hasRejected ? 'text-destructive' : state.canApprove ? 'text-primary' : 'text-muted-foreground',
         className,
       )}
     >
       {state.hasRejected && <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />}
       {state.label}
+      {/* Duplicidade não bloqueia no banco: a fila só avisa para o gestor conferir no Detalhe. */}
+      {(report.possible_duplicate_count ?? 0) > 0 && (
+        <Badge
+          variant="outline"
+          className="ml-1 gap-1 border-amber-500/50 px-1.5 py-0 text-[11px] font-normal text-amber-700 dark:text-amber-400"
+          data-testid="queue-possible-duplicate"
+        >
+          <Copy className="h-3 w-3" aria-hidden="true" />
+          {POSSIBLE_DUPLICATE_LABEL}
+          {(report.possible_duplicate_count ?? 0) > 1 ? ` (${report.possible_duplicate_count})` : ''}
+        </Badge>
+      )}
     </p>
   );
 }

@@ -63,7 +63,7 @@ const mockReports = [
     user: { full_name: 'Bia' },
     items: [
       { expense_id: 'e1', expense: { id: 'e1', description: 'Almoço', date: '2026-01-05', amount_cents: 6000, reimbursable_cents: 3000, is_reimbursable: true } },
-      { expense_id: 'e2', expense: { id: 'e2', description: 'Uber', date: '2026-01-06', amount_cents: 2000, reimbursable_cents: 2000, is_reimbursable: true } },
+      { expense_id: 'e2', expense: { id: 'e2', description: 'Uber', date: '2026-01-06', amount_cents: 2000, reimbursable_cents: 2000, is_reimbursable: true, possible_duplicate_of: 'e0' } },
       { expense_id: 'e3', expense: { id: 'e3', description: 'Cartão empresa', date: '2026-01-07', amount_cents: 1000, reimbursable_cents: 1000, is_reimbursable: false } },
     ],
     reviews: [
@@ -149,5 +149,12 @@ describe('useReports — N+1 fix (Aria-2)', () => {
     expect(r3?.reimbursable_cents).toBe(3000);
     expect(r3?.review).toEqual({ total: 3, reviewed: 2, rejected: 1 });
     expect(r3?.rejected_items).toEqual([{ description: 'Uber', date: '2026-01-06', comment: 'Sem nota' }]);
+  });
+
+  it('conta os itens marcados como possível duplicidade (selo da Fila)', async () => {
+    const { result } = renderHook(() => useReports(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.find((r) => r.id === 'r3')?.possible_duplicate_count).toBe(1);
+    expect(result.current.data?.find((r) => r.id === 'r1')?.possible_duplicate_count).toBe(0);
   });
 });

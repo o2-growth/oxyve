@@ -144,4 +144,17 @@ describe.each([false, true])('ApprovalQueue (mobile=%s)', (isMobile) => {
     expect(screen.queryByText('Revisão completa')).toBeNull();
     expect(screen.queryByRole('button', { name: /^Aprovar Vazio/ })).toBeNull();
   });
+
+  it('selo de possível duplicidade no resumo, sem bloquear a aprovação', () => {
+    mockReports = [report({ id: 'a', title: 'Dup', possible_duplicate_count: 2 })];
+    renderQueue();
+    expect(screen.getByTestId('queue-possible-duplicate')).toHaveTextContent('Possível duplicidade (2)');
+    expect(screen.getAllByRole('button', { name: /^Aprovar Dup/ }).length).toBeGreaterThan(0);
+  });
+
+  it('sem duplicidade não mostra o selo', () => {
+    mockReports = [report({ id: 'a', title: 'Limpo', possible_duplicate_count: 0 })];
+    renderQueue();
+    expect(screen.queryByTestId('queue-possible-duplicate')).toBeNull();
+  });
 });

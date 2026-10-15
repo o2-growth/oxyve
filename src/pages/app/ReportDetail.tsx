@@ -24,13 +24,14 @@ import { useExpensePolicy } from '@/hooks/usePolicy';
 import { buildRejectionDraft } from '@/components/reports/reportRules';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
+import { POSSIBLE_DUPLICATE_LABEL, possibleDuplicateHint } from '@/lib/possibleDuplicate';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet,
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip,
   ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, FileText, History,
-  Undo2, Info,
+  Undo2, Info, Copy,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -65,6 +66,8 @@ interface ReportExpense {
   receipt_path?: string | null;
   category?: { name: string } | null;
   cost_center?: { name: string } | null;
+  possible_duplicate_of?: string | null;
+  duplicate_of?: { id: string; date: string; description: string } | null;
 }
 interface ReportItem {
   id: string;
@@ -115,6 +118,9 @@ interface Row {
   outReason: string | null;
   latePending: boolean;
   notReimbursable: boolean;
+  /** Mesma data+valor+categoria de outra despesa da pessoa (o banco marca, não bloqueia). */
+  possibleDuplicate: boolean;
+  duplicateHint: string | null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -205,6 +211,8 @@ export default function ReportDetail() {
           outReason,
           latePending: rule?.late_decision === 'pending',
           notReimbursable,
+          possibleDuplicate: !!e.possible_duplicate_of,
+          duplicateHint: e.possible_duplicate_of ? possibleDuplicateHint(e.duplicate_of) : null,
         };
       }),
     [items, rules]
@@ -251,6 +259,7 @@ export default function ReportDetail() {
   const allReviewed = totalExpenses > 0 && reviewedCount >= totalExpenses;
   const reviewProgress = totalExpenses > 0 ? (reviewedCount / totalExpenses) * 100 : 0;
   const hasRejected = reviewedItems.some((item) => item.review_decision === 'rejected');
+  const duplicateCount = rows.filter((row) => row.possibleDuplicate).length;
 
   // Os hooks de ação invalidam só as listas; o detalhe (['report', id]) ficava velho
   // até recarregar. Refaz aqui tudo que a tela e a casca mostram.
@@ -969,6 +978,7 @@ export default function ReportDetail() {
                       Há despesas reprovadas
                     </p>
                   )}
+                  {duplicateCount > 0 && <DuplicateSummary count={duplicateCount} />}
                 </div>
                 <Separator />
               </>
@@ -1028,6 +1038,8 @@ export default function ReportDetail() {
               Aprovar "{report.title}" — {formatCurrency(reimbursableTotal)} a reembolsar ({formatCurrency(totalCents)} lançados)?
             </DialogDescription>
           </DialogHeader>
+          {/* Última chance de conferir antes de aprovar: o banco não bloqueia duplicidade. */}
+          {duplicateCount > 0 && <DuplicateSummary count={duplicateCount} />}
           <Textarea
             placeholder="Comentário (opcional)"
             value={comment}
@@ -1151,6 +1163,18 @@ function ExpenseReviewBadge({ decision }: { decision: string | null | undefined 
   );
 }
 
+/** Resumo/diálogo de aprovação: quantos itens o banco marcou como possível duplicidade. */
+function DuplicateSummary({ count }: { count: number }) {
+  return (
+    <p className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" data-testid="possible-duplicate-summary">
+      <Copy className="h-3 w-3 shrink-0" aria-hidden="true" />
+      {count === 1
+        ? '1 despesa com possível duplicidade — confira antes de aprovar.'
+        : `${count} despesas com possível duplicidade — confira antes de aprovar.`}
+    </p>
+  );
+}
+
 /** Valor da linha: reembolso vs. lançado quando o teto cortou, e dias cobertos. */
 function AmountBlock({ row, align = 'right' }: { row: Row; align?: 'left' | 'right' }) {
   const cur = row.e.currency ?? undefined;
@@ -1192,11 +1216,27 @@ function PolicyBadges({
   className?: string;
 }) {
   const showCap = row.capped && !row.notReimbursable;
-  if (!row.outReason && !row.latePending && !showCap) return null;
+  if (!row.outReason && !row.latePending && !showCap && !row.possibleDuplicate) return null;
   const teto = foodDailyLimit != null ? `é ${formatCurrency(foodDailyLimit)} por dia` : 'é diário';
   const capTip = `O teto de alimentação ${teto}${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-1', className)}>
+      {row.possibleDuplicate && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="cursor-help gap-1 border-amber-500/50 text-xs text-amber-700 dark:text-amber-400"
+              tabIndex={0}
+              data-testid="possible-duplicate-badge"
+            >
+              <Copy className="h-3 w-3" aria-hidden="true" />
+              {POSSIBLE_DUPLICATE_LABEL}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{row.duplicateHint}</TooltipContent>
+        </Tooltip>
+      )}
       {showCap && (
         <Tooltip>
           <TooltipTrigger asChild>

@@ -23,6 +23,8 @@ export interface Report {
   returned_at?: string | null;
   /** Revisão item a item do gestor (expense_reviews) — a Fila decide com isso. */
   review?: ReviewSummary;
+  /** Itens marcados pelo banco como possível duplicidade (mesma data+valor+categoria). */
+  possible_duplicate_count?: number;
   /** Itens reprovados na revisão, para o rascunho do motivo da devolução. */
   rejected_items?: Array<{ description: string; date: string; comment: string | null }>;
   user?: { full_name: string | null } | null;
@@ -39,6 +41,9 @@ export interface ReportWithItems extends Report {
       currency: string;
       receipt_path: string | null;
       is_out_of_policy: boolean;
+      possible_duplicate_of?: string | null;
+      /** A despesa mais antiga que coincide (data/descrição), quando visível. */
+      duplicate_of?: { id: string; date: string; description: string } | null;
       category: { name: string } | null;
     };
   }>;
@@ -78,6 +83,7 @@ type ItemExpense = {
   reimbursable_cents: number | null;
   is_reimbursable: boolean | null;
   status: string | null;
+  possible_duplicate_of?: string | null;
 };
 
 type ReportRow = {
@@ -117,7 +123,7 @@ export function useReports(filters?: { status?: string }) {
         .select(
           `*,
           user:profiles!user_id(full_name),
-          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status)),
+          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status, possible_duplicate_of)),
           reviews:expense_reviews(expense_id, decision, comment)`
         )
         .order('created_at', { ascending: false });
@@ -139,12 +145,14 @@ export function useReports(filters?: { status?: string }) {
         const rejected_items: NonNullable<Report['rejected_items']> = [];
         let total_cents = 0;
         let reimbursable_cents = 0;
+        let possible_duplicate_count = 0;
         for (const item of items) {
           const expense = pickFirst(item.expense);
           const expenseId = item.expense_id ?? expense?.id;
           if (expenseId) expenseIds.push(expenseId);
           // Reprovada (legado) não conta em nada.
           if (!expense || expense.status === 'rejected') continue;
+          if (expense.possible_duplicate_of) possible_duplicate_count += 1;
           total_cents += expense.amount_cents ?? 0;
           // Mesma conta do Detalhe: teto, não reembolsável e reprovada na revisão.
           const review = expenseId ? reviewById.get(expenseId) : undefined;
@@ -174,6 +182,7 @@ export function useReports(filters?: { status?: string }) {
           reimbursable_cents,
           expense_count: items.length,
           review: summarizeReview(expenseIds, reviews),
+          possible_duplicate_count,
           rejected_items,
           user: pickFirst(row.user),
         };
@@ -206,7 +215,7 @@ export function useReport(id: string) {
           `id,
            expense:expenses(
              id, date, description, amount_cents, currency, receipt_path,
-             is_out_of_policy, is_reimbursable, payment_method,
+             is_out_of_policy, is_reimbursable, payment_method, possible_duplicate_of,
              category:expense_categories(name),
              cost_center:cost_centers(name, code),
              project:projects(name, code)
@@ -225,6 +234,24 @@ export function useReport(id: string) {
         .from('expense_reviews')
         .select('*')
         .eq('report_id', id);
+
+      // Possível duplicidade: busca a outra despesa (data/descrição) para o gestor
+      // saber com qual comparar. Pode estar fora deste relatório.
+      type DupItem = { expense: { possible_duplicate_of?: string | null } | null };
+      const dupIds = [
+        ...new Set(
+          ((items || []) as DupItem[])
+            .map((it) => it.expense?.possible_duplicate_of)
+            .filter((v): v is string => !!v),
+        ),
+      ];
+      const duplicatesById: Record<string, { id: string; date: string; description: string }> = {};
+      if (dupIds.length) {
+        const { data: dups } = await supabase.from('expenses').select('id, date, description').in('id', dupIds);
+        (dups || []).forEach((d) => {
+          duplicatesById[d.id] = d;
+        });
+      }
 
       const approvalsWithProfiles = await Promise.all(
         (approvals || []).map(async (approval) => {
@@ -255,12 +282,16 @@ export function useReport(id: string) {
       // Attach review info to each item.
       type ItemRow = {
         id: string;
-        expense: { id: string; amount_cents?: number | null } | null;
+        expense: { id: string; amount_cents?: number | null; possible_duplicate_of?: string | null } | null;
       };
       const itemsWithReviews = ((items || []) as ItemRow[]).map((item) => {
         const review = item.expense ? reviewsByExpenseId[item.expense.id] : undefined;
+        const dupId = item.expense?.possible_duplicate_of;
         return {
           ...item,
+          expense: item.expense
+            ? { ...item.expense, duplicate_of: dupId ? duplicatesById[dupId] ?? null : null }
+            : item.expense,
           review_decision: review?.decision || null,
           review_comment: review?.comment || null,
         };
