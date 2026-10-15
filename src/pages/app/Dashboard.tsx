@@ -8,7 +8,7 @@ import { useAdminOverview } from '@/hooks/useAdminOverview';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
-import { isAwaitingApprovalBy } from '@/components/reports/reportRules';
+import { isAwaitingApprovalBy, reimbursableOf } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { FileText, TrendingUp, Clock, CheckCircle2, Undo2, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -42,8 +42,9 @@ export default function Dashboard() {
   const currentReportExpenses = currentReportId ? {
     total_cents: expenses
       ?.filter((e) => e.report?.id === currentReportId)
-      // Total do relatório = valor lançado (com o teto), não a soma das notas.
-      .reduce((sum, e) => sum + (e.reimbursable_cents ?? e.amount_cents), 0) || 0,
+      // Total do relatório = a reembolsar (com o teto, sem não reembolsável), a
+      // mesma conta do Detalhe — não a soma das notas.
+      .reduce((sum, e) => sum + reimbursableOf(e), 0) || 0,
     count: expenses
       ?.filter((e) => e.report?.id === currentReportId)
       .length || 0,
