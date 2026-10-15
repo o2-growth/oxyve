@@ -27,6 +27,7 @@ import { ReportCard } from '@/components/reports/ReportCard';
 import { ApprovalQueue } from '@/components/reports/ApprovalQueue';
 import { useReports, useDeleteReport, Report } from '@/hooks/useReports';
 import { useAuth } from '@/contexts/AuthContext';
+import { isAwaitingApprovalBy } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import {
   Plus,
@@ -92,7 +93,8 @@ export default function Reports() {
     return { total, reimbursable, nonReimbursable, average };
   }, [reports]);
 
-  const pendingCount = pendingReports?.filter((r) => r.user_id !== profile?.id).length || 0;
+  // Mesmo filtro da lista da Fila: contador e linhas não podem divergir.
+  const pendingCount = pendingReports?.filter((r) => isAwaitingApprovalBy(r, profile?.id)).length || 0;
 
   const handleStatusChange = (status: string) => {
     if (status === 'all') {

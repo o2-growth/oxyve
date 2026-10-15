@@ -8,6 +8,7 @@ import { useAdminOverview } from '@/hooks/useAdminOverview';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
+import { isAwaitingApprovalBy } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { FileText, TrendingUp, Clock, CheckCircle2, Undo2, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -74,7 +75,7 @@ export default function Dashboard() {
   const periodExpenses = expenses?.filter((e) => e.report?.id === currentReportId).slice(0, 5) ?? [];
 
   const pendingApproval = isManager
-    ? reports?.filter((r) => r.status === 'submitted' && r.user_id !== profile?.id).length || 0
+    ? reports?.filter((r) => isAwaitingApprovalBy(r, profile?.id)).length || 0
     : 0;
 
   return (
