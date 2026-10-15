@@ -148,6 +148,25 @@ describe('ExpenseFormDialog', () => {
     expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/sem comprovante/i), expect.anything());
   });
 
+  it('comprovante que sobe depois de salvar atualiza a lista de despesas', { timeout: 10_000 }, async () => {
+    mutateAsync.mockResolvedValue({ expense: { id: 'e1' }, report: { id: 'r1' }, is_out_of_policy: false });
+    attachReceipt.mockResolvedValue('o1/u1/r1/e1/1.jpg');
+    const qc = new QueryClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />
+      </QueryClientProvider>,
+    );
+    await attachPhoto(container);
+    await wait(1500);
+    await act(async () => {
+      fireEvent.click(screen.getByText('Criar Despesa'));
+    });
+    await waitFor(() => expect(attachReceipt).toHaveBeenCalled());
+    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['expenses'] }));
+  });
+
   it('data sem relatório do ciclo mostra o período e avisa que será criado ao salvar', () => {
     render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
     expect(screen.getByText(/será criado ao salvar/)).toBeInTheDocument();

@@ -48,20 +48,25 @@ describe('useReportForDate', () => {
     result.data = null;
   });
 
-  it('consulta reports do próprio usuário cujo período contém a data, sem RPC', async () => {
+  it('procura o relatório do ciclo como a RPC (dono + cycle_key), sem criar', async () => {
     result.data = { id: 'r1', title: 'Relatório Out 2026', status: 'draft' };
-    const { result: hook } = renderHook(() => useReportForDate('2026-10-10'), { wrapper });
+    const { result: hook } = renderHook(() => useReportForDate('2026-10-10', 24), { wrapper });
     await waitFor(() => expect(hook.current.isSuccess).toBe(true));
     expect(calls.rpc).not.toHaveBeenCalled();
     expect(calls.table).toBe('reports');
     expect(calls.filters).toContainEqual(['eq', 'user_id', 'u1']);
-    expect(calls.filters).toContainEqual(['lte', 'start_date', '2026-10-10']);
-    expect(calls.filters).toContainEqual(['gte', 'end_date', '2026-10-10']);
+    expect(calls.filters).toContainEqual(['eq', 'cycle_key', '2026-10']);
     expect(hook.current.data).toMatchObject({ id: 'r1' });
   });
 
+  it('o ciclo segue o dia de corte da política', async () => {
+    const { result: hook } = renderHook(() => useReportForDate('2026-10-15', 10), { wrapper });
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true));
+    expect(calls.filters).toContainEqual(['eq', 'cycle_key', '2026-11']);
+  });
+
   it('devolve null quando o relatório do ciclo ainda não existe', async () => {
-    const { result: hook } = renderHook(() => useReportForDate('2026-09-01'), { wrapper });
+    const { result: hook } = renderHook(() => useReportForDate('2026-09-01', 24), { wrapper });
     await waitFor(() => expect(hook.current.isSuccess).toBe(true));
     expect(hook.current.data).toBeNull();
     expect(calls.rpc).not.toHaveBeenCalled();

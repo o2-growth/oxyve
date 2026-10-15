@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   Dialog,
@@ -88,6 +89,7 @@ export function ExpenseFormDialog({
   const createExpenseInReport = useCreateExpenseInReport();
   const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
+  const queryClient = useQueryClient();
   const foodDailyLimit = (policy as { food_daily_limit_cents?: number | null } | undefined)?.food_daily_limit_cents ?? 3000;
   const { data: costCenters = [] } = useActiveCostCenters();
   const { data: projects = [] } = useActiveProjects();
@@ -237,7 +239,9 @@ export function ExpenseFormDialog({
     useCurrentReportFlow && watchedDate && !isEditing
       ? format(watchedDate, 'yyyy-MM-dd')
       : null;
-  const reportForDateQuery = useReportForDate(dateStrForQuery);
+  // O ciclo depende do dia de corte da política: só busca depois que ela carregou.
+  const cycleCutoffDay = policy?.cycle_cutoff_day ?? 24;
+  const reportForDateQuery = useReportForDate(policy ? dateStrForQuery : null, cycleCutoffDay);
   const currentReportForDate: CurrentReport | null = reportForDateQuery.data ?? null;
 
   useEffect(() => {
@@ -419,14 +423,16 @@ export function ExpenseFormDialog({
 
   // A despesa já foi gravada quando isto roda. Se o upload falhar, fecha o diálogo:
   // reenviar o form criaria a despesa de novo e bateria na regra de duplicidade.
-  const uploadAfterSave = async (expenseId: string, reportId: string | null | undefined, saved: string) => {
+  const uploadAfterSave = async (expenseId: string, reportId: string | null | undefined, failMessage: string) => {
     try {
       await uploadReceipt(expenseId, reportId);
+      // receipt_path foi gravado depois do onSuccess da mutation: sem isso a lista e o
+      // relatório seguiam mostrando a despesa sem comprovante até o próximo refetch.
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
     } catch (err) {
       console.error('receipt upload failed', err);
-      toast.error(`${saved} sem comprovante: o arquivo não subiu. Anexe depois em Despesas › Editar.`, {
-        duration: 8000,
-      });
+      toast.error(failMessage, { duration: 8000 });
     }
   };
 
@@ -487,7 +493,13 @@ export function ExpenseFormDialog({
         // Sem receipt_path no payload: mandar null em toda edição apagava o comprovante
         // anexado. O caminho do arquivo novo é gravado por attachReceipt.
         await updateExpense.mutateAsync({ id: expense.id, ...payload });
-        if (receiptFile) await uploadAfterSave(expense.id, expense.report?.id, 'Alterações salvas, mas a despesa continua');
+        if (receiptFile) {
+          await uploadAfterSave(
+            expense.id,
+            expense.report?.id,
+            'Alterações salvas, mas o comprovante novo não subiu. Tente anexar de novo em Despesas › Editar.',
+          );
+        }
       } else if (useCurrentReportFlow) {
         const result = await createExpenseInReport.mutateAsync(payload);
         if (receiptFile && result.expense?.id) {
@@ -495,7 +507,7 @@ export function ExpenseFormDialog({
           await uploadAfterSave(
             result.expense.id,
             result.report?.id ?? result.late_report?.id,
-            'Despesa salva',
+            'Despesa salva sem comprovante: o arquivo não subiu. Anexe depois em Despesas › Editar.',
           );
         }
       } else {
@@ -520,9 +532,8 @@ export function ExpenseFormDialog({
 
   // Ciclo da data ainda sem relatório: mostra o período calculado e avisa que o
   // relatório nasce ao salvar (antes ele era criado só por escolher a data).
-  const cycleCutoffDay = (policy as { cycle_cutoff_day?: number | null } | undefined)?.cycle_cutoff_day ?? 24;
   const reportToBeCreated =
-    !isEditing && !!dateStrForQuery && reportForDateQuery.isFetched && !currentReportForDate;
+    !isEditing && !!dateStrForQuery && !!policy && reportForDateQuery.isFetched && !currentReportForDate;
   const displayReport = isEditing
     ? null
     : currentReportForDate ||

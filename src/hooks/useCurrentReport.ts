@@ -97,23 +97,21 @@ export function cycleForDate(date: string, cutoffDay: number) {
  * no formulário (e o vazio vencido virava alerta de "relatório atrasado"). A criação
  * fica com create_expense_in_current_report, ao salvar. null = ainda não existe.
  */
-export function useReportForDate(date: string | null) {
+export function useReportForDate(date: string | null, cutoffDay: number) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['report-for-date', date, user?.id],
+    queryKey: ['report-for-date', date, cutoffDay, user?.id],
     queryFn: async () => {
       if (!date || !user) return null;
-      // Filtro por dono: gestor enxerga os relatórios da empresa pela RLS.
+      // Mesma busca da RPC (dono + cycle_key do ciclo pelo corte atual). Por intervalo de
+      // datas, um relatório de antes de mudarem o dia de corte aparecia aqui e a despesa
+      // ia para outro. Filtro por dono: gestor enxerga os relatórios da empresa pela RLS.
       const { data, error } = await supabase
         .from('reports')
         .select('id, title, start_date, end_date, due_date, cycle_key, status, submitted_at, submitted_late, created_at')
         .eq('user_id', user.id)
-        .not('cycle_key', 'is', null)
-        .lte('start_date', date)
-        .gte('end_date', date)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .eq('cycle_key', cycleForDate(date, cutoffDay).cycle_key)
         .maybeSingle();
       if (error) throw error;
       return (data as unknown as CurrentReport | null) ?? null;
