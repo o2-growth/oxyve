@@ -41,15 +41,17 @@ vi.mock('@/integrations/supabase/client', () => {
   return { supabase: { from: () => chain, rpc: (...args: unknown[]) => rpc(...args) } };
 });
 vi.mock('@/hooks/useAdminOverview', () => ({ useAdminOverview: () => overview }));
+let auth = { isAdmin: true, isManager: true, isLoading: false };
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ isAdmin: true, isManager: true, isLoading: false }),
+  useAuth: () => auth,
 }));
 vi.mock('@/components/layout/AppShell', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('@/components/gestao/GestaoUsuarios', () => ({ GestaoUsuarios: () => null }));
 vi.mock('@/components/gestao/GestaoCategorias', () => ({ GestaoCategorias: () => null }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const toastSuccess = vi.fn();
+vi.mock('sonner', () => ({ toast: { success: (...a: unknown[]) => toastSuccess(...a), error: vi.fn() } }));
 
 import Gestao from '@/pages/app/Gestao';
 
@@ -64,7 +66,7 @@ function renderGestao() {
   );
 }
 
-const okOverview = (): Overview => ({
+const okOverview = (extra: Record<string, unknown> = {}): Overview => ({
   isLoading: false,
   isError: false,
   error: null,
@@ -72,7 +74,7 @@ const okOverview = (): Overview => ({
   data: {
     cycle: { cycle_key: '2026-10', start: '2026-10-01', end: '2026-10-31', business_days: 22 },
     org: { colaboradores: 1, food_daily_limit_cents: 3000, food_budget_cents: 0, food_realized_cents: 0, transport_realized_cents: 0, total_a_pagar_cents: 8000, realized_cents: 0, aguardando_aprovacao_cents: 0 },
-    por_pessoa: [person],
+    por_pessoa: [{ ...person, ...extra }],
     por_setor: [],
     fora_do_prazo: [],
   },
@@ -107,6 +109,7 @@ describe('Gestão — pagamento por pessoa (uso-real-3)', () => {
   afterEach(() => cleanup());
   beforeEach(() => {
     rpc.mockClear();
+    auth = { isAdmin: true, isManager: true, isLoading: false };
     overview = okOverview();
   });
 
@@ -124,5 +127,59 @@ describe('Gestão — pagamento por pessoa (uso-real-3)', () => {
     await vi.waitFor(() =>
       expect(rpc).toHaveBeenCalledWith('mark_expenses_paid', { p_expense_ids: ['a'] }),
     );
+  });
+});
+
+describe('Gestão — pagamento só admin e dados de pagamento (decisões 1 e 4)', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    rpc.mockClear();
+    toastSuccess.mockClear();
+  });
+
+  it('gestor vê os valores mas não o "Confirmar pagamento"', async () => {
+    auth = { isAdmin: false, isManager: true, isLoading: false };
+    overview = okOverview({ pix_key: 'bia@x.com', pix_key_type: 'email' });
+    renderGestao();
+    fireEvent.click(screen.getByText('Bia'));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText(/só\s+administradores confirmam o pagamento/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/a pagar R\$\s?30,00/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: /Confirmar pagamento/ })).toBeNull();
+    // Dados bancários aparecem só no fluxo de pagamento (admin).
+    expect(within(dialog).queryByTestId('payment-details')).toBeNull();
+  });
+
+  it('admin vê PIX (tipo), banco/agência/conta e copia a chave', async () => {
+    auth = { isAdmin: true, isManager: true, isLoading: false };
+    overview = okOverview({
+      pix_key: 'bia@x.com',
+      pix_key_type: 'email',
+      bank_name: 'Banco X',
+      bank_branch: '0001',
+      bank_account: '12345-6',
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    renderGestao();
+    fireEvent.click(screen.getByText('Bia'));
+    const dialog = await screen.findByRole('dialog');
+    const details = await within(dialog).findByTestId('payment-details');
+    expect(details.textContent).toMatch(/PIX \(E-mail\)/);
+    expect(details.textContent).toContain('bia@x.com');
+    expect(details.textContent).toContain('Banco X · Ag. 0001 · Conta 12345-6');
+    fireEvent.click(within(details).getByRole('button', { name: /Copiar chave PIX/ }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('bia@x.com'));
+    expect(toastSuccess).toHaveBeenCalledWith('Chave PIX copiada!');
+  });
+
+  it('admin sem dados de pagamento da pessoa vê o aviso', async () => {
+    auth = { isAdmin: true, isManager: true, isLoading: false };
+    overview = okOverview({ pix_key: null, bank_name: null, bank_branch: '', bank_account: null });
+    renderGestao();
+    fireEvent.click(screen.getByText('Bia'));
+    const dialog = await screen.findByRole('dialog');
+    expect(await within(dialog).findByText('Pessoa sem dados de pagamento cadastrados.')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Confirmar pagamento/ })).toBeInTheDocument();
   });
 });

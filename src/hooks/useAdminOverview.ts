@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, type PixKeyType } from '@/contexts/AuthContext';
 
 /**
  * Painel Admin de Gestão Financeira.
@@ -43,6 +43,12 @@ export interface PersonRow {
   excecoes: number;
   transport_projected_cents: number;
   food_projected_cents: number;
+  /** Dados de pagamento de quem recebe (profile), para o admin conferir ao pagar. */
+  pix_key?: string | null;
+  pix_key_type?: PixKeyType | null;
+  bank_name?: string | null;
+  bank_branch?: string | null;
+  bank_account?: string | null;
 }
 
 export interface SectorRow {
