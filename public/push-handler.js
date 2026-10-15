@@ -71,3 +71,20 @@ self.addEventListener('notificationclick', (event) => {
     })(),
   );
 });
+
+// Caches de versões antigas do SW que guardavam respostas do Supabase (REST,
+// functions) e comprovantes do Storage. O cleanupOutdatedCaches do Workbox só
+// cuida do precache, então apagamos estes na ativação do SW novo.
+const LEGACY_RUNTIME_CACHES = ['supabase-rest', 'supabase-functions', 'images'];
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        await Promise.all(LEGACY_RUNTIME_CACHES.map((name) => caches.delete(name)));
+      } catch (err) {
+        // Falha aqui não pode impedir a ativação do SW.
+      }
+    })(),
+  );
+});

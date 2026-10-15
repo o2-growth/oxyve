@@ -29,3 +29,15 @@ test('build de produção: service worker registra e o login renderiza sem erro'
   await expect(page.getByRole('button', { name: /entrar com google/i })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('service worker não guarda respostas do Supabase nem imagens de outra origem', async ({ request }) => {
+  const sw = await (await request.get('/sw.js')).text();
+  expect(sw).not.toContain('supabase-rest');
+  expect(sw).not.toContain('supabase-functions');
+  expect(sw).toContain('images-v2');
+  expect(sw).toContain('self.location.origin');
+  // O handler de push segue importado e apaga os caches antigos na ativação.
+  expect(sw).toContain('push-handler.js');
+  const handler = await (await request.get('/push-handler.js')).text();
+  expect(handler).toContain("'supabase-rest'");
+});
