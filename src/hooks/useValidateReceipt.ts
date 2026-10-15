@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
@@ -80,18 +80,26 @@ function formatCurrency(cents: number): string {
 }
 
 export function useValidateReceipt() {
-  const [state, setState] = useState<ValidationState>({
+  const [state, setRawState] = useState<ValidationState>({
     status: 'idle',
     result: null,
     divergences: [],
     errorMessage: null,
   });
 
+  // Só a leitura mais recente grava o estado: o form revalida quando data/valor mudam e
+  // a IA pode responder fora de ordem (resposta antiga com divergência que já não vale).
+  const requestIdRef = useRef(0);
+
   const validate = useCallback(async (
     file: File,
     formDate: string, // YYYY-MM-DD
     formAmountCents: number,
   ) => {
+    const requestId = ++requestIdRef.current;
+    const setState = (next: ValidationState) => {
+      if (requestId === requestIdRef.current) setRawState(next);
+    };
     setState({ status: 'validating', result: null, divergences: [], errorMessage: null });
 
     try {
@@ -180,7 +188,8 @@ export function useValidateReceipt() {
   }, []);
 
   const reset = useCallback(() => {
-    setState({ status: 'idle', result: null, divergences: [], errorMessage: null });
+    requestIdRef.current++;
+    setRawState({ status: 'idle', result: null, divergences: [], errorMessage: null });
   }, []);
 
   // Identidade estável: o form usa o retorno em deps de useCallback/useEffect; um objeto
