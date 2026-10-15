@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { prepareImageForOcr } from '@/lib/receiptImage';
 
 export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
 
@@ -56,18 +57,30 @@ export interface ValidationState {
   errorMessage: string | null;
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      // Remove the data:...;base64, prefix
-      const base64 = dataUrl.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+/**
+ * Erro HTTP da função (supabase.functions.invoke devolve o Response em
+ * error.context). 413 (foto grande) e 429 (cota de leituras) são aviso: a leitura
+ * automática é ajuda, o lançamento segue com data e valor à mão.
+ */
+async function friendlyInvokeError(error: unknown): Promise<string> {
+  const ctx = (error as { context?: unknown } | null)?.context as
+    | { status?: number; clone?: () => { json: () => Promise<unknown> }; json?: () => Promise<unknown> }
+    | undefined;
+  const status = typeof ctx?.status === 'number' ? ctx.status : null;
+  let serverMsg: string | null = null;
+  try {
+    const body = (await (ctx?.clone ? ctx.clone().json() : ctx?.json?.())) as { error?: unknown } | undefined;
+    if (typeof body?.error === 'string' && body.error.trim()) serverMsg = body.error.trim();
+  } catch {
+    // Corpo sem JSON: fica a mensagem padrão do status.
+  }
+  if (status === 429) {
+    return serverMsg ?? 'Limite de leituras automáticas atingido. Preencha data e valor à mão — a despesa pode ser salva normalmente.';
+  }
+  if (status === 413) {
+    return serverMsg ?? 'Foto grande demais para a leitura automática. Preencha data e valor à mão — a despesa pode ser salva normalmente.';
+  }
+  return 'Não foi possível validar o comprovante.';
 }
 
 function formatDate(dateStr: string): string {
@@ -115,19 +128,17 @@ export function useValidateReceipt() {
         return;
       }
 
-      const image_base64 = await fileToBase64(file);
+      // Reduz no cliente (máx. 1600px, JPEG 0,8): foto de celular cheia batia no 413.
+      const { base64: image_base64, mimeType: sentMime } = await prepareImageForOcr(file);
 
       const { data, error } = await supabase.functions.invoke('validate-receipt', {
-        body: { image_base64, mime_type: mimeType },
+        body: { image_base64, mime_type: sentMime },
       });
 
       if (error) {
-        setState({
-          status: 'error',
-          result: null,
-          divergences: [],
-          errorMessage: 'Não foi possível validar o comprovante.',
-        });
+        // 'error' só mostra o aviso; não trava o salvar.
+        const errorMessage = await friendlyInvokeError(error);
+        setState({ status: 'error', result: null, divergences: [], errorMessage });
         return;
       }
 

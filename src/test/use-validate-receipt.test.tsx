@@ -61,4 +61,30 @@ describe('useValidateReceipt', () => {
     await act(async () => resolveOld({ data: read, error: null }));
     expect(result.current.status).toBe('idle');
   });
+
+  it.each([
+    [429, 'Limite de leituras automáticas atingido. Preencha data e valor à mão — a despesa pode ser salva normalmente.'],
+    [413, 'Imagem muito grande para leitura automática. Envie uma foto menor (até ~6 MB).'],
+  ])('HTTP %s vira aviso com a mensagem da função (não trava o salvar)', async (status, msg) => {
+    const response = new Response(JSON.stringify({ error: msg }), { status });
+    invoke.mockResolvedValueOnce({ data: null, error: { message: 'non-2xx', context: response } });
+    const { result } = renderHook(() => useValidateReceipt());
+    await act(() => result.current.validate(file, '2026-10-10', 5000));
+    expect(result.current.status).toBe('error');
+    expect(result.current.errorMessage).toBe(msg);
+  });
+
+  it('429 sem corpo legível ainda dá aviso em pt-BR', async () => {
+    invoke.mockResolvedValueOnce({ data: null, error: { message: 'x', context: new Response('oops', { status: 429 }) } });
+    const { result } = renderHook(() => useValidateReceipt());
+    await act(() => result.current.validate(file, '2026-10-10', 5000));
+    expect(result.current.errorMessage).toMatch(/^Limite de leituras automáticas/);
+  });
+
+  it('envia o base64 e o tipo preparados para a leitura', async () => {
+    invoke.mockResolvedValueOnce({ data: read, error: null });
+    const { result } = renderHook(() => useValidateReceipt());
+    await act(() => result.current.validate(file, '2026-10-10', 5000));
+    expect(invoke).toHaveBeenCalledWith('validate-receipt', { body: { image_base64: 'YWJj', mime_type: 'image/jpeg' } });
+  });
 });
