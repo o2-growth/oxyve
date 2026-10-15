@@ -8,7 +8,7 @@ import { useAdminOverview } from '@/hooks/useAdminOverview';
 import { useExpenses } from '@/hooks/useExpenses';
 import { useReports } from '@/hooks/useReports';
 import { useDashboardContext } from '@/hooks/useCurrentReport';
-import { isAwaitingApprovalBy, reimbursableOf } from '@/components/reports/reportRules';
+import { isAwaitingApprovalBy, isReturnedReport, reimbursableOf } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { FileText, TrendingUp, Clock, CheckCircle2, Undo2, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -332,7 +332,14 @@ export default function Dashboard() {
                         className="flex min-h-11 items-center justify-between gap-2 rounded-lg border p-3 transition-colors hover:bg-muted/50 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium truncate text-sm">{report.title}</p>
+                          <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                            <span className="truncate">{report.title}</span>
+                            {isReturnedReport(report) && (
+                              <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
+                                Devolvido
+                              </span>
+                            )}
+                          </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {isManager && <>{owner} • </>}
                             {report.expense_count === 1 ? '1 despesa' : `${report.expense_count ?? 0} despesas`}

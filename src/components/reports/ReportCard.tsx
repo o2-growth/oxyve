@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ReportStatusBadge } from '@/components/reports/ReportStatusBadge';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { Report } from '@/hooks/useReports';
 import { ChevronRight, Clock } from 'lucide-react';
@@ -22,7 +22,7 @@ export function ReportCard({ report }: ReportCardProps) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-semibold truncate">{report.title}</p>
-              <StatusBadge status={report.status} type="report" />
+              <ReportStatusBadge report={report} />
             </div>
             
             {report.user?.full_name && (
