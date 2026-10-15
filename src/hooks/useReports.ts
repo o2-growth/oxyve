@@ -313,31 +313,6 @@ export function useCreateReport() {
   });
 }
 
-export function useUpdateReport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ id, ...input }: ReportInput & { id: string }) => {
-      const { data, error } = await supabase
-        .from('reports')
-        .update(input)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', variables.id] });
-      toast.success('Relatório atualizado!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao atualizar relatório: ' + error.message);
-    },
-  });
-}
-
 export function useDeleteReport() {
   const queryClient = useQueryClient();
 
@@ -439,85 +414,6 @@ export function useRemoveExpenseFromReport() {
 //  - retorna `submitted_late` para sinalizar atraso.
 // Mantemos só o RPC para evitar duas fontes de verdade divergentes.
 
-export function useApproveReport() {
-  const queryClient = useQueryClient();
-  const { profile } = useAuth();
-
-  return useMutation({
-    mutationFn: async ({ reportId, decision, comment }: { reportId: string; decision: 'approved' | 'rejected'; comment?: string }) => {
-      const { data: items } = await supabase
-        .from('report_items')
-        .select('expense_id')
-        .eq('report_id', reportId);
-
-      const { error: approvalError } = await supabase.from('report_approvals').insert({
-        report_id: reportId,
-        approver_id: profile!.id,
-        decision,
-        comment,
-      });
-      if (approvalError) throw approvalError;
-
-      const { error: reportError } = await supabase
-        .from('reports')
-        .update({ status: decision })
-        .eq('id', reportId);
-      if (reportError) throw reportError;
-
-      if (items?.length) {
-        const expenseIds = items.map((i) => i.expense_id);
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .update({ status: decision })
-          .in('id', expenseIds);
-        if (expenseError) throw expenseError;
-      }
-    },
-    onSuccess: (_, { reportId, decision }) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao processar aprovação: ' + error.message);
-    },
-  });
-}
-
-export function useMarkReportAsPaid() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reportId: string) => {
-      const { data: items } = await supabase
-        .from('report_items')
-        .select('expense_id')
-        .eq('report_id', reportId);
-
-      const { error: reportError } = await supabase
-        .from('reports')
-        .update({ status: 'paid' })
-        .eq('id', reportId);
-      if (reportError) throw reportError;
-
-      if (items?.length) {
-        const expenseIds = items.map((i) => i.expense_id);
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .update({ status: 'paid' })
-          .in('id', expenseIds);
-        if (expenseError) throw expenseError;
-      }
-    },
-    onSuccess: (_, reportId) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success('Relatório marcado como pago!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao marcar como pago: ' + error.message);
-    },
-  });
-}
+// useApproveReport, useMarkReportAsPaid e useUpdateReport (escrita direta em
+// reports/expenses) foram removidos: o banco bloqueia esse caminho e a decisão e o
+// pagamento passam só pelas RPCs de useReportActions.
