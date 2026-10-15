@@ -51,3 +51,20 @@ describe('useReviewExpense — erros', () => {
     expect(toastError).toHaveBeenCalledWith('Erro ao salvar revisão: connection failure');
   });
 });
+
+describe('useReviewExpense — sucesso', () => {
+  it('invalida também a lista de relatórios (a Fila decide pela revisão)', async () => {
+    nextError = null;
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useReviewExpense(), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ expenseId: 'e1', reportId: 'r1', decision: 'approved' });
+    });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['report', 'r1'] });
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['reports'] });
+  });
+});

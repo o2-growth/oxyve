@@ -136,4 +136,12 @@ describe.each([false, true])('ApprovalQueue (mobile=%s)', (isMobile) => {
       expect(mutateAsync).toHaveBeenCalledWith({ reportId: 'a', decision: 'rejected', comment: 'Falta nota' }),
     );
   });
+
+  it('relatório sem despesas não diz "Revisão completa" nem oferece decisão', () => {
+    mockReports = [report({ id: 'a', title: 'Vazio', expense_count: 0, review: { total: 0, reviewed: 0, rejected: 0 } })];
+    renderQueue();
+    expect(screen.getByText('Sem despesas')).toBeInTheDocument();
+    expect(screen.queryByText('Revisão completa')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Aprovar Vazio/ })).toBeNull();
+  });
 });

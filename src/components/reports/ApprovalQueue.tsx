@@ -49,11 +49,13 @@ function decisionState(report: Report) {
   const review = report.review ?? { ...EMPTY_REVIEW, total: report.expense_count ?? 0 };
   const pending = Math.max(review.total - review.reviewed, 0);
   const label =
-    review.rejected > 0
-      ? `${review.rejected === 1 ? '1 item reprovado' : `${review.rejected} itens reprovados`} na revisão`
-      : pending > 0
-        ? `Revisão: ${review.reviewed} de ${review.total}`
-        : 'Revisão completa';
+    review.total === 0
+      ? 'Sem despesas'
+      : review.rejected > 0
+        ? `${review.rejected === 1 ? '1 item reprovado' : `${review.rejected} itens reprovados`} na revisão`
+        : pending > 0
+          ? `Revisão: ${review.reviewed} de ${review.total}`
+          : 'Revisão completa';
   return {
     canApprove: canApproveDirectly(review),
     canReject: canRejectDirectly(review),

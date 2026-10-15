@@ -41,6 +41,9 @@ export function useReviewExpense() {
     },
     onSuccess: (_, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
+      // A Fila decide pelo estado da revisão (useReports): sem isto, ao voltar do
+      // Detalhe ela seguia mostrando "Revisar" até o cache vencer.
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
     },
     onError: (error) => {
       // A policy de UPDATE só deixa quem revisou alterar a própria revisão: com dois
