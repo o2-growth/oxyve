@@ -279,6 +279,7 @@ export type Database = {
           notes: string | null
           org_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of: string | null
           project_id: string | null
           receipt_hash: string | null
           receipt_path: string | null
@@ -305,6 +306,7 @@ export type Database = {
           notes?: string | null
           org_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of?: string | null
           project_id?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
@@ -331,6 +333,7 @@ export type Database = {
           notes?: string | null
           org_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of?: string | null
           project_id?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
@@ -359,6 +362,13 @@ export type Database = {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_possible_duplicate_of_fkey"
+            columns: ["possible_duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {

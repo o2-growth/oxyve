@@ -255,6 +255,10 @@ SELECT t.ok((SELECT last_rejection_comment = '• táxi aeroporto: ainda sem not
 SELECT t.as_user('00000000-0000-0000-0000-0000000000e2');
 SELECT t.ok((SELECT public.submit_report((SELECT (j->'report'->>'id')::uuid FROM b1)) IS NOT NULL), 'devolver: reenvio ok');
 SELECT t.as_user('00000000-0000-0000-0000-0000000000a9');
+-- Decisão 2 (20261015130000): aprovar exige todos os itens revisados na rodada nova.
+SELECT t.rows(format($q$INSERT INTO public.expense_reviews (expense_id, report_id, reviewer_id, decision)
+  SELECT ri.expense_id, ri.report_id, '00000000-0000-0000-0000-0000000000a9', 'approved'
+    FROM public.report_items ri WHERE ri.report_id = %L$q$, (SELECT j->'report'->>'id' FROM b1)));
 SELECT t.ok((SELECT public.admin_decide_report((SELECT (j->'report'->>'id')::uuid FROM b1), 'approved')->>'decision') = 'approved',
   'devolver: aprovação depois do reenvio ok (revisões limpas)');
 
