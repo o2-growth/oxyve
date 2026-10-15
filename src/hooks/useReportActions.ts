@@ -2,6 +2,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+/**
+ * Recusa de regra de negócio (RAISE EXCEPTION no banco, código P0001) já vem em
+ * pt-BR e explica o que fazer ("Revise todos os itens antes de aprovar (2 de 5
+ * revisados)."); vai direto no toast. Erro técnico ganha um prefixo.
+ */
+export function decisionErrorMessage(error: unknown, prefix: string): string {
+  const e = (error ?? {}) as { code?: unknown; message?: unknown };
+  const msg = typeof e.message === 'string' ? e.message.trim() : '';
+  if (e.code === 'P0001' && msg) return msg;
+  return `${prefix}${msg || 'tente novamente.'}`;
+}
+
 export function useApproveReportRpc() {
   const queryClient = useQueryClient();
 
@@ -30,8 +42,17 @@ export function useApproveReportRpc() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
     },
-    onError: (error) => {
-      toast.error('Erro ao processar: ' + error.message);
+    onError: (error, { decision }) => {
+      // Fila e Detalhe podem estar com dado antigo (outro gestor revisou/reprovou):
+      // recarrega para os botões refletirem o que o banco viu.
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+      toast.error(
+        decisionErrorMessage(
+          error,
+          decision === 'approved' ? 'Erro ao aprovar: ' : 'Erro ao reprovar: ',
+        ),
+      );
     },
   });
 }
@@ -54,7 +75,7 @@ export function useMarkReportPaidRpc() {
       toast.success('Relatório marcado como pago!');
     },
     onError: (error) => {
-      toast.error('Erro: ' + error.message);
+      toast.error(decisionErrorMessage(error, 'Erro ao marcar como pago: '));
     },
   });
 }
