@@ -68,23 +68,53 @@ export function useDashboardContext() {
   });
 }
 
+const MONTH_ABBR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+const ymd = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 /**
- * B4 — Sprint 0: trocada de useMutation por useQuery para evitar race
- * condition (resposta antiga sobrescrevendo nova). React Query dedupe por
- * queryKey + cache resolve sem precisar de debounce explícito.
+ * Limites do ciclo que contém `date` (YYYY-MM-DD), com a mesma conta de
+ * get_or_create_report_for_date: começa no dia de corte, termina na véspera do corte
+ * seguinte e leva o mês do vencimento no título. Só para exibir — quem cria é o banco.
  */
-export function useReportForDate(date: string | null) {
+export function cycleForDate(date: string, cutoffDay: number) {
+  const [y, m, d] = date.split('-').map(Number);
+  const start = d >= cutoffDay ? new Date(y, m - 1, cutoffDay) : new Date(y, m - 2, cutoffDay);
+  const due = new Date(start.getFullYear(), start.getMonth() + 1, cutoffDay);
+  const end = new Date(due.getFullYear(), due.getMonth(), due.getDate() - 1);
+  return {
+    start_date: ymd(start),
+    end_date: ymd(end),
+    due_date: ymd(due),
+    cycle_key: ymd(due).slice(0, 7),
+    title: `Relatório ${MONTH_ABBR[due.getMonth()]} ${due.getFullYear()}`,
+  };
+}
+
+/**
+ * Relatório do ciclo que contém a data, só leitura. Antes chamava
+ * get_or_create_report_for_date, que criava um relatório vazio a cada data escolhida
+ * no formulário (e o vazio vencido virava alerta de "relatório atrasado"). A criação
+ * fica com create_expense_in_current_report, ao salvar. null = ainda não existe.
+ */
+export function useReportForDate(date: string | null, cutoffDay: number) {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: ['report-for-date', date, user?.id],
+    queryKey: ['report-for-date', date, cutoffDay, user?.id],
     queryFn: async () => {
-      if (!date) return null;
-      const { data, error } = await supabase.rpc('get_or_create_report_for_date', {
-        p_date: date,
-      });
+      if (!date || !user) return null;
+      // Mesma busca da RPC (dono + cycle_key do ciclo pelo corte atual). Por intervalo de
+      // datas, um relatório de antes de mudarem o dia de corte aparecia aqui e a despesa
+      // ia para outro. Filtro por dono: gestor enxerga os relatórios da empresa pela RLS.
+      const { data, error } = await supabase
+        .from('reports')
+        .select('id, title, start_date, end_date, due_date, cycle_key, status, submitted_at, submitted_late, created_at')
+        .eq('user_id', user.id)
+        .eq('cycle_key', cycleForDate(date, cutoffDay).cycle_key)
+        .maybeSingle();
       if (error) throw error;
-      return data as unknown as CurrentReport;
+      return (data as unknown as CurrentReport | null) ?? null;
     },
     enabled: !!date && !!user,
     staleTime: 30_000,
@@ -139,7 +169,9 @@ export function useCreateExpenseInReport() {
       queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
-      
+      // O relatório do ciclo pode ter acabado de ser criado pela RPC.
+      queryClient.invalidateQueries({ queryKey: ['report-for-date'] });
+
       const e = data.expense;
       if (data.late) {
         toast.warning(
@@ -211,6 +243,7 @@ export function useCreateExpenseMultiday() {
       queryClient.invalidateQueries({ queryKey: ['report'] });
       queryClient.invalidateQueries({ queryKey: ['current-report'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
+      queryClient.invalidateQueries({ queryKey: ['report-for-date'] });
       toast.success(`${data.count} despesa(s) criada(s) — uma por dia.`);
     },
     onError: (error) => {
