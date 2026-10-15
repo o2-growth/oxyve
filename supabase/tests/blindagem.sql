@@ -91,7 +91,7 @@ SELECT t.ok((SELECT reimbursable_cents FROM public.expenses WHERE id = (SELECT (
   'A1: ...mas o valor volta para o teto (30)');
 
 SELECT t.raises(format($q$UPDATE public.expenses SET org_id = gen_random_uuid() WHERE id = %L$q$, (SELECT j->'expense'->>'id' FROM r1)),
-  '', 'A1: trocar org_id da despesa é recusado');
+  'empresa', 'A1: trocar org_id da despesa é recusado');
 SELECT t.ok(t.rows(format($q$UPDATE public.expenses SET late_decision = 'this_month', is_out_of_policy = true WHERE id = %L$q$,
   (SELECT j->'expense'->>'id' FROM r1))) = 1, 'A1: PATCH de late_decision/is_out_of_policy roda...');
 SELECT t.ok((SELECT late_decision IS NULL AND NOT is_out_of_policy FROM public.expenses WHERE id = (SELECT (j->'expense'->>'id')::uuid FROM r1)),
@@ -136,7 +136,7 @@ SELECT t.as_user('00000000-0000-0000-0000-0000000000e1');
 SELECT t.raises(format($q$INSERT INTO public.report_items (report_id, expense_id) VALUES (%L, %L)$q$,
   (SELECT j->'report'->>'id' FROM r1), (SELECT id FROM bia)), 'policy', 'A3: anexar despesa de colega ao próprio relatório é recusado');
 SELECT t.raises(format($q$INSERT INTO public.report_items (report_id, expense_id) VALUES (gen_random_uuid(), %L)$q$,
-  (SELECT j->'expense'->>'id' FROM r1)), '', 'A3: anexar despesa a relatório inexistente é recusado');
+  (SELECT j->'expense'->>'id' FROM r1)), 'policy', 'A3: anexar despesa a relatório inexistente é recusado');
 
 -- Relatório manual (AddToReportDialog) e despesa avulsa própria: continua funcionando.
 CREATE TEMP TABLE manual AS SELECT gen_random_uuid() AS id;
@@ -154,7 +154,7 @@ SELECT t.raises(format($q$INSERT INTO public.report_items (report_id, expense_id
 SELECT t.raises(format($q$UPDATE public.reports SET due_date = due_date + 30 WHERE id = %L$q$, (SELECT j->'report'->>'id' FROM r1)),
   'prazo', 'A4: dono não muda o prazo do próprio relatório por PATCH');
 SELECT t.raises(format($q$UPDATE public.reports SET status = 'submitted' WHERE id = %L$q$, (SELECT j->'report'->>'id' FROM r1)),
-  '', 'A4: dono não envia o relatório por PATCH (só pela RPC)');
+  'Situação', 'A4: dono não envia o relatório por PATCH (só pela RPC)');
 
 -- ================================================================ fluxo normal: enviar → revisar → aprovar → pagar
 SELECT t.ok((SELECT public.submit_report((SELECT (j->'report'->>'id')::uuid FROM r1)) IS NOT NULL), 'fluxo: submit_report ok');
@@ -205,6 +205,9 @@ SELECT t.ok(t.rows(format($q$INSERT INTO public.expense_reviews (expense_id, rep
   (SELECT j->'expense'->>'id' FROM r1), (SELECT j->'report'->>'id' FROM r1))) = 1, 'uso-real-8: gestor 2 muda a revisão do gestor 1 (upsert)');
 SELECT t.raises(format($q$UPDATE public.expense_reviews SET reviewer_id = '00000000-0000-0000-0000-0000000000a9' WHERE report_id = %L$q$,
   (SELECT j->'report'->>'id' FROM r1)), 'policy', 'uso-real-8: não dá para gravar a revisão em nome de outro gestor');
+SELECT t.raises(format($q$UPDATE public.expense_reviews SET report_id = %L WHERE report_id = %L$q$,
+  (SELECT id FROM manual), (SELECT j->'report'->>'id' FROM r1)), 'policy',
+  'uso-real-8: não dá para mover a revisão para relatório fora de aprovação');
 
 -- Aprova e paga pelas RPCs.
 SELECT t.ok((SELECT public.admin_decide_report((SELECT (j->'report'->>'id')::uuid FROM r1), 'approved')->>'decision') = 'approved',
@@ -298,6 +301,18 @@ SELECT t.ok((SELECT (pp->>'aguardando_aprovacao_cents')::int FROM json_array_ele
 RESET role;
 SELECT t.ok((SELECT cycle_start FROM public.cycle_bounds(gen_random_uuid(), DATE '2026-10-24')) = DATE '2026-09-25',
   'D3: org sem política usa corte 25 (24/10 ainda é do ciclo que começou em 25/09)');
+-- Org nova sem expense_policies: get_or_create_current_report cria a política e usa 25.
+INSERT INTO public.organizations (id, name) VALUES ('00000000-0000-0000-0000-0000000000b1', 'Org sem política');
+INSERT INTO public.org_domains (org_id, domain) VALUES ('00000000-0000-0000-0000-0000000000b1', 'nova.o2inc.com.br');
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
+  ('00000000-0000-0000-0000-0000000000b9', 'dora@nova.o2inc.com.br', '{"full_name":"Dora Nova"}');
+SELECT t.ok(NOT EXISTS (SELECT 1 FROM public.expense_policies WHERE org_id = '00000000-0000-0000-0000-0000000000b1'),
+  'D3: org nova começa sem política');
+SELECT t.as_user('00000000-0000-0000-0000-0000000000b9');
+CREATE TEMP TABLE cur AS SELECT public.get_or_create_current_report() AS j;
+RESET role;
+SELECT t.ok((SELECT EXTRACT(DAY FROM (j->>'start_date')::date) = 25 AND EXTRACT(DAY FROM (j->>'due_date')::date) = 25 FROM cur),
+  'D3: get_or_create_current_report em org sem política usa corte 25');
 
 -- ================================================================ B7
 SELECT t.ok(NOT has_function_privilege('anon', 'public.admin_decide_report(uuid,text,text)', 'EXECUTE'), 'B7: anon sem EXECUTE em admin_decide_report');
@@ -305,6 +320,7 @@ SELECT t.ok(NOT has_function_privilege('anon', 'public.mark_expenses_paid(uuid[]
 SELECT t.ok(NOT has_function_privilege('anon', 'public.get_admin_financial_overview()', 'EXECUTE'), 'B7: anon sem EXECUTE em get_admin_financial_overview');
 SELECT t.ok(has_function_privilege('authenticated', 'public.submit_report(uuid)', 'EXECUTE'), 'B7: authenticated mantém EXECUTE em submit_report');
 SELECT t.ok(NOT has_function_privilege('authenticated', 'public.reconcile_notification_deliveries()', 'EXECUTE'), 'C2: reconciliação não é RPC pública');
+SELECT t.ok(NOT has_function_privilege('authenticated', 'public.admin_assign_role(uuid,public.app_role)', 'EXECUTE'), 'B7: admin_assign_role (morta) fora de authenticated');
 
 -- ================================================================ C1
 SELECT t.as_user('00000000-0000-0000-0000-0000000000e1');

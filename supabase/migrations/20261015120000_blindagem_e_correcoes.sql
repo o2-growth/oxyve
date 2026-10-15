@@ -238,6 +238,28 @@ CREATE POLICY "Org approvers can update expense reviews"
   )
   WITH CHECK (public.is_manager_or_admin(auth.uid()) AND reviewer_id = auth.uid());
 
+-- A policy antiga de UPDATE ("Managers can update expense reviews") não olha o
+-- relatório: o revisor conseguia mover a própria revisão (report_id) para um
+-- relatório de outra org ou fora de aprovação. RESTRICTIVE vale para as duas.
+CREATE POLICY "Expense reviews: update so em relatorio em aprovacao da org"
+  ON public.expense_reviews AS RESTRICTIVE FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.reports r
+       WHERE r.id = expense_reviews.report_id
+         AND r.org_id = public.get_user_org_id(auth.uid())
+         AND r.status = 'submitted'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.reports r
+       WHERE r.id = expense_reviews.report_id
+         AND r.org_id = public.get_user_org_id(auth.uid())
+         AND r.status = 'submitted'
+    )
+  );
+
 -- ---------------------------------------------------------------------------
 -- tg_expenses_regras (versão da 20260928120000 com as correções)
 -- ---------------------------------------------------------------------------
@@ -771,6 +793,112 @@ BEGIN
 END;
 $function$;
 
+-- Versão da 20260208180618 (a vigente; o front chama no Dashboard). Tinha o mesmo
+-- fallback fixo em 24 quando a org não tem política.
+CREATE OR REPLACE FUNCTION public.get_or_create_current_report()
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _user_id UUID;
+  _org_id UUID;
+  _policy RECORD;
+  _today DATE;
+  _cycle_start DATE;
+  _cycle_end DATE;
+  _due_date DATE;
+  _cycle_key TEXT;
+  _report RECORD;
+  _report_title TEXT;
+BEGIN
+  -- Get current user and org
+  _user_id := auth.uid();
+  IF _user_id IS NULL THEN
+    RAISE EXCEPTION 'User not authenticated';
+  END IF;
+
+  SELECT org_id INTO _org_id FROM public.profiles WHERE id = _user_id;
+  IF _org_id IS NULL THEN
+    RAISE EXCEPTION 'User has no organization';
+  END IF;
+
+  -- Get policy settings
+  SELECT cycle_cutoff_day, timezone INTO _policy
+  FROM public.expense_policies
+  WHERE org_id = _org_id;
+
+  IF NOT FOUND THEN
+    -- Cria a política padrão e lê de volta o default da coluna (25).
+    INSERT INTO public.expense_policies (org_id) VALUES (_org_id)
+    RETURNING cycle_cutoff_day, timezone INTO _policy;
+  END IF;
+  _policy.cycle_cutoff_day := COALESCE(_policy.cycle_cutoff_day, 25);
+  _policy.timezone := COALESCE(_policy.timezone, 'America/Sao_Paulo');
+
+  -- Calculate cycle dates based on current date in org timezone
+  _today := (now() AT TIME ZONE _policy.timezone)::DATE;
+
+  -- If today is before cutoff day, cycle started on cutoff day of previous month
+  -- If today is on or after cutoff day, cycle started on cutoff day of current month
+  IF EXTRACT(DAY FROM _today) < _policy.cycle_cutoff_day THEN
+    _cycle_start := date_trunc('month', _today - interval '1 month')::DATE + (_policy.cycle_cutoff_day - 1);
+  ELSE
+    _cycle_start := date_trunc('month', _today)::DATE + (_policy.cycle_cutoff_day - 1);
+  END IF;
+
+  -- Cycle ends one month after start, minus one day
+  _cycle_end := (_cycle_start + interval '1 month')::DATE - 1;
+  _due_date := _cycle_end + 1;
+
+  -- Cycle key is YYYY-MM of the due date
+  _cycle_key := to_char(_due_date, 'YYYY-MM');
+
+  -- Try to find existing report for this cycle
+  SELECT * INTO _report
+  FROM public.reports
+  WHERE org_id = _org_id
+    AND user_id = _user_id
+    AND cycle_key = _cycle_key;
+
+  IF NOT FOUND THEN
+    -- Create report title like "Relatório Mar 2026"
+    _report_title := 'Relatório ' ||
+      CASE EXTRACT(MONTH FROM _due_date)
+        WHEN 1 THEN 'Jan'
+        WHEN 2 THEN 'Fev'
+        WHEN 3 THEN 'Mar'
+        WHEN 4 THEN 'Abr'
+        WHEN 5 THEN 'Mai'
+        WHEN 6 THEN 'Jun'
+        WHEN 7 THEN 'Jul'
+        WHEN 8 THEN 'Ago'
+        WHEN 9 THEN 'Set'
+        WHEN 10 THEN 'Out'
+        WHEN 11 THEN 'Nov'
+        WHEN 12 THEN 'Dez'
+      END || ' ' || EXTRACT(YEAR FROM _due_date);
+
+    -- Create new report
+    INSERT INTO public.reports (org_id, user_id, title, start_date, end_date, due_date, cycle_key, status)
+    VALUES (_org_id, _user_id, _report_title, _cycle_start, _cycle_end, _due_date, _cycle_key, 'draft')
+    RETURNING * INTO _report;
+  END IF;
+
+  RETURN json_build_object(
+    'id', _report.id,
+    'title', _report.title,
+    'start_date', _report.start_date,
+    'end_date', _report.end_date,
+    'due_date', _report.due_date,
+    'cycle_key', _report.cycle_key,
+    'status', _report.status,
+    'created_at', _report.created_at
+  );
+END;
+$function$;
+
 -- ---------------------------------------------------------------------------
 -- B7: RPCs de negócio fora de PUBLIC/anon
 -- ---------------------------------------------------------------------------
@@ -794,6 +922,10 @@ BEGIN
     EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO authenticated, service_role', _fn);
   END LOOP;
 END $$;
+
+-- admin_assign_role é código morto (o front usa set_user_role, que proíbe mexer
+-- no próprio papel). Sai também de authenticated; service_role mantém.
+REVOKE EXECUTE ON FUNCTION public.admin_assign_role(uuid, public.app_role) FROM authenticated;
 
 -- Funções de trigger não são chamáveis como RPC, mas ficam fora de PUBLIC também.
 REVOKE EXECUTE ON FUNCTION public.tg_expenses_regras() FROM PUBLIC, anon;
