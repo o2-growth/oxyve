@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
@@ -183,5 +183,7 @@ export function useValidateReceipt() {
     setState({ status: 'idle', result: null, divergences: [], errorMessage: null });
   }, []);
 
-  return { ...state, validate, reset };
+  // Identidade estável: o form usa o retorno em deps de useCallback/useEffect; um objeto
+  // novo a cada render realimentava a validação (loop de chamadas à IA).
+  return useMemo(() => ({ ...state, validate, reset }), [state, validate, reset]);
 }
