@@ -11,7 +11,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
-const mutateMock = vi.fn();
+const mutateMock = vi.fn(() => Promise.resolve());
 const toastError = vi.fn();
 
 vi.mock('sonner', () => ({
@@ -53,7 +53,7 @@ let policyData: typeof basePolicy | undefined;
 vi.mock('@/hooks/usePolicy', () => ({
   useExpensePolicy: () => ({ data: policyData, isLoading: false, dataUpdatedAt: 0 }),
   useUpdateExpensePolicy: () => ({
-    mutate: mutateMock,
+    mutateAsync: mutateMock,
     isPending: false,
     isSuccess: false,
   }),
@@ -74,7 +74,7 @@ function switchFor(label: RegExp) {
 }
 
 function sentPatches() {
-  return mutateMock.mock.calls.map((c) => c[0]);
+  return (mutateMock.mock.calls as unknown as unknown[][]).map((c) => c[0] as Record<string, unknown>);
 }
 
 beforeEach(() => {

@@ -69,8 +69,8 @@ export default function SettingsPolicy() {
   const pendingRef = useRef<PolicyPatch>({});
   const policyIdRef = useRef<string | undefined>(policy?.id);
   policyIdRef.current = policy?.id;
-  const mutateRef = useRef(updatePolicy.mutate);
-  mutateRef.current = updatePolicy.mutate;
+  const mutateAsyncRef = useRef(updatePolicy.mutateAsync);
+  mutateAsyncRef.current = updatePolicy.mutateAsync;
   const lastSavedRef = useRef<Date | null>(null);
 
   // Track if we just saved (for showing "Salvo" indicator)
@@ -100,7 +100,12 @@ export default function SettingsPolicy() {
         delete next[field];
         return next;
       });
-    mutateRef.current({ id, [field]: value }, { onSettled: clearDraft });
+    // mutateAsync e não mutate(..., { onSettled }): o TanStack só chama os
+    // callbacks do último mutate(); com dois campos em voo o primeiro ficaria
+    // preso no draft mesmo se falhasse. O toast de erro já sai no hook.
+    mutateAsyncRef.current({ id, [field]: value })
+      .catch(() => undefined)
+      .finally(clearDraft);
   }, []);
 
   const saveField = useCallback(
