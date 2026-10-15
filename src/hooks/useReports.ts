@@ -389,6 +389,10 @@ export function useRemoveExpenseFromReport() {
     onSuccess: (_, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      // A despesa volta a ser avulsa: lista e contadores de Despesas mudam também.
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
       toast.success('Despesa removida do relatório!');
     },
     onError: (error) => {
