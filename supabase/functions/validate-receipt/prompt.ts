@@ -1,9 +1,10 @@
-// Prompt e schema da leitura de comprovante. Módulo puro (sem Deno): o mesmo
-// texto vai para o gpt-4o-mini e, quando a leitura sai duvidosa, para o gpt-4o.
+// Prompt e schema da leitura de comprovante. Módulo puro (sem Deno).
 import { EXPENSE_KIND_HINTS, RECEIPT_ISSUES, RECEIPT_TYPES } from "./normalize.ts";
 
-export const PRIMARY_MODEL = "gpt-4o-mini";
-export const FALLBACK_MODEL = "gpt-4o";
+// Escolhido em teste com notas reais e sintéticas (out/2026): o gpt-4o-mini
+// inventava valor e ano com confiança alta; o gpt-4.1 acertou mais e devolveu
+// null onde a foto não mostrava o total. Em imagem o custo é parecido.
+export const PRIMARY_MODEL = "gpt-4.1";
 export const EXTRACT_FUNCTION_NAME = "extract_receipt_data";
 
 export const SYSTEM_PROMPT = [
@@ -17,6 +18,8 @@ export const SYSTEM_PROMPT = [
   "- NUNCA use: subtotal; 'valor recebido', 'dinheiro', 'troco'; tributos aproximados",
   "  ('Val. aprox. tributos', Lei 12.741); desconto isolado; valor de um item; saldo ou limite.",
   "- Formato brasileiro: '1.234,56' = 123456 centavos; '45,90' = 4590. Ponto separa milhar, vírgula separa centavos.",
+  "- Confira: se a nota lista itens, a soma dos itens (mais serviço, menos desconto) deve dar o total.",
+  "  Se não bater ou algum dígito estiver duvidoso (5/6/8/9, 0/8), use amount_confidence 'medium'.",
   "- Se houver mais de um total e não der para saber qual foi pago, marque a issue 'multiple_totals'",
   "  e amount_confidence 'low'.",
   "",
@@ -115,7 +118,7 @@ export const EXTRACT_TOOL = {
   },
 } as const;
 
-/** Corpo do chat/completions — igual para os dois modelos, só muda o `model`. */
+/** Corpo do chat/completions. */
 export function buildChatRequest(model: string, dataUrl: string) {
   return {
     model,

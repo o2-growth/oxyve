@@ -24,6 +24,9 @@ export const RECEIPT_ISSUES = [
 ] as const;
 export type ReceiptIssue = (typeof RECEIPT_ISSUES)[number];
 
+// Problemas que tiram a certeza de qualquer campo lido.
+const PHOTO_DOUBT_ISSUES: readonly ReceiptIssue[] = ["blurry", "cropped", "multiple_totals", "handwritten", "low_light"];
+
 export const EXPENSE_KIND_HINTS = ["food", "transport", "other"] as const;
 export type ExpenseKindHint = (typeof EXPENSE_KIND_HINTS)[number];
 
@@ -42,7 +45,9 @@ export interface NormalizedReceipt {
 
 // R$ 1.000.000,00 em centavos: acima disso é leitura errada (vírgula/ponto trocados).
 export const MAX_AMOUNT_CENTS = 100_000_000;
-export const MIN_RECEIPT_DATE = "2000-01-01";
+// O app só aceita despesa de até 20 dias; nota "de 2023" numa foto difícil é o
+// modelo inventando ano, não despesa antiga. Fora da janela vira dúvida (null + low).
+export const MAX_RECEIPT_AGE_DAYS = 60;
 export const MAX_SUPPLIER_CHARS = 80;
 const TIME_ZONE = "America/Sao_Paulo";
 
@@ -81,8 +86,14 @@ function isRealDate(y: number, m: number, d: number): boolean {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
+/** YYYY-MM-DD de `days` dias antes de hoje em Brasília. */
+function daysBeforeToday(days: number, now: Date): string {
+  const [y, m, d] = todayInSaoPaulo(now).split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
+}
+
 /**
- * Data ISO válida, de 2000 até hoje (Brasília). Aceita também dd/mm/aaaa e
+ * Data ISO válida, dos últimos MAX_RECEIPT_AGE_DAYS dias até hoje (Brasília). Aceita também dd/mm/aaaa e
  * dd/mm/aa caso o modelo devolva no formato da nota (ano de 2 dígitos = 20xx).
  */
 export function normalizeDate(v: unknown, now: Date = new Date()): string | null {
@@ -101,7 +112,7 @@ export function normalizeDate(v: unknown, now: Date = new Date()): string | null
   }
   if (!isRealDate(y, m, d)) return null;
   const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  if (iso < MIN_RECEIPT_DATE || iso > todayInSaoPaulo(now)) return null;
+  if (iso < daysBeforeToday(MAX_RECEIPT_AGE_DAYS, now) || iso > todayInSaoPaulo(now)) return null;
   return iso;
 }
 
@@ -150,10 +161,20 @@ export function normalizeExtraction(raw: unknown, now: Date = new Date()): Norma
   let amountConfidence = asConfidence(r.amount_confidence) ?? general ?? "low";
   let dateConfidence = asConfidence(r.date_confidence) ?? general ?? "low";
 
+  // Foto com problema nunca vale como certeza: o modelo marca "cropped" e mesmo
+  // assim diz high para o subtotal que sobrou na foto.
+  if (issues.some((i) => PHOTO_DOUBT_ISSUES.includes(i))) {
+    amountConfidence = worst(amountConfidence, "medium");
+    dateConfidence = worst(dateConfidence, "medium");
+  }
+
   const amount = normalizeAmountCents(r.extracted_amount_cents);
   if (amount === null) amountConfidence = "low";
   const date = normalizeDate(r.extracted_date, now);
   if (date === null) dateConfidence = "low";
+  // Comprovante em que nem a data foi lida é foto difícil: o valor também pede
+  // conferência (na foto real de teste, 88,50 saiu 88,90 com "high" e data nula).
+  if (dateConfidence === "low") amountConfidence = worst(amountConfidence, "medium");
 
   const receiptType = (RECEIPT_TYPES as readonly unknown[]).includes(r.receipt_type)
     ? (r.receipt_type as ReceiptType)
@@ -194,17 +215,3 @@ export function normalizeExtraction(raw: unknown, now: Date = new Date()): Norma
   };
 }
 
-/**
- * Leitura do modelo barato que merece uma segunda passada no modelo maior:
- * valor ou data com confiança baixa, valor ausente, foto tremida ou nota com
- * mais de um total (o erro mais comum: pegar subtotal ou "valor recebido").
- */
-export function needsEscalation(r: NormalizedReceipt): boolean {
-  return (
-    r.amount_confidence === "low" ||
-    r.date_confidence === "low" ||
-    r.extracted_amount_cents === null ||
-    r.issues.includes("multiple_totals") ||
-    r.issues.includes("blurry")
-  );
-}

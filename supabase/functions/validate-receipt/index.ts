@@ -10,8 +10,8 @@ import {
   isImageTooLarge,
   quotaOutcome,
 } from "./limits.ts";
-import { type NormalizedReceipt, needsEscalation, normalizeExtraction } from "./normalize.ts";
-import { EXTRACT_FUNCTION_NAME, FALLBACK_MODEL, PRIMARY_MODEL, buildChatRequest } from "./prompt.ts";
+import { type NormalizedReceipt, normalizeExtraction } from "./normalize.ts";
+import { EXTRACT_FUNCTION_NAME, PRIMARY_MODEL, buildChatRequest } from "./prompt.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,11 +155,10 @@ serve(async (req) => {
 
     const dataUrl = `data:${mime_type};base64,${image_base64}`;
 
-    // 1ª leitura no modelo barato; só refaz no gpt-4o quando ela sai duvidosa.
-    const primary = await readReceipt(OPENAI_API_KEY, PRIMARY_MODEL, dataUrl);
+    const read = await readReceipt(OPENAI_API_KEY, PRIMARY_MODEL, dataUrl);
 
-    if (!primary.ok) {
-      if (primary.status === 429) {
+    if (!read.ok) {
+      if (read.status === 429) {
         return new Response(
           JSON.stringify({ error: OPENAI_BUSY_MESSAGE }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -171,23 +170,13 @@ serve(async (req) => {
       );
     }
 
-    let result = primary.receipt;
-    let modelUsed = PRIMARY_MODEL;
-    const escalated = needsEscalation(primary.receipt);
-    if (escalated) {
-      const fallback = await readReceipt(OPENAI_API_KEY, FALLBACK_MODEL, dataUrl);
-      // gpt-4o fora do ar ou ocupado: fica a leitura do mini (o front já pede conferência).
-      if (fallback.ok) {
-        result = fallback.receipt;
-        modelUsed = FALLBACK_MODEL;
-      }
-    }
+    const result = read.receipt;
+    const modelUsed = PRIMARY_MODEL;
 
     // Sem valores no log: só qual modelo respondeu e por quê, para medir custo e acerto.
     console.log(JSON.stringify({
       fn: "validate-receipt",
       model_used: modelUsed,
-      escalated,
       amount_confidence: result.amount_confidence,
       date_confidence: result.date_confidence,
       issues: result.issues,

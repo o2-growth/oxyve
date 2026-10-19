@@ -1,11 +1,10 @@
 /**
- * validate-receipt — normalização da saída do modelo e regra de escalonamento
- * para o gpt-4o (edge function, módulo puro).
+ * validate-receipt — normalização da saída do modelo e prompt (edge function,
+ * módulos puros).
  */
 import { describe, it, expect } from 'vitest';
 import {
   isValidCnpj,
-  needsEscalation,
   normalizeAmountCents,
   normalizeCnpj,
   normalizeDate,
@@ -15,7 +14,6 @@ import {
 } from '../../supabase/functions/validate-receipt/normalize.ts';
 import {
   EXTRACT_TOOL,
-  FALLBACK_MODEL,
   PRIMARY_MODEL,
   SYSTEM_PROMPT,
   buildChatRequest,
@@ -75,7 +73,14 @@ describe('normalizeDate', () => {
   it('aceita dd/mm/aaaa e dd/mm/aa (ano de 2 dígitos = 20xx)', () => {
     expect(normalizeDate('15/10/2026', NOW)).toBe('2026-10-15');
     expect(normalizeDate('15/10/26', NOW)).toBe('2026-10-15');
-    expect(normalizeDate('5/3/25', NOW)).toBe('2025-03-05');
+    expect(normalizeDate('1/9/26', NOW)).toBe('2026-09-01');
+  });
+
+  it('recusa data mais antiga que a janela (modelo inventando ano)', () => {
+    expect(normalizeDate('2023-10-12', NOW)).toBeNull();
+    expect(normalizeDate('12/10/23', NOW)).toBeNull();
+    expect(normalizeDate('2026-08-18', NOW)).toBeNull();
+    expect(normalizeDate('2026-08-19', NOW)).toBe('2026-08-19');
   });
 
   it('recusa data inexistente, anterior a 2000 e formato estranho', () => {
@@ -143,6 +148,19 @@ describe('normalizeExtraction', () => {
     expect(r.date_confidence).toBe('low');
   });
 
+  it('foto cortada não deixa valor nem data como certeza', () => {
+    const r = normalizeExtraction({ ...good, issues: ['cropped'] }, NOW);
+    expect(r.amount_confidence).toBe('medium');
+    expect(r.date_confidence).toBe('medium');
+    expect(r.extracted_amount_cents).toBe(good.extracted_amount_cents);
+  });
+
+  it('sem data lida, o valor também pede conferência', () => {
+    const r = normalizeExtraction({ ...good, extracted_date: null, date_confidence: 'low' }, NOW);
+    expect(r.extracted_amount_cents).toBe(good.extracted_amount_cents);
+    expect(r.amount_confidence).toBe('medium');
+  });
+
   it('resposta no formato antigo herda a confiança geral por campo', () => {
     const r = normalizeExtraction(
       { extracted_date: '2026-10-15', extracted_amount_cents: 4590, confidence: 'medium' },
@@ -192,31 +210,11 @@ describe('normalizeExtraction', () => {
   });
 });
 
-describe('needsEscalation', () => {
-  const ok = normalizeExtraction(good, NOW);
-
-  it('leitura confiável não chama o modelo maior', () => {
-    expect(needsEscalation(ok)).toBe(false);
-    expect(needsEscalation({ ...ok, amount_confidence: 'medium', issues: ['cropped'] })).toBe(false);
-  });
-
-  it.each([
-    ['valor low', { amount_confidence: 'low' as const }],
-    ['data low', { date_confidence: 'low' as const }],
-    ['valor nulo', { extracted_amount_cents: null }],
-    ['vários totais', { issues: ['multiple_totals' as const] }],
-    ['foto tremida', { issues: ['blurry' as const] }],
-  ])('%s escala para o gpt-4o', (_label, patch) => {
-    expect(needsEscalation({ ...ok, ...patch })).toBe(true);
-  });
-});
-
 describe('prompt e schema', () => {
-  it('modelos e pedido determinístico com detail high', () => {
-    expect(PRIMARY_MODEL).toBe('gpt-4o-mini');
-    expect(FALLBACK_MODEL).toBe('gpt-4o');
-    const body = buildChatRequest(FALLBACK_MODEL, 'data:image/jpeg;base64,x');
-    expect(body.model).toBe('gpt-4o');
+  it('modelo e pedido determinístico com detail high', () => {
+    expect(PRIMARY_MODEL).toBe('gpt-4.1');
+    const body = buildChatRequest(PRIMARY_MODEL, 'data:image/jpeg;base64,x');
+    expect(body.model).toBe('gpt-4.1');
     expect(body.temperature).toBe(0);
     expect(body.tool_choice).toEqual({ type: 'function', function: { name: 'extract_receipt_data' } });
     const image = (body.messages[1].content as Array<{ type: string; image_url?: { detail: string } }>)[1];
@@ -241,5 +239,6 @@ describe('prompt e schema', () => {
     expect(SYSTEM_PROMPT).toMatch(/vencimento/);
     expect(SYSTEM_PROMPT).toMatch(/20xx/);
     expect(SYSTEM_PROMPT).toMatch(/EMITENTE/);
+    expect(SYSTEM_PROMPT).toMatch(/soma dos itens/);
   });
 });
