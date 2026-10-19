@@ -151,6 +151,9 @@ describe('QuickExpenseSheet — leitura duvidosa', () => {
     render(<QuickExpenseSheet open onOpenChange={() => {}} />, { wrapper });
     await photoAndCategory();
     expect(screen.getByTestId('reading-issues')).toHaveTextContent('Mais de um total na nota — confira o valor');
+    // O resumo não diz "Alta" ao lado de um valor em dúvida.
+    expect(screen.getByText('Conferir')).toBeInTheDocument();
+    expect(screen.queryByText('Alta')).toBeNull();
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('quick-save-btn'));

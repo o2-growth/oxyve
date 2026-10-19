@@ -665,10 +665,15 @@ export function QuickExpenseSheet({
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Confiança</span>
-                  <span className="font-mono text-sm font-medium">
-                    {CONFIDENCE_LABELS[String(extractedSummary.confidence).toLowerCase()] ??
-                      extractedSummary.confidence}
-                  </span>
+                  {/* Campo em dúvida manda: "Alta" ao lado de um valor em amarelo confundia. */}
+                  {validation.review.amount || validation.review.date ? (
+                    <span className="font-mono text-sm font-medium text-[hsl(var(--status-event))]">Conferir</span>
+                  ) : (
+                    <span className="font-mono text-sm font-medium">
+                      {CONFIDENCE_LABELS[String(extractedSummary.confidence).toLowerCase()] ??
+                        extractedSummary.confidence}
+                    </span>
+                  )}
                 </div>
               </div>
             ) : (
