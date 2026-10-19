@@ -14,9 +14,10 @@ const invoke = vi.hoisted(() => vi.fn());
 const mutateAsync = vi.hoisted(() => vi.fn());
 const attachReceipt = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
+const toastWarning = vi.hoisted(() => vi.fn());
 
 vi.mock('sonner', () => ({
-  toast: Object.assign(vi.fn(), { error: toastError, success: vi.fn(), warning: vi.fn() }),
+  toast: Object.assign(vi.fn(), { error: toastError, success: vi.fn(), warning: toastWarning }),
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -170,5 +171,81 @@ describe('ExpenseFormDialog', () => {
   it('data sem relatório do ciclo mostra o período e avisa que será criado ao salvar', () => {
     render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
     expect(screen.getByText(/será criado ao salvar/)).toBeInTheDocument();
+  });
+
+  it('leitura com valor em dúvida preenche e destaca o valor; corrigir tira o destaque', { timeout: 10_000 }, async () => {
+    invoke.mockResolvedValue({
+      data: {
+        extracted_date: today,
+        extracted_amount_cents: 18900,
+        confidence: 'medium',
+        amount_confidence: 'low',
+        date_confidence: 'high',
+        issues: ['blurry'],
+        receipt_type: 'nota_fiscal',
+        extracted_cnpj: '11222333000181',
+      },
+      error: null,
+    });
+    const { container } = render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
+    await attachPhoto(container);
+    await wait(300);
+
+    const amount = screen.getByTestId('expense-amount-input') as HTMLInputElement;
+    await waitFor(() => expect(amount.value).toBe('189,00'));
+    expect(amount.className).toMatch(/status-event/);
+    expect(screen.getByText('Confira o valor lido')).toBeInTheDocument();
+    // Foto tremida também põe a data em dúvida.
+    expect(screen.getByText('Confira a data lida')).toBeInTheDocument();
+    expect(screen.getByTestId('reading-issues')).toHaveTextContent('Foto tremida — confira os valores');
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringMatching(/confira os campos destacados/));
+
+    fireEvent.change(amount, { target: { value: '198,00' } });
+    await waitFor(() => expect(screen.queryByText('Confira o valor lido')).toBeNull());
+  });
+
+  it('leitura confiável preenche sem destaque', { timeout: 10_000 }, async () => {
+    invoke.mockResolvedValue({
+      data: {
+        extracted_date: today,
+        extracted_amount_cents: 5000,
+        confidence: 'high',
+        amount_confidence: 'high',
+        date_confidence: 'high',
+        issues: [],
+        receipt_type: 'nota_fiscal',
+        extracted_cnpj: '11222333000181',
+      },
+      error: null,
+    });
+    const { container } = render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
+    await attachPhoto(container);
+    await wait(300);
+    const amount = screen.getByTestId('expense-amount-input') as HTMLInputElement;
+    await waitFor(() => expect(amount.value).toBe('50,00'));
+    expect(amount.className).not.toMatch(/status-event/);
+    expect(screen.queryByText('Confira o valor lido')).toBeNull();
+  });
+
+  it('foto que não é comprovante avisa e não preenche nada', { timeout: 10_000 }, async () => {
+    invoke.mockResolvedValue({
+      data: {
+        extracted_date: today,
+        extracted_amount_cents: 5000,
+        extracted_supplier: 'Cardápio',
+        confidence: 'low',
+        amount_confidence: 'low',
+        date_confidence: 'low',
+        issues: ['not_a_receipt'],
+      },
+      error: null,
+    });
+    const { container } = render(<ExpenseFormDialog open onOpenChange={() => {}} useCurrentReportFlow />, { wrapper });
+    await attachPhoto(container);
+    await wait(300);
+    await waitFor(() => expect(screen.getByTestId('not-a-receipt-warning')).toBeInTheDocument());
+    expect((screen.getByTestId('expense-amount-input') as HTMLInputElement).value).toBe('');
+    expect(screen.getByPlaceholderText('Ex: Almoço com cliente')).toHaveValue('');
+    expect(toastWarning).toHaveBeenCalledWith(expect.stringMatching(/não parece um comprovante/));
   });
 });
