@@ -24,7 +24,7 @@ const report = {
       id: 'i1',
       review_decision: 'approved',
       review_comment: null,
-      expense: { id: 'e1', date: '2026-10-05', description: 'Almoço', amount_cents: 6000, is_reimbursable: true, currency: 'BRL' },
+      expense: { id: 'e1', date: '2026-10-05', description: 'Almoço', amount_cents: 6000, is_reimbursable: true, currency: 'BRL', receipt_date: '2026-09-21' },
     },
     {
       id: 'i2',
@@ -105,6 +105,16 @@ function renderDetail() {
 
 describe('ReportDetail — possível duplicidade', () => {
   afterEach(() => cleanup());
+
+  it('data da nota diferente: selo âmbar com a dica só no item que difere', async () => {
+    renderDetail();
+    const badges = await screen.findAllByTestId('receipt-date-mismatch-badge');
+    // Linha da tabela e card mobile do mesmo item.
+    expect(new Set(badges.map((b) => b.getAttribute('title')))).toEqual(
+      new Set(['Nota de 21/09/2026 · despesa em 05/10/2026']),
+    );
+    expect(badges[0]).toHaveTextContent('Data da nota diferente');
+  });
 
   it('selo só no item marcado e aviso no resumo', async () => {
     renderDetail();

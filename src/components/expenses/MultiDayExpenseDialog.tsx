@@ -6,7 +6,7 @@
  * POR DIA. Chama a RPC create_expense_multiday, que gera uma despesa por dia
  * reusando o motor de política (teto diário, ciclo, evento) de forma atômica.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -50,6 +50,9 @@ import { multiDaySchema } from './multiDaySchema';
 import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useCreateExpenseMultiday } from '@/hooks/useCurrentReport';
+import { useExpensePolicy } from '@/hooks/usePolicy';
+import { useFoodCapAmount } from '@/hooks/useFoodCapAmount';
+import { FoodCapHint } from './FoodCapHint';
 
 interface MultiDayExpenseDialogProps {
   open: boolean;
@@ -83,6 +86,21 @@ export function MultiDayExpenseDialog({
   });
 
   const watchedIsEvent = form.watch('is_event');
+  const watchedCategoryId = form.watch('category_id');
+  const { data: policy } = useExpensePolicy();
+  const foodDailyLimit = (policy as { food_daily_limit_cents?: number | null } | undefined)?.food_daily_limit_cents ?? 3000;
+  const isFood = categories.find((c) => c.id === watchedCategoryId)?.kind === 'food';
+  // Valor é por dia: em alimentação (sem evento) o lançado fica em até 1 × teto por dia.
+  const foodCap = useFoodCapAmount({
+    active: isFood && !watchedIsEvent,
+    dailyLimitCents: foodDailyLimit,
+    days: 1,
+    setAmount: (v) => form.setValue('amount_per_day', v, { shouldValidate: true }),
+  });
+  const { reset: resetFoodCap } = foodCap;
+  useEffect(() => {
+    if (!open) resetFoodCap();
+  }, [open, resetFoodCap]);
 
   const start = form.watch('start_date');
   const end = form.watch('end_date');
@@ -258,11 +276,14 @@ export function MultiDayExpenseDialog({
                       inputMode="decimal"
                       {...field}
                       onBlur={() => {
-                        field.onChange(formatAmountInput(field.value));
+                        const formatted = formatAmountInput(field.value);
+                        field.onChange(formatted);
+                        foodCap.onAmountBlur(formatted);
                         field.onBlur();
                       }}
                     />
                   </FormControl>
+                  <FoodCapHint cap={foodCap} amount={field.value} />
                   <FormMessage />
                 </FormItem>
               )}

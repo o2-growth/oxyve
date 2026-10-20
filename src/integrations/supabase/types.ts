@@ -281,6 +281,7 @@ export type Database = {
           payment_method: Database["public"]["Enums"]["payment_method"]
           possible_duplicate_of: string | null
           project_id: string | null
+          receipt_date: string | null
           receipt_hash: string | null
           receipt_path: string | null
           reimbursable_cents: number | null
@@ -308,6 +309,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"]
           possible_duplicate_of?: string | null
           project_id?: string | null
+          receipt_date?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
           reimbursable_cents?: number | null
@@ -335,6 +337,7 @@ export type Database = {
           payment_method?: Database["public"]["Enums"]["payment_method"]
           possible_duplicate_of?: string | null
           project_id?: string | null
+          receipt_date?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
           reimbursable_cents?: number | null

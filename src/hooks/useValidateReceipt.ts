@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { prepareImageForOcr } from '@/lib/receiptImage';
+import { receiptDateInWindow, receiptDateWarning, receiptOutOfWindowWarning } from '@/lib/receiptDate';
 
 export type ValidationStatus = 'idle' | 'validating' | 'success' | 'warning' | 'error';
 
@@ -106,14 +107,12 @@ export function toValidationResult(data: Record<string, unknown>): ValidationRes
 }
 
 /**
- * Bloqueios de política sobre o comprovante (PO-0002 4.9.1 e 4.9.3), avaliados
- * no submit com a data FINAL do lançamento. Retorna os motivos que impedem
- * salvar — vazio se o comprovante está conforme (ou se a leitura foi incerta).
+ * Bloqueios de política sobre o comprovante (PO-0002 4.9.3). Retorna os motivos
+ * que impedem salvar — vazio se o comprovante está conforme (ou se a leitura foi
+ * incerta). Data da nota diferente do dia (4.9.1) NÃO bloqueia mais: vira aviso
+ * (receiptDateNotice) e o gestor vê o selo pela coluna receipt_date.
  */
-export function receiptPolicyBlocks(
-  result: ValidationResult | null,
-  finalDateYMD: string,
-): string[] {
+export function receiptPolicyBlocks(result: ValidationResult | null): string[] {
   // Leitura de baixa confiança não bloqueia — evita falso positivo do OCR.
   if (!result || result.confidence === 'low') return [];
   const blocks: string[] = [];
@@ -127,12 +126,18 @@ export function receiptPolicyBlocks(
   if (!result.extracted_cnpj && result.receipt_type !== 'nota_fiscal') {
     blocks.push('O comprovante não tem CNPJ. É necessária nota fiscal com CNPJ (Política 4.9.3).');
   }
-  if (result.extracted_date && result.extracted_date !== finalDateYMD) {
-    blocks.push(
-      `A data do comprovante (${formatDate(result.extracted_date)}) não corresponde ao dia da despesa (${formatDate(finalDateYMD)}) — Política 4.9.1.`,
-    );
-  }
   return blocks;
+}
+
+/**
+ * Aviso amarelo (não bloqueia) quando a data lida da nota difere da data final da
+ * despesa. Nota fora da janela de lançamento: a despesa fica com a data de hoje.
+ */
+export function receiptDateNotice(result: ValidationResult | null, finalDateYMD: string): string | null {
+  const d = result?.extracted_date;
+  if (!d || result?.issues?.includes('not_a_receipt')) return null;
+  if (!receiptDateInWindow(d)) return receiptOutOfWindowWarning(d);
+  return d !== finalDateYMD ? receiptDateWarning(d) : null;
 }
 
 export interface ValidationState {
@@ -263,7 +268,9 @@ export function useValidateReceipt() {
         );
       }
 
-      if (result.extracted_amount_cents != null && result.extracted_amount_cents !== formAmountCents) {
+      // Valor 0 = só extrair (form ainda sem valor). Em alimentação o form manda o valor
+      // da NOTA, não o lançado (que pode ser menor por causa do teto).
+      if (result.extracted_amount_cents != null && formAmountCents > 0 && result.extracted_amount_cents !== formAmountCents) {
         divergences.push(
           `Valor no comprovante: ${formatCurrency(result.extracted_amount_cents)}, Valor informado: ${formatCurrency(formAmountCents)}`
         );

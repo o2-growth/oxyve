@@ -10,15 +10,21 @@ export async function attachReceipt(opts: {
   userId: string;
   reportId: string | null | undefined;
   expenseId: string;
+  /** Data lida da nota (YYYY-MM-DD), para o gestor ver se difere do dia da despesa. */
+  receiptDate?: string | null;
 }): Promise<string> {
   const ext = opts.file.name.split('.').pop() || 'jpg';
   const path = `${opts.orgId}/${opts.userId}/${opts.reportId || 'unassigned'}/${opts.expenseId}/${Date.now()}.${ext}`;
   const { error: uploadError } = await supabase.storage.from('receipts').upload(path, opts.file);
   if (uploadError) throw uploadError;
-  const { error: updateError } = await supabase
-    .from('expenses')
-    .update({ receipt_path: path, receipt_hash: await receiptHash(opts.file) })
-    .eq('id', opts.expenseId);
+  const base = { receipt_path: path, receipt_hash: await receiptHash(opts.file) };
+  const fields = opts.receiptDate ? { ...base, receipt_date: opts.receiptDate } : base;
+  let { error: updateError } = await supabase.from('expenses').update(fields).eq('id', opts.expenseId);
+  // Banco ainda sem a coluna receipt_date (front publicado antes da migration): grava
+  // o comprovante sem ela em vez de dar o anexo como perdido.
+  if (updateError && 'receipt_date' in fields && /receipt_date/.test(updateError.message ?? '')) {
+    ({ error: updateError } = await supabase.from('expenses').update(base).eq('id', opts.expenseId));
+  }
   if (updateError) throw updateError;
   return path;
 }

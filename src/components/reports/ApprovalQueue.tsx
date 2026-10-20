@@ -32,8 +32,9 @@ import {
   isAwaitingApprovalBy,
 } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
-import { Eye, CheckCircle2, XCircle, AlertTriangle, Loader2, FileText, Clock, Copy } from 'lucide-react';
+import { Eye, CheckCircle2, XCircle, AlertTriangle, Loader2, FileText, Clock, Copy, CalendarX } from 'lucide-react';
 import { POSSIBLE_DUPLICATE_LABEL } from '@/lib/possibleDuplicate';
+import { RECEIPT_DATE_MISMATCH_LABEL } from '@/lib/receiptDate';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -404,6 +405,18 @@ function ReviewStatus({ report, className }: { report: Report; className?: strin
           <Copy className="h-3 w-3" aria-hidden="true" />
           {POSSIBLE_DUPLICATE_LABEL}
           {(report.possible_duplicate_count ?? 0) > 1 ? ` (${report.possible_duplicate_count})` : ''}
+        </Badge>
+      )}
+      {/* Data da nota ≠ dia da despesa não bloqueia quem lança: o gestor confere no Detalhe. */}
+      {(report.receipt_date_mismatch_count ?? 0) > 0 && (
+        <Badge
+          variant="outline"
+          className="ml-1 gap-1 border-amber-500/50 px-1.5 py-0 text-[11px] font-normal text-amber-700 dark:text-amber-400"
+          data-testid="queue-receipt-date-mismatch"
+        >
+          <CalendarX className="h-3 w-3" aria-hidden="true" />
+          {RECEIPT_DATE_MISMATCH_LABEL}
+          {(report.receipt_date_mismatch_count ?? 0) > 1 ? ` (${report.receipt_date_mismatch_count})` : ''}
         </Badge>
       )}
     </p>

@@ -1,3 +1,4 @@
+import { receiptDateDiffers } from '@/lib/receiptDate';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -26,6 +27,8 @@ export interface Report {
   review?: ReviewSummary;
   /** Itens marcados pelo banco como possível duplicidade (mesma data+valor+categoria). */
   possible_duplicate_count?: number;
+  /** Itens cuja data lida da nota (receipt_date) difere do dia da despesa. */
+  receipt_date_mismatch_count?: number;
   /** Itens reprovados na revisão, para o rascunho do motivo da devolução. */
   rejected_items?: Array<{ description: string; date: string; comment: string | null }>;
   user?: ({ full_name: string | null } & PaymentInfo) | null;
@@ -43,6 +46,8 @@ export interface ReportWithItems extends Report {
       receipt_path: string | null;
       is_out_of_policy: boolean;
       possible_duplicate_of?: string | null;
+      /** Data lida da nota (OCR); diferente de `date` vira selo para o gestor. */
+      receipt_date?: string | null;
       /** A despesa mais antiga que coincide (data/descrição), quando visível. */
       duplicate_of?: { id: string; date: string; description: string } | null;
       category: { name: string } | null;
@@ -85,6 +90,7 @@ type ItemExpense = {
   is_reimbursable: boolean | null;
   status: string | null;
   possible_duplicate_of?: string | null;
+  receipt_date?: string | null;
 };
 
 type ReportRow = {
@@ -124,7 +130,7 @@ export function useReports(filters?: { status?: string }) {
         .select(
           `*,
           user:profiles!user_id(full_name),
-          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status, possible_duplicate_of)),
+          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status, possible_duplicate_of, receipt_date)),
           reviews:expense_reviews(expense_id, decision, comment)`
         )
         .order('created_at', { ascending: false });
@@ -147,6 +153,7 @@ export function useReports(filters?: { status?: string }) {
         let total_cents = 0;
         let reimbursable_cents = 0;
         let possible_duplicate_count = 0;
+        let receipt_date_mismatch_count = 0;
         for (const item of items) {
           const expense = pickFirst(item.expense);
           const expenseId = item.expense_id ?? expense?.id;
@@ -154,6 +161,7 @@ export function useReports(filters?: { status?: string }) {
           // Reprovada (legado) não conta em nada.
           if (!expense || expense.status === 'rejected') continue;
           if (expense.possible_duplicate_of) possible_duplicate_count += 1;
+          if (receiptDateDiffers(expense.receipt_date, expense.date)) receipt_date_mismatch_count += 1;
           total_cents += expense.amount_cents ?? 0;
           // Mesma conta do Detalhe: teto, não reembolsável e reprovada na revisão.
           const review = expenseId ? reviewById.get(expenseId) : undefined;
@@ -184,6 +192,7 @@ export function useReports(filters?: { status?: string }) {
           expense_count: items.length,
           review: summarizeReview(expenseIds, reviews),
           possible_duplicate_count,
+          receipt_date_mismatch_count,
           rejected_items,
           user: pickFirst(row.user),
         };
@@ -218,7 +227,7 @@ export function useReport(id: string) {
           `id,
            expense:expenses(
              id, date, description, amount_cents, currency, receipt_path,
-             is_out_of_policy, is_reimbursable, payment_method, possible_duplicate_of,
+             is_out_of_policy, is_reimbursable, payment_method, possible_duplicate_of, receipt_date,
              category:expense_categories(name),
              cost_center:cost_centers(name, code),
              project:projects(name, code)

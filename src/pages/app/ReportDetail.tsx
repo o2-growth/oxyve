@@ -26,6 +26,7 @@ import { buildRejectionDraft } from '@/components/reports/reportRules';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import { POSSIBLE_DUPLICATE_LABEL, possibleDuplicateHint } from '@/lib/possibleDuplicate';
+import { RECEIPT_DATE_MISMATCH_LABEL, receiptDateDiffers, receiptDateHint } from '@/lib/receiptDate';
 import { PaymentDetails } from '@/components/payments/PaymentDetails';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -33,7 +34,7 @@ import {
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet,
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip,
   ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, FileText, History,
-  Undo2, Info, Copy,
+  Undo2, Info, Copy, CalendarX,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -70,6 +71,7 @@ interface ReportExpense {
   cost_center?: { name: string } | null;
   possible_duplicate_of?: string | null;
   duplicate_of?: { id: string; date: string; description: string } | null;
+  receipt_date?: string | null;
 }
 interface ReportItem {
   id: string;
@@ -123,6 +125,8 @@ interface Row {
   /** Mesma data+valor+categoria de outra despesa da pessoa (o banco marca, não bloqueia). */
   possibleDuplicate: boolean;
   duplicateHint: string | null;
+  /** Data lida da nota ≠ dia da despesa (não bloqueia quem lança): "Nota de … · despesa em …". */
+  receiptDateHint: string | null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -215,6 +219,8 @@ export default function ReportDetail() {
           notReimbursable,
           possibleDuplicate: !!e.possible_duplicate_of,
           duplicateHint: e.possible_duplicate_of ? possibleDuplicateHint(e.duplicate_of) : null,
+          receiptDateHint:
+            e.receipt_date && receiptDateDiffers(e.receipt_date, e.date) ? receiptDateHint(e.receipt_date, e.date) : null,
         };
       }),
     [items, rules]
@@ -1230,7 +1236,7 @@ function PolicyBadges({
   className?: string;
 }) {
   const showCap = row.capped && !row.notReimbursable;
-  if (!row.outReason && !row.latePending && !showCap && !row.possibleDuplicate) return null;
+  if (!row.outReason && !row.latePending && !showCap && !row.possibleDuplicate && !row.receiptDateHint) return null;
   const teto = foodDailyLimit != null ? `é ${formatCurrency(foodDailyLimit)} por dia` : 'é diário';
   const capTip = `O teto de alimentação ${teto}${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
   return (
@@ -1249,6 +1255,23 @@ function PolicyBadges({
             </Badge>
           </TooltipTrigger>
           <TooltipContent className="max-w-xs">{row.duplicateHint}</TooltipContent>
+        </Tooltip>
+      )}
+      {row.receiptDateHint && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="cursor-help gap-1 border-amber-500/50 text-xs text-amber-700 dark:text-amber-400"
+              tabIndex={0}
+              title={row.receiptDateHint}
+              data-testid="receipt-date-mismatch-badge"
+            >
+              <CalendarX className="h-3 w-3" aria-hidden="true" />
+              {RECEIPT_DATE_MISMATCH_LABEL}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{row.receiptDateHint}</TooltipContent>
         </Tooltip>
       )}
       {showCap && (
