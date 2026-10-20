@@ -56,3 +56,11 @@ verify_jwt = true
 
 [functions.validate-receipt]
 verify_jwt = true
+
+# Callback do OAuth vem do navegador, sem JWT; start/desconectar conferem o JWT
+# dentro da função.
+[functions.contaazul-oauth]
+verify_jwt = false
+
+[functions.contaazul-sync]
+verify_jwt = true
