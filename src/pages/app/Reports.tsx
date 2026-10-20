@@ -20,13 +20,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { EmptyState, LoadError } from '@/components/ui/EmptyState';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ReportStatusBadge } from '@/components/reports/ReportStatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ReportFormDialog } from '@/components/reports/ReportFormDialog';
 import { ReportCard } from '@/components/reports/ReportCard';
 import { ApprovalQueue } from '@/components/reports/ApprovalQueue';
 import { useReports, useDeleteReport, Report } from '@/hooks/useReports';
 import { useAuth } from '@/contexts/AuthContext';
+import { isAwaitingApprovalBy, isReturnedReport } from '@/components/reports/reportRules';
 import { formatCurrency, formatDate } from '@/lib/constants';
 import {
   Plus,
@@ -45,7 +46,10 @@ import { useIsMobile } from '@/hooks/use-mobile';
 export default function Reports() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const statusFilter = searchParams.get('status') || 'all';
+  // "Devolvidos" substitui a antiga aba "Reprovados" (status 'rejected' não sobra
+  // mais: a reprovação devolve como rascunho). Link antigo com ?status=rejected cai nela.
+  const rawStatus = searchParams.get('status') || 'all';
+  const statusFilter = rawStatus === 'rejected' ? 'returned' : rawStatus;
   const tab = searchParams.get('tab') || 'my-reports';
   
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -54,12 +58,18 @@ export default function Reports() {
 
   const { isManager, profile } = useAuth();
   const isMobile = useIsMobile();
-  const { data: orgReports, isLoading, isError, refetch } = useReports({ status: statusFilter });
+  // Devolvido não é um status no banco (é rascunho com motivo): busca tudo e filtra aqui.
+  const { data: orgReports, isLoading, isError, refetch } = useReports({
+    status: statusFilter === 'returned' ? 'all' : statusFilter,
+  });
   // Para gestor a RLS devolve a org inteira; "Meus Relatórios" é só do próprio usuário
   // — os dos outros ficam na Fila de Aprovação.
   const reports = useMemo(
-    () => orgReports?.filter((r) => r.user_id === profile?.id),
-    [orgReports, profile?.id],
+    () =>
+      orgReports?.filter(
+        (r) => r.user_id === profile?.id && (statusFilter !== 'returned' || isReturnedReport(r)),
+      ),
+    [orgReports, profile?.id, statusFilter],
   );
   const { data: pendingReports } = useReports({ status: 'submitted' });
   // Carrega TUDO uma vez pra calcular contadores nas tabs (GAP-G016).
@@ -72,10 +82,11 @@ export default function Reports() {
   const deleteReport = useDeleteReport();
 
   const tabCounts = useMemo(() => {
-    const c = { all: 0, draft: 0, submitted: 0, approved: 0, rejected: 0, paid: 0 };
+    const c = { all: 0, draft: 0, submitted: 0, approved: 0, returned: 0, paid: 0 };
     (allReports || []).forEach((r) => {
       c.all += 1;
       if (r.status in c) c[r.status as keyof typeof c] += 1;
+      if (isReturnedReport(r)) c.returned += 1;
     });
     return c;
   }, [allReports]);
@@ -92,7 +103,8 @@ export default function Reports() {
     return { total, reimbursable, nonReimbursable, average };
   }, [reports]);
 
-  const pendingCount = pendingReports?.filter((r) => r.user_id !== profile?.id).length || 0;
+  // Mesmo filtro da lista da Fila: contador e linhas não podem divergir.
+  const pendingCount = pendingReports?.filter((r) => isAwaitingApprovalBy(r, profile?.id)).length || 0;
 
   const handleStatusChange = (status: string) => {
     if (status === 'all') {
@@ -222,7 +234,7 @@ interface ReportsContentProps {
   onRetry: () => void;
   stats: { total: number; reimbursable: number; nonReimbursable: number; average: number };
   statusFilter: string;
-  tabCounts: { all: number; draft: number; submitted: number; approved: number; rejected: number; paid: number };
+  tabCounts: { all: number; draft: number; submitted: number; approved: number; returned: number; paid: number };
   onStatusChange: (status: string) => void;
   onDelete: (report: Report) => void;
   onCreateNew: () => void;
@@ -256,7 +268,7 @@ function ReportsContent({
               <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm text-muted-foreground">Total</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Total lançado</p>
               <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.total)}</p>
             </div>
           </CardContent>
@@ -280,7 +292,8 @@ function ReportsContent({
               <Receipt className="h-5 w-5 sm:h-6 sm:w-6 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-xs sm:text-sm text-muted-foreground">Não Reembolsável</p>
+              {/* Teto, reprovado na revisão e não reembolsável: tudo que não se paga. */}
+              <p className="text-xs sm:text-sm text-muted-foreground">Fora do reembolso</p>
               <p className="o2-num text-lg sm:text-xl font-bold">{formatCurrency(stats.nonReimbursable)}</p>
             </div>
           </CardContent>
@@ -308,7 +321,7 @@ function ReportsContent({
               { value: 'draft', label: 'Abertos' },
               { value: 'submitted', label: 'Enviados' },
               { value: 'approved', label: 'Aprovados' },
-              { value: 'rejected', label: 'Reprovados' },
+              { value: 'returned', label: 'Devolvidos' },
               { value: 'paid', label: 'Pagos' },
             ].map((t) => {
               const count = tabCounts[t.value as keyof typeof tabCounts] ?? 0;
@@ -342,6 +355,12 @@ function ReportsContent({
         </div>
       ) : isError ? (
         <LoadError onRetry={onRetry} />
+      ) : reports?.length === 0 && statusFilter === 'returned' ? (
+        <EmptyState
+          icon={<FileText className="h-6 w-6" />}
+          title="Nenhum relatório devolvido"
+          description="Quando o gestor devolver um relatório para correção, ele aparece aqui."
+        />
       ) : reports?.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-6 w-6" />}
@@ -372,7 +391,7 @@ function ReportsContent({
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider">Período</TableHead>
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider">Despesas</TableHead>
                 <TableHead className="font-mono text-[11px] uppercase tracking-wider">Status</TableHead>
-                <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">Total</TableHead>
+                <TableHead className="text-right font-mono text-[11px] uppercase tracking-wider">A reembolsar</TableHead>
                 <TableHead className="w-12"></TableHead>
               </TableRow>
             </TableHeader>
@@ -396,10 +415,14 @@ function ReportsContent({
                   </TableCell>
                   <TableCell className="o2-num">{report.expense_count}</TableCell>
                   <TableCell>
-                    <StatusBadge status={report.status} type="report" />
+                    <ReportStatusBadge report={report} />
                   </TableCell>
-                  <TableCell className="text-right font-semibold o2-num">
-                    {formatCurrency(report.total_cents || 0)}
+                  {/* Mesmo número do card no celular e do Detalhe: o reembolsável. */}
+                  <TableCell className="text-right o2-num">
+                    <p className="font-semibold">{formatCurrency(report.reimbursable_cents ?? report.total_cents ?? 0)}</p>
+                    {report.reimbursable_cents != null && (report.total_cents ?? 0) !== report.reimbursable_cents && (
+                      <p className="text-xs text-muted-foreground">de {formatCurrency(report.total_cents ?? 0)} lançado</p>
+                    )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>

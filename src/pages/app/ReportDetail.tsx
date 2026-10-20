@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,15 +20,19 @@ import { useReport, useRemoveExpenseFromReport } from '@/hooks/useReports';
 import { useSubmitReportRpc } from '@/hooks/useCurrentReport';
 import { useApproveReportRpc, useMarkReportPaidRpc } from '@/hooks/useReportActions';
 import { useReviewExpense } from '@/hooks/useReviewExpense';
+import { useExpensePolicy } from '@/hooks/usePolicy';
+import { buildRejectionDraft } from '@/components/reports/reportRules';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/constants';
+import { POSSIBLE_DUPLICATE_LABEL, possibleDuplicateHint } from '@/lib/possibleDuplicate';
+import { PaymentDetails } from '@/components/payments/PaymentDetails';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Send, CheckCircle2, XCircle, Trash2, Receipt, Wallet,
   MessageSquare, Clock, AlertTriangle, Loader2, Paperclip,
   ListChecks, ThumbsUp, ThumbsDown, MoreHorizontal, Download, FileSpreadsheet, FileText, History,
-  Undo2, Info,
+  Undo2, Info, Copy,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
@@ -63,6 +67,8 @@ interface ReportExpense {
   receipt_path?: string | null;
   category?: { name: string } | null;
   cost_center?: { name: string } | null;
+  possible_duplicate_of?: string | null;
+  duplicate_of?: { id: string; date: string; description: string } | null;
 }
 interface ReportItem {
   id: string;
@@ -113,6 +119,9 @@ interface Row {
   outReason: string | null;
   latePending: boolean;
   notReimbursable: boolean;
+  /** Mesma data+valor+categoria de outra despesa da pessoa (o banco marca, não bloqueia). */
+  possibleDuplicate: boolean;
+  duplicateHint: string | null;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -127,12 +136,15 @@ export default function ReportDetail() {
   const queryClient = useQueryClient();
   const { user, isManager, isAdmin } = useAuth();
 
-  const { data: report, isLoading } = useReport(id!);
+  const { data: report, isLoading, isError, refetch } = useReport(id!);
   const submitReport = useSubmitReportRpc();
   const approveReport = useApproveReportRpc();
   const markAsPaid = useMarkReportPaidRpc();
   const removeExpense = useRemoveExpenseFromReport();
   const reviewExpense = useReviewExpense();
+  // Teto de alimentação vem da política (editável em Configurações), não de texto fixo.
+  const { data: policy } = useExpensePolicy();
+  const foodDailyLimit = policy?.food_daily_limit_cents ?? null;
 
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [isApproveOpen, setIsApproveOpen] = useState(false);
@@ -200,6 +212,8 @@ export default function ReportDetail() {
           outReason,
           latePending: rule?.late_decision === 'pending',
           notReimbursable,
+          possibleDuplicate: !!e.possible_duplicate_of,
+          duplicateHint: e.possible_duplicate_of ? possibleDuplicateHint(e.duplicate_of) : null,
         };
       }),
     [items, rules]
@@ -246,6 +260,7 @@ export default function ReportDetail() {
   const allReviewed = totalExpenses > 0 && reviewedCount >= totalExpenses;
   const reviewProgress = totalExpenses > 0 ? (reviewedCount / totalExpenses) * 100 : 0;
   const hasRejected = reviewedItems.some((item) => item.review_decision === 'rejected');
+  const duplicateCount = rows.filter((row) => row.possibleDuplicate).length;
 
   // Os hooks de ação invalidam só as listas; o detalhe (['report', id]) ficava velho
   // até recarregar. Refaz aqui tudo que a tela e a casca mostram.
@@ -279,14 +294,14 @@ export default function ReportDetail() {
   };
 
   const handleRejectExpense = async () => {
-    if (!rejectExpenseId || !rejectExpenseComment) return;
+    if (!rejectExpenseId || !rejectExpenseComment.trim()) return;
     await run(
       () =>
         reviewExpense.mutateAsync({
           expenseId: rejectExpenseId,
           reportId: id!,
           decision: 'rejected',
-          comment: rejectExpenseComment,
+          comment: rejectExpenseComment.trim(),
         }),
       () => {
         setRejectExpenseId(null);
@@ -306,10 +321,26 @@ export default function ReportDetail() {
       }
     );
 
+  // O banco apaga a revisão por item ao devolver: o motivo de cada item reprovado
+  // já vem no texto (editável), senão o autor não sabe o que corrigir.
+  const openRejectReport = () => {
+    setComment(
+      buildRejectionDraft(
+        outBreakdown.rejectedRows.map((row) => ({
+          description: row.e.description,
+          date: row.e.date,
+          comment: row.item.review_comment,
+        })),
+      ),
+    );
+    setIsRejectOpen(true);
+  };
+
   const handleReject = async () => {
-    if (!comment) return;
+    // Só espaços não é motivo: o banco recusaria e o usuário veria erro em vez do aviso.
+    if (!comment.trim()) return;
     await run(
-      () => approveReport.mutateAsync({ reportId: id!, decision: 'rejected', comment }),
+      () => approveReport.mutateAsync({ reportId: id!, decision: 'rejected', comment: comment.trim() }),
       () => {
         setIsRejectOpen(false);
         setComment('');
@@ -334,14 +365,24 @@ export default function ReportDetail() {
 
   const buildExportable = (): ExportableReport | null => {
     if (!report) return null;
-    const expenses = rows.map(({ e }) => ({
-      date: e.date,
-      description: e.description,
-      category: e.category?.name ?? null,
-      costCenter: e.cost_center?.name ?? null,
-      paymentMethod: e.payment_method ?? 'other',
-      amountCents: e.amount_cents ?? 0,
-      currency: e.currency ?? 'BRL',
+    // Arquivo com os mesmos números da tela: nota e reembolsável lado a lado, e o
+    // motivo de cada linha que não entra (ou entra só em parte) no reembolso.
+    const expenses = rows.map((row) => ({
+      date: row.e.date,
+      description: row.e.description,
+      category: row.e.category?.name ?? null,
+      costCenter: row.e.cost_center?.name ?? null,
+      paymentMethod: row.e.payment_method ?? 'other',
+      amountCents: row.amount,
+      reimbursableCents: row.reimb,
+      situation: row.rejected
+        ? ('rejected' as const)
+        : row.notReimbursable
+          ? ('not_reimbursable' as const)
+          : row.capped
+            ? ('capped' as const)
+            : ('ok' as const),
+      currency: row.e.currency ?? 'BRL',
     }));
     return {
       title: report.title,
@@ -351,6 +392,11 @@ export default function ReportDetail() {
       endDate: r?.end_date ?? null,
       totalCents,
       reimbursableCents: reimbursableTotal,
+      breakdown: {
+        rejectedCents: outBreakdown.rejected,
+        cappedCents: outBreakdown.capped,
+        notReimbursableCents: outBreakdown.notReimb,
+      },
       expenses,
     };
   };
@@ -398,6 +444,15 @@ export default function ReportDetail() {
       <AppShell>
         <Skeleton className="h-8 w-64 mb-4" />
         <Skeleton className="h-64 w-full" />
+      </AppShell>
+    );
+  }
+
+  // Falha de rede/banco não é "não encontrado": oferece tentar de novo.
+  if (!report && isError) {
+    return (
+      <AppShell>
+        <LoadError onRetry={() => refetch()} />
       </AppShell>
     );
   }
@@ -500,7 +555,7 @@ export default function ReportDetail() {
             <>
               <Button
                 variant="outline"
-                onClick={() => setIsRejectOpen(true)}
+                onClick={openRejectReport}
                 className={cn('gap-2', actionSize, disabledLook)}
                 disabled={rejectBlocked || busy}
                 aria-describedby={rejectBlocked && approveBlockReason ? 'approve-block-reason' : undefined}
@@ -509,7 +564,10 @@ export default function ReportDetail() {
                 {hasRejected ? 'Reprovar relatório' : 'Reprovar'}
               </Button>
               <Button
-                onClick={() => setIsApproveOpen(true)}
+                onClick={() => {
+                  setComment('');
+                  setIsApproveOpen(true);
+                }}
                 className={cn('gap-2', actionSize, disabledLook)}
                 disabled={!allReviewed || hasRejected || busy}
                 aria-describedby={approveBlockReason ? 'approve-block-reason' : undefined}
@@ -577,7 +635,7 @@ export default function ReportDetail() {
             <p className="o2-display tabular-nums text-2xl sm:text-3xl text-foreground">
               {formatCurrency(reimbursableTotal)}
             </p>
-            <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
+            <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} foodDailyLimit={foodDailyLimit} />
           </CardContent>
         </Card>
         <Card className="min-w-0">
@@ -632,7 +690,7 @@ export default function ReportDetail() {
                         </p>
                       </div>
 
-                      <PolicyBadges row={row} />
+                      <PolicyBadges row={row} foodDailyLimit={foodDailyLimit} />
 
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -737,7 +795,7 @@ export default function ReportDetail() {
                                   {row.e.description}
                                 </p>
                                 <p className="text-xs text-muted-foreground">{row.e.category?.name || 'Sem categoria'}</p>
-                                <PolicyBadges row={row} className="mt-1" />
+                                <PolicyBadges row={row} foodDailyLimit={foodDailyLimit} className="mt-1" />
                               </TableCell>
                               <TableCell className="align-top">
                                 {row.e.receipt_path ? (
@@ -930,6 +988,7 @@ export default function ReportDetail() {
                       Há despesas reprovadas
                     </p>
                   )}
+                  {duplicateCount > 0 && <DuplicateSummary count={duplicateCount} />}
                 </div>
                 <Separator />
               </>
@@ -951,7 +1010,7 @@ export default function ReportDetail() {
               <p className="-mt-2 text-xs text-muted-foreground">Pago em {paidAtLabel}</p>
             )}
             {notReimbursedTotal > 0 && (
-              <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} />
+              <OutOfReimbursement total={notReimbursedTotal} breakdown={outBreakdown} foodDailyLimit={foodDailyLimit} />
             )}
           </CardContent>
         </Card>
@@ -989,6 +1048,8 @@ export default function ReportDetail() {
               Aprovar "{report.title}" — {formatCurrency(reimbursableTotal)} a reembolsar ({formatCurrency(totalCents)} lançados)?
             </DialogDescription>
           </DialogHeader>
+          {/* Última chance de conferir antes de aprovar: o banco não bloqueia duplicidade. */}
+          {duplicateCount > 0 && <DuplicateSummary count={duplicateCount} />}
           <Textarea
             placeholder="Comentário (opcional)"
             value={comment}
@@ -1020,7 +1081,7 @@ export default function ReportDetail() {
             onChange={(e) => setComment(e.target.value)}
             className="min-h-[100px]"
           />
-          {!comment && (
+          {!comment.trim() && (
             <p className="flex items-center gap-1 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
               Informe o motivo da reprovação
@@ -1028,7 +1089,7 @@ export default function ReportDetail() {
           )}
           <DialogFooter className="gap-2">
             <Button className="h-11 lg:h-10" variant="outline" onClick={() => setIsRejectOpen(false)} disabled={approveReport.isPending}>Cancelar</Button>
-            <Button className="h-11 lg:h-10" variant="destructive" onClick={handleReject} disabled={approveReport.isPending || !comment}>
+            <Button className="h-11 lg:h-10" variant="destructive" onClick={handleReject} disabled={approveReport.isPending || !comment.trim()}>
               {approveReport.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reprovar e devolver
             </Button>
@@ -1050,7 +1111,7 @@ export default function ReportDetail() {
             className="min-h-[100px]"
             autoFocus
           />
-          {!rejectExpenseComment && (
+          {!rejectExpenseComment.trim() && (
             <p className="flex items-center gap-1 text-sm text-destructive">
               <AlertTriangle className="h-4 w-4" />
               O motivo é obrigatório
@@ -1062,7 +1123,7 @@ export default function ReportDetail() {
               className="h-11 lg:h-10"
               variant="destructive"
               onClick={handleRejectExpense}
-              disabled={reviewExpense.isPending || !rejectExpenseComment}
+              disabled={reviewExpense.isPending || !rejectExpenseComment.trim()}
             >
               {reviewExpense.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Reprovar despesa
@@ -1080,7 +1141,10 @@ export default function ReportDetail() {
         confirmLabel="Confirmar pagamento"
         onConfirm={handleMarkPaid}
         isLoading={markAsPaid.isPending}
-      />
+      >
+        {/* Decisão 4: o admin vê para onde vai o dinheiro antes de confirmar. */}
+        <PaymentDetails person={report.user} />
+      </ConfirmDialog>
 
       <ReceiptPreviewDialog
         path={receiptTarget?.path ?? null}
@@ -1109,6 +1173,18 @@ function ExpenseReviewBadge({ decision }: { decision: string | null | undefined 
       <ThumbsDown className="h-3 w-3" />
       Reprovada
     </Badge>
+  );
+}
+
+/** Resumo/diálogo de aprovação: quantos itens o banco marcou como possível duplicidade. */
+function DuplicateSummary({ count }: { count: number }) {
+  return (
+    <p className="flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" data-testid="possible-duplicate-summary">
+      <Copy className="h-3 w-3 shrink-0" aria-hidden="true" />
+      {count === 1
+        ? '1 despesa com possível duplicidade — confira antes de aprovar.'
+        : `${count} despesas com possível duplicidade — confira antes de aprovar.`}
+    </p>
   );
 }
 
@@ -1143,12 +1219,37 @@ function AmountBlock({ row, align = 'right' }: { row: Row; align?: 'left' | 'rig
  * selo neutro. Exceção (âmbar) fica só para evento/viagem. "Após o envio" marca
  * despesa lançada depois do envio do ciclo, aguardando o gestor.
  */
-function PolicyBadges({ row, className }: { row: Row; className?: string }) {
+function PolicyBadges({
+  row,
+  foodDailyLimit,
+  className,
+}: {
+  row: Row;
+  foodDailyLimit: number | null;
+  className?: string;
+}) {
   const showCap = row.capped && !row.notReimbursable;
-  if (!row.outReason && !row.latePending && !showCap) return null;
-  const capTip = `O teto de alimentação é R$ 30 por dia${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
+  if (!row.outReason && !row.latePending && !showCap && !row.possibleDuplicate) return null;
+  const teto = foodDailyLimit != null ? `é ${formatCurrency(foodDailyLimit)} por dia` : 'é diário';
+  const capTip = `O teto de alimentação ${teto}${row.foodDays > 1 ? ` (× ${row.foodDays} dias)` : ''}. A nota foi de ${formatCurrency(row.amount)}; o reembolso é de ${formatCurrency(row.covered)}.`;
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-1', className)}>
+      {row.possibleDuplicate && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="cursor-help gap-1 border-amber-500/50 text-xs text-amber-700 dark:text-amber-400"
+              tabIndex={0}
+              data-testid="possible-duplicate-badge"
+            >
+              <Copy className="h-3 w-3" aria-hidden="true" />
+              {POSSIBLE_DUPLICATE_LABEL}
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-xs">{row.duplicateHint}</TooltipContent>
+        </Tooltip>
+      )}
       {showCap && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1257,9 +1358,11 @@ function buildTimeline(events: ReportEvent[], approvals: ReportApproval[]): Time
 function OutOfReimbursement({
   total,
   breakdown,
+  foodDailyLimit,
 }: {
   total: number;
   breakdown: { rejected: number; capped: number; notReimb: number; rejectedRows: Row[] };
+  foodDailyLimit: number | null;
 }) {
   if (total <= 0) return null;
   return (
@@ -1277,7 +1380,8 @@ function OutOfReimbursement({
         ))}
         {breakdown.capped > 0 && (
           <li>
-            <span className="o2-num">{formatCurrency(breakdown.capped)}</span> acima do teto de alimentação (R$ 30/dia)
+            <span className="o2-num">{formatCurrency(breakdown.capped)}</span> acima do teto de alimentação
+            {foodDailyLimit != null ? ` (${formatCurrency(foodDailyLimit)}/dia)` : ''}
           </li>
         )}
         {breakdown.notReimb > 0 && (

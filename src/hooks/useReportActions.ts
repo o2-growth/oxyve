@@ -1,6 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { decisionErrorMessage } from '@/lib/businessError';
+
+export { decisionErrorMessage };
 
 export function useApproveReportRpc() {
   const queryClient = useQueryClient();
@@ -30,8 +33,17 @@ export function useApproveReportRpc() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-context'] });
       toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
     },
-    onError: (error) => {
-      toast.error('Erro ao processar: ' + error.message);
+    onError: (error, { decision }) => {
+      // Fila e Detalhe podem estar com dado antigo (outro gestor revisou/reprovou):
+      // recarrega para os botões refletirem o que o banco viu.
+      queryClient.invalidateQueries({ queryKey: ['reports'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+      toast.error(
+        decisionErrorMessage(
+          error,
+          decision === 'approved' ? 'Erro ao aprovar: ' : 'Erro ao reprovar: ',
+        ),
+      );
     },
   });
 }
@@ -54,7 +66,7 @@ export function useMarkReportPaidRpc() {
       toast.success('Relatório marcado como pago!');
     },
     onError: (error) => {
-      toast.error('Erro: ' + error.message);
+      toast.error(decisionErrorMessage(error, 'Erro ao marcar como pago: '));
     },
   });
 }

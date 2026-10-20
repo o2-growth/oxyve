@@ -28,7 +28,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -40,6 +40,9 @@ import {
   type PersonRow,
   type LateExpenseRow,
 } from '@/hooks/useAdminOverview';
+import { isPermissionError } from '@/lib/permissionError';
+import { payableExpenses, reimbursableOf } from '@/components/reports/reportRules';
+import { PaymentDetails } from '@/components/payments/PaymentDetails';
 import {
   Wallet,
   TrendingUp,
@@ -74,6 +77,7 @@ interface DrillExpense {
   reimbursable_cents: number | null;
   currency: string;
   status: 'draft' | 'submitted' | 'approved' | 'rejected' | 'paid';
+  is_reimbursable: boolean;
   is_out_of_policy: boolean;
   is_event: boolean;
   category?: { name: string } | null;
@@ -85,9 +89,12 @@ interface DrillExpense {
 
 function PersonExpensesDialog({
   person,
+  canPay,
   onClose,
 }: {
   person: PersonRow | null;
+  /** Só admin marca reembolso como pago (o banco também recusa gestor). */
+  canPay: boolean;
   onClose: () => void;
 }) {
   const userId = person?.user_id ?? null;
@@ -107,12 +114,14 @@ function PersonExpensesDialog({
   });
 
   const queryClient = useQueryClient();
-  // Só aprovada é pagável — a RPC recusa o resto; a tela diz o mesmo antes.
-  const payable = (data ?? []).filter((e) => e.status === 'approved');
+  // Só aprovada é pagável — a RPC recusa o resto; a tela diz o mesmo antes. Não
+  // reembolsável (ex.: cartão da empresa) não se paga ao colaborador: fica fora da
+  // lista enviada à RPC, senão a empresa pagaria duas vezes.
   // Paga-se o reembolsável (teto de alimentação), não o valor da nota.
-  const reimb = (e: DrillExpense) => e.reimbursable_cents ?? e.amount_cents;
-  const payableTotal = payable.reduce((s, e) => s + reimb(e), 0);
+  const { items: payable, totalCents: payableTotal } = payableExpenses(data ?? []);
+  const reimb = (e: DrillExpense) => reimbursableOf(e);
   const pending = (data ?? []).filter((e) => e.status === 'submitted');
+  const pendingTotal = pending.reduce((s, e) => s + reimb(e), 0);
   const [confirming, setConfirming] = useState(false);
 
   const markPaid = useMutation({
@@ -142,9 +151,11 @@ function PersonExpensesDialog({
           <DialogTitle>{person?.full_name || 'Colaborador'}</DialogTitle>
           <DialogDescription>
             Lançamentos do colaborador
-            {person ? ` — a pagar ${formatCurrency(person.a_pagar_cents)}` : ''}
-            {person && person.aguardando_aprovacao_cents > 0
-              ? ` · aguardando aprovação ${formatCurrency(person.aguardando_aprovacao_cents)}`
+            {/* Com a lista carregada, o valor sai dela (sem não reembolsáveis); antes
+                disso, o do painel. */}
+            {person ? ` — a pagar ${formatCurrency(data ? payableTotal : person.a_pagar_cents)}` : ''}
+            {person && (data ? pendingTotal : person.aguardando_aprovacao_cents) > 0
+              ? ` · aguardando aprovação ${formatCurrency(data ? pendingTotal : person.aguardando_aprovacao_cents)}`
               : ''}
           </DialogDescription>
         </DialogHeader>
@@ -193,6 +204,11 @@ function PersonExpensesDialog({
                         Evento
                       </span>
                     )}
+                    {expense.is_reimbursable === false && (
+                      <span className={`${STAMP} border border-border text-muted-foreground`}>
+                        Não reembolsável
+                      </span>
+                    )}
                   </div>
                   <p className="o2-num mt-0.5 text-[11px] text-muted-foreground">
                     {formatIsoDate(expense.date)}
@@ -206,10 +222,16 @@ function PersonExpensesDialog({
                   <p className="o2-num font-semibold text-sm">
                     {formatCurrency(reimb(expense), expense.currency)}
                   </p>
-                  {reimb(expense) < expense.amount_cents && (
+                  {expense.is_reimbursable === false ? (
                     <p className="o2-num text-[11px] text-muted-foreground">
-                      nota {formatCurrency(expense.amount_cents, expense.currency)} · teto
+                      nota {formatCurrency(expense.amount_cents, expense.currency)} · não entra no pagamento
                     </p>
+                  ) : (
+                    reimb(expense) < expense.amount_cents && (
+                      <p className="o2-num text-[11px] text-muted-foreground">
+                        nota {formatCurrency(expense.amount_cents, expense.currency)} · teto
+                      </p>
+                    )
                   )}
                 </div>
               </div>
@@ -224,8 +246,21 @@ function PersonExpensesDialog({
           </p>
         )}
 
-        {payable.length > 0 && (
-          <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+        {payable.length > 0 && !canPay && (
+          <p className="mt-4 border-t pt-4 text-sm text-muted-foreground">
+            {payable.length} lançamento(s) aprovado(s) aguardando pagamento — só
+            administradores confirmam o pagamento.
+          </p>
+        )}
+
+        {payable.length > 0 && canPay && person && (
+          <div className="mt-4 border-t pt-4">
+            <PaymentDetails person={person} />
+          </div>
+        )}
+
+        {payable.length > 0 && canPay && (
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
               {confirming
                 ? `Confirmar o pagamento de ${payable.length} lançamento(s) aprovado(s)?`
@@ -345,7 +380,7 @@ const REPORT_STATUS_LABEL: Record<string, string> = {
 
 export default function Gestao() {
   const { isAdmin, isManager, isLoading: authLoading } = useAuth();
-  const { data, isLoading, isError } = useAdminOverview();
+  const { data, isLoading, isError, error, refetch } = useAdminOverview();
   const [selectedPerson, setSelectedPerson] = useState<PersonRow | null>(null);
 
   const people = useMemo(
@@ -366,7 +401,8 @@ export default function Gestao() {
 
   // Acesso restrito: a RPC já recusa não-gestor, mas a tela não pode depender
   // do erro — com a consulta desligada para employee ela mostrava tudo zerado.
-  if ((!authLoading && !isManager) || isError) {
+  // Erro de rede/servidor não é falta de permissão: vira "tentar de novo".
+  if ((!authLoading && !isManager) || (isError && isPermissionError(error))) {
     return (
       <AppShell>
         <PageHeader
@@ -378,6 +414,18 @@ export default function Gestao() {
           title="Acesso restrito aos administradores."
           description="Você não tem permissão para visualizar o painel de gestão financeira."
         />
+      </AppShell>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AppShell>
+        <PageHeader
+          title="Gestão"
+          description="Painel financeiro da organização"
+        />
+        <LoadError onRetry={() => refetch()} />
       </AppShell>
     );
   }
@@ -656,6 +704,7 @@ export default function Gestao() {
       {/* Drill-down */}
       <PersonExpensesDialog
         person={selectedPerson}
+        canPay={isAdmin}
         onClose={() => setSelectedPerson(null)}
       />
         </TabsContent>

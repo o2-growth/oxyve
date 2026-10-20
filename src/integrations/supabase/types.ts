@@ -279,6 +279,7 @@ export type Database = {
           notes: string | null
           org_id: string
           payment_method: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of: string | null
           project_id: string | null
           receipt_hash: string | null
           receipt_path: string | null
@@ -305,6 +306,7 @@ export type Database = {
           notes?: string | null
           org_id: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of?: string | null
           project_id?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
@@ -331,6 +333,7 @@ export type Database = {
           notes?: string | null
           org_id?: string
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          possible_duplicate_of?: string | null
           project_id?: string | null
           receipt_hash?: string | null
           receipt_path?: string | null
@@ -362,6 +365,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_possible_duplicate_of_fkey"
+            columns: ["possible_duplicate_of"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -382,10 +392,14 @@ export type Database = {
           body: string | null
           category: Database["public"]["Enums"]["notification_category"]
           created_at: string
+          email_attempts: number
+          email_request_id: number | null
           emailed_at: string | null
           id: string
           link: string | null
           org_id: string
+          push_attempts: number
+          push_request_id: number | null
           pushed_at: string | null
           read_at: string | null
           title: string
@@ -395,10 +409,14 @@ export type Database = {
           body?: string | null
           category?: Database["public"]["Enums"]["notification_category"]
           created_at?: string
+          email_attempts?: number
+          email_request_id?: number | null
           emailed_at?: string | null
           id?: string
           link?: string | null
           org_id: string
+          push_attempts?: number
+          push_request_id?: number | null
           pushed_at?: string | null
           read_at?: string | null
           title: string
@@ -408,10 +426,14 @@ export type Database = {
           body?: string | null
           category?: Database["public"]["Enums"]["notification_category"]
           created_at?: string
+          email_attempts?: number
+          email_request_id?: number | null
           emailed_at?: string | null
           id?: string
           link?: string | null
           org_id?: string
+          push_attempts?: number
+          push_request_id?: number | null
           pushed_at?: string | null
           read_at?: string | null
           title?: string
@@ -636,6 +658,7 @@ export type Database = {
           id: string
           last_used_at: string
           p256dh: string
+          updated_at: string
           user_agent: string | null
           user_id: string
         }
@@ -646,6 +669,7 @@ export type Database = {
           id?: string
           last_used_at?: string
           p256dh: string
+          updated_at?: string
           user_agent?: string | null
           user_id: string
         }
@@ -656,7 +680,26 @@ export type Database = {
           id?: string
           last_used_at?: string
           p256dh?: string
+          updated_at?: string
           user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      receipt_validation_usage: {
+        Row: {
+          created_at: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
           user_id?: string
         }
         Relationships: []
@@ -914,6 +957,10 @@ export type Database = {
         }
         Returns: Json
       }
+      consume_receipt_validation_quota: {
+        Args: { p_limit_per_hour?: number }
+        Returns: boolean
+      }
       create_notification: {
         Args: {
           p_body?: string
@@ -934,6 +981,10 @@ export type Database = {
       }
       dispatch_pending_notification_emails: { Args: never; Returns: number }
       dispatch_pending_notification_pushes: { Args: never; Returns: number }
+      expense_in_any_report: {
+        Args: { p_expense_id: string }
+        Returns: boolean
+      }
       get_admin_financial_overview: { Args: never; Returns: Json }
       get_dashboard_context: { Args: never; Returns: Json }
       get_or_create_current_report: { Args: never; Returns: Json }
@@ -951,6 +1002,8 @@ export type Database = {
       is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       mark_expenses_paid: { Args: { p_expense_ids: string[] }; Returns: Json }
       mark_report_paid: { Args: { p_report_id: string }; Returns: Json }
+      receipt_is_locked: { Args: { p_name: string }; Returns: boolean }
+      reconcile_notification_deliveries: { Args: never; Returns: number }
       set_user_role: {
         Args: {
           p_role: Database["public"]["Enums"]["app_role"]

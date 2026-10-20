@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { SettingsLayout } from '@/components/settings/SettingsLayout';
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useExpensePolicy, useUpdateExpensePolicy } from '@/hooks/usePolicy';
+import { useExpensePolicy, useUpdateExpensePolicy, type ExpensePolicy } from '@/hooks/usePolicy';
 import { CostCentersList } from '@/components/settings/CostCentersList';
 import { ProjectsList } from '@/components/settings/ProjectsList';
 import { DepartmentsList } from '@/components/settings/DepartmentsList';
@@ -21,6 +21,8 @@ import { Loader2, Shield, ArrowLeft, Check, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
+import { parseOptionalLimitCents } from '@/lib/constants';
 
 const CURRENCIES = [
   { value: 'BRL', label: 'Real (BRL)' },
@@ -30,15 +32,45 @@ const CURRENCIES = [
 
 const CUTOFF_DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
 
-const DEBOUNCE_DELAY = 600;
+// Switch: agrupa cliques repetidos no mesmo campo. Select e teto salvam na hora.
+const SWITCH_DEBOUNCE_MS = 400;
+
+// Padrão do banco desde 20260725130000 (a coluna e a regra vigente usam 25).
+const DEFAULT_CUTOFF_DAY = 25;
+const DEFAULT_FOOD_LIMIT_CENTS = 3000;
+
+type PolicyField =
+  | 'cycle_cutoff_day'
+  | 'food_daily_limit_cents'
+  | 'default_currency'
+  | 'require_cost_center'
+  | 'require_project'
+  | 'require_receipt';
+type PolicyPatch = Partial<Pick<ExpensePolicy, PolicyField>>;
+
+/** Converte o texto do input (R$) em centavos; null se vazio ou inválido. */
+function parseFoodLimitCents(raw: string): number | null {
+  // Mesma leitura pt-BR do valor da despesa ("30,00", "30.00", "1.500").
+  const cents = parseOptionalLimitCents(raw);
+  return typeof cents === 'number' ? cents : null;
+}
 
 export default function SettingsPolicy() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const { data: policy, isLoading, dataUpdatedAt } = useExpensePolicy();
   const updatePolicy = useUpdateExpensePolicy();
-  
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Valores escolhidos que ainda não voltaram do servidor: a tela mostra o que
+  // o admin escolheu na hora, sem o switch "voltar" esperando a rede.
+  const [draft, setDraft] = useState<PolicyPatch>({});
+  // Debounce por campo: mudar um campo nunca cancela o save de outro.
+  const timersRef = useRef(new Map<PolicyField, ReturnType<typeof setTimeout>>());
+  const pendingRef = useRef<PolicyPatch>({});
+  const policyIdRef = useRef<string | undefined>(policy?.id);
+  policyIdRef.current = policy?.id;
+  const mutateAsyncRef = useRef(updatePolicy.mutateAsync);
+  mutateAsyncRef.current = updatePolicy.mutateAsync;
   const lastSavedRef = useRef<Date | null>(null);
 
   // Track if we just saved (for showing "Salvo" indicator)
@@ -51,34 +83,62 @@ export default function SettingsPolicy() {
     }
   }, [updatePolicy.isSuccess]);
 
-  const handleAutoSave = useCallback(
-    (field: string, value: string | number | boolean) => {
+  const sendField = useCallback((field: PolicyField) => {
+    timersRef.current.delete(field);
+    if (!(field in pendingRef.current)) return;
+    const value = pendingRef.current[field];
+    delete pendingRef.current[field];
+    const id = policyIdRef.current;
+    if (!id) return;
+
+    // Ao terminar (ok ou erro), a tela volta a seguir o cache da query, que o
+    // hook já atualizou de forma otimista (ou desfez no erro).
+    const clearDraft = () =>
+      setDraft((d) => {
+        if (field in pendingRef.current || d[field] !== value) return d;
+        const next = { ...d };
+        delete next[field];
+        return next;
+      });
+    // mutateAsync e não mutate(..., { onSettled }): o TanStack só chama os
+    // callbacks do último mutate(); com dois campos em voo o primeiro ficaria
+    // preso no draft mesmo se falhasse. O toast de erro já sai no hook.
+    mutateAsyncRef.current({ id, [field]: value })
+      .catch(() => undefined)
+      .finally(clearDraft);
+  }, []);
+
+  const saveField = useCallback(
+    <K extends PolicyField>(field: K, value: ExpensePolicy[K], delayMs = 0) => {
       if (!policy?.id) return;
+      setDraft((d) => ({ ...d, [field]: value }));
+      pendingRef.current = { ...pendingRef.current, [field]: value };
 
-      // Clear any pending debounce
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      const timer = timersRef.current.get(field);
+      if (timer) clearTimeout(timer);
+      if (delayMs <= 0) {
+        sendField(field);
+      } else {
+        timersRef.current.set(field, setTimeout(() => sendField(field), delayMs));
       }
-
-      // Set new debounce
-      debounceRef.current = setTimeout(() => {
-        updatePolicy.mutate({
-          id: policy.id,
-          [field]: value,
-        });
-      }, DEBOUNCE_DELAY);
     },
-    [policy?.id, updatePolicy]
+    [policy?.id, sendField]
   );
 
-  // Cleanup debounce on unmount
+  // Ao sair da página, envia o que estava pendente em vez de descartar.
   useEffect(() => {
+    const timers = timersRef.current;
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
+      for (const [field, timer] of Array.from(timers.entries())) {
+        clearTimeout(timer);
+        sendField(field);
       }
     };
-  }, []);
+  }, [sendField]);
+
+  const view = { ...policy, ...draft };
+  const cutoffDay = view.cycle_cutoff_day ?? DEFAULT_CUTOFF_DAY;
+  const foodLimitCents = view.food_daily_limit_cents ?? DEFAULT_FOOD_LIMIT_CENTS;
 
   if (isLoading) {
     return (
@@ -170,7 +230,7 @@ export default function SettingsPolicy() {
                     <Info className="h-4 w-4" />
                     <AlertDescription>
                       {(() => {
-                        const c = policy?.cycle_cutoff_day ?? 24;
+                        const c = cutoffDay;
                         const fim = c === 1 ? 'último dia do mês' : `dia ${c - 1}`;
                         return `O ciclo começa no dia ${c} de um mês e termina no ${fim} do mês seguinte. O relatório do ciclo vence no dia ${c}, quando o próximo começa.`;
                       })()}
@@ -181,8 +241,8 @@ export default function SettingsPolicy() {
                     <div className="space-y-2">
                       <Label htmlFor="cutoff-day">Dia de corte mensal</Label>
                       <Select
-                        value={String(policy?.cycle_cutoff_day ?? 24)}
-                        onValueChange={(value) => handleAutoSave('cycle_cutoff_day', parseInt(value))}
+                        value={String(cutoffDay)}
+                        onValueChange={(value) => saveField('cycle_cutoff_day', parseInt(value, 10))}
                       >
                         <SelectTrigger id="cutoff-day" className="w-32">
                           <SelectValue />
@@ -209,12 +269,19 @@ export default function SettingsPolicy() {
                         min={0}
                         step="0.01"
                         className="h-11 w-32"
-                        defaultValue={((policy?.food_daily_limit_cents ?? 3000) / 100).toFixed(2)}
-                        key={policy?.food_daily_limit_cents ?? 'x'}
+                        defaultValue={(foodLimitCents / 100).toFixed(2)}
+                        key={foodLimitCents}
                         onBlur={(e) => {
-                          const cents = Math.round(Number(e.target.value.replace(',', '.')) * 100);
-                          if (Number.isFinite(cents) && cents >= 0 && cents !== policy?.food_daily_limit_cents) {
-                            handleAutoSave('food_daily_limit_cents', cents);
+                          const cents = parseFoodLimitCents(e.target.value);
+                          // Vazio ou 0 seria salvo como 0, que o banco trata
+                          // como "sem limite": toda refeição reembolsada cheia.
+                          if (cents === null || cents <= 0) {
+                            toast.error('Informe um teto de alimentação maior que zero.');
+                            e.target.value = (foodLimitCents / 100).toFixed(2);
+                            return;
+                          }
+                          if (cents !== foodLimitCents) {
+                            saveField('food_daily_limit_cents', cents);
                           }
                         }}
                       />
@@ -240,8 +307,8 @@ export default function SettingsPolicy() {
                   <div className="space-y-2">
                     <Label htmlFor="currency">Moeda padrão</Label>
                     <Select
-                      value={policy?.default_currency || 'BRL'}
-                      onValueChange={(value) => handleAutoSave('default_currency', value)}
+                      value={view.default_currency || 'BRL'}
+                      onValueChange={(value) => saveField('default_currency', value)}
                     >
                       <SelectTrigger id="currency" className="w-48">
                         <SelectValue />
@@ -263,45 +330,48 @@ export default function SettingsPolicy() {
                     
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <Label>Centro de custo obrigatório</Label>
+                        <Label htmlFor="require-cost-center">Centro de custo obrigatório</Label>
                         <p className="text-sm text-muted-foreground">
                           Exigir seleção de centro de custo ao criar despesas
                         </p>
                       </div>
                       <Switch
-                        checked={policy?.require_cost_center ?? false}
+                        id="require-cost-center"
+                        checked={view.require_cost_center ?? false}
                         onCheckedChange={(checked) =>
-                          handleAutoSave('require_cost_center', checked)
+                          saveField('require_cost_center', checked, SWITCH_DEBOUNCE_MS)
                         }
                       />
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <Label>Projeto obrigatório</Label>
+                        <Label htmlFor="require-project">Projeto obrigatório</Label>
                         <p className="text-sm text-muted-foreground">
                           Exigir seleção de projeto ao criar despesas
                         </p>
                       </div>
                       <Switch
-                        checked={policy?.require_project ?? false}
+                        id="require-project"
+                        checked={view.require_project ?? false}
                         onCheckedChange={(checked) =>
-                          handleAutoSave('require_project', checked)
+                          saveField('require_project', checked, SWITCH_DEBOUNCE_MS)
                         }
                       />
                     </div>
 
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <Label>Comprovante obrigatório</Label>
+                        <Label htmlFor="require-receipt">Comprovante obrigatório</Label>
                         <p className="text-sm text-muted-foreground">
                           Exigir upload de comprovante ao criar despesas
                         </p>
                       </div>
                       <Switch
-                        checked={policy?.require_receipt ?? false}
+                        id="require-receipt"
+                        checked={view.require_receipt ?? false}
                         onCheckedChange={(checked) =>
-                          handleAutoSave('require_receipt', checked)
+                          saveField('require_receipt', checked, SWITCH_DEBOUNCE_MS)
                         }
                       />
                     </div>

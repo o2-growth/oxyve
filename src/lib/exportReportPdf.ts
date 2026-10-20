@@ -6,16 +6,16 @@
  *
  * Layout:
  *   - Cabeçalho com nome da org (se disponível) + título do relatório + status
- *   - 4 KPIs em linha: Total / Reembolsável / Não-reembolsável / Despesas
- *   - Tabela de despesas: Data, Descrição, Tipo, CC, Forma pagto, Valor
- *   - Sumário por categoria (% e valor)
+ *   - 4 KPIs em linha: Total lançado / Reembolsável / Fora do reembolso / Despesas
+ *   - Tabela de despesas: Data, Descrição, Tipo, CC, Forma pagto, Nota, Reembolso, Situação
+ *   - Sumário por categoria (% e valor reembolsável — o que de fato se paga)
  *   - Footer com data de geração
  */
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { PAYMENT_METHOD_LABELS, formatCurrency } from '@/lib/constants';
-import type { ExportableReport } from '@/lib/exportReport';
+import { SITUATION_LABELS, type ExportableReport } from '@/lib/exportReport';
 
 interface ExtendedReport extends ExportableReport {
   orgName?: string | null;
@@ -62,12 +62,14 @@ interface CategoryAgg {
   count: number;
 }
 
-function aggregateByCategory(report: ExportableReport): CategoryAgg[] {
+/** Agrupa pelo valor reembolsável; item reprovado na revisão fica fora. Exposto pra testes. */
+export function aggregateByCategory(report: ExportableReport): CategoryAgg[] {
   const map = new Map<string, CategoryAgg>();
   for (const e of report.expenses) {
+    if (e.situation === 'rejected') continue;
     const key = e.category || 'Sem categoria';
     const cur = map.get(key) ?? { name: key, totalCents: 0, count: 0 };
-    cur.totalCents += e.amountCents || 0;
+    cur.totalCents += e.reimbursableCents ?? e.amountCents ?? 0;
     cur.count += 1;
     map.set(key, cur);
   }
@@ -112,9 +114,9 @@ export function generateReportPdf(report: ExtendedReport): Blob {
   const reimbursable = report.reimbursableCents ?? 0;
   const nonReimbursable = (report.totalCents ?? 0) - reimbursable;
   const kpis: Array<[string, string]> = [
-    ['Total', formatCurrency(report.totalCents)],
+    ['Total lançado', formatCurrency(report.totalCents)],
     ['Reembolsável', formatCurrency(reimbursable)],
-    ['Não reembolsável', formatCurrency(nonReimbursable)],
+    ['Fora do reembolso', formatCurrency(nonReimbursable)],
     ['Despesas', String(report.expenses.length)],
   ];
 
@@ -135,7 +137,7 @@ export function generateReportPdf(report: ExtendedReport): Blob {
   cursorY += cardH + 18;
 
   // Tabela de despesas
-  const head = [['Data', 'Descrição', 'Tipo', 'CC', 'Forma pagto', 'Valor']];
+  const head = [['Data', 'Descrição', 'Tipo', 'CC', 'Forma pagto', 'Nota', 'Reembolso', 'Situação']];
   const body = report.expenses.map((e) => [
     formatDateBR(e.date),
     e.description,
@@ -143,6 +145,8 @@ export function generateReportPdf(report: ExtendedReport): Blob {
     e.costCenter || '-',
     paymentLabel(e.paymentMethod),
     formatCurrency(e.amountCents, e.currency || 'BRL'),
+    formatCurrency(e.reimbursableCents ?? e.amountCents, e.currency || 'BRL'),
+    SITUATION_LABELS[e.situation ?? 'ok'],
   ]);
 
   autoTable(doc, {
@@ -150,10 +154,11 @@ export function generateReportPdf(report: ExtendedReport): Blob {
     head,
     body,
     margin: { left: margin, right: margin },
-    styles: { fontSize: 9, cellPadding: 4 },
+    styles: { fontSize: 8, cellPadding: 3 },
     headStyles: { fillColor: [40, 40, 40], textColor: [255, 255, 255] },
     columnStyles: {
       5: { halign: 'right' },
+      6: { halign: 'right' },
     },
     alternateRowStyles: { fillColor: [248, 248, 248] },
   });
@@ -164,7 +169,8 @@ export function generateReportPdf(report: ExtendedReport): Blob {
 
   // Sumário por categoria
   const buckets = aggregateByCategory(report);
-  if (buckets.length > 0 && report.totalCents > 0) {
+  const bucketsTotal = buckets.reduce((s, b) => s + b.totalCents, 0);
+  if (buckets.length > 0 && bucketsTotal > 0) {
     if (cursorY > 700) {
       doc.addPage();
       cursorY = margin;
@@ -175,13 +181,13 @@ export function generateReportPdf(report: ExtendedReport): Blob {
     cursorY += 8;
 
     const catBody = buckets.map((b) => {
-      const pct = ((b.totalCents / report.totalCents) * 100).toFixed(1) + '%';
+      const pct = ((b.totalCents / bucketsTotal) * 100).toFixed(1) + '%';
       return [b.name, String(b.count), pct, formatCurrency(b.totalCents)];
     });
 
     autoTable(doc, {
       startY: cursorY + 4,
-      head: [['Categoria', '#', '%', 'Total']],
+      head: [['Categoria', '#', '%', 'Reembolsável']],
       body: catBody,
       margin: { left: margin, right: margin },
       styles: { fontSize: 9, cellPadding: 4 },

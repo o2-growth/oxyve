@@ -45,7 +45,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, parseOptionalLimitCents } from '@/lib/constants';
 import {
   useExpenseTypes,
   useCreateExpenseType,
@@ -144,15 +144,11 @@ function CategoryFormDialog({
 
   const onSubmit = async (data: FormData) => {
     // Converte limite diário (reais) para centavos; vazio => sem limite.
-    let dailyLimitCents: number | null = null;
-    const rawLimit = (data.daily_limit ?? '').trim();
-    if (rawLimit !== '') {
-      const parsed = parseFloat(rawLimit.replace(',', '.'));
-      if (Number.isNaN(parsed) || parsed < 0) {
-        form.setError('daily_limit', { message: 'Valor inválido' });
-        return;
-      }
-      dailyLimitCents = Math.round(parsed * 100);
+    // parseFloat lia "1.234,56" como R$ 1,23; a leitura pt-BR é a mesma do valor da despesa.
+    const dailyLimitCents = parseOptionalLimitCents(data.daily_limit);
+    if (dailyLimitCents === 'invalid') {
+      form.setError('daily_limit', { message: 'Valor inválido' });
+      return;
     }
 
     const sector = (data.sector ?? '').trim();

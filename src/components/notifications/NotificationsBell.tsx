@@ -1,8 +1,9 @@
 /**
  * Sprint 2 — GAP-G012: sino de notificações no header.
  *
- * Tabs internas: Todas / Ações necessárias / Minhas despesas / Outras
- * (igual VExpenses screens 03b).
+ * Tabs internas: Todas / Ações necessárias / Minhas despesas / Relatórios / Outras
+ * (igual VExpenses screens 03b). O banco grava 'reports' no envio de relatório;
+ * sem a aba, essas só apareciam em "Todas".
  */
 import { Bell, CheckCheck } from 'lucide-react';
 import { useState } from 'react';
@@ -69,6 +70,7 @@ const CATEGORIES: { value: NotificationCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'Todas' },
   { value: 'action_required', label: 'Ações' },
   { value: 'my_expenses', label: 'Despesas' },
+  { value: 'reports', label: 'Relatórios' },
   { value: 'other', label: 'Outras' },
 ];
 
@@ -136,12 +138,12 @@ export function NotificationsBell() {
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as NotificationCategory | 'all')}>
-          <TabsList className="grid w-full grid-cols-4 rounded-none border-b bg-transparent p-0">
+          <TabsList className="grid w-full grid-cols-5 rounded-none border-b bg-transparent p-0">
             {CATEGORIES.map((c) => (
               <TabsTrigger
                 key={c.value}
                 value={c.value}
-                className="rounded-none text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none"
+                className="rounded-none px-1 text-xs data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:shadow-none"
               >
                 {c.label}
               </TabsTrigger>

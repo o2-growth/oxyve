@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   Dialog,
@@ -50,16 +51,15 @@ import {
 import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
-import { useDashboardContext, useCreateExpenseInReport, useReportForDate, CurrentReport } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents } from '@/lib/constants';
+import { useDashboardContext, useCreateExpenseInReport, useReportForDate, cycleForDate, CurrentReport, DEFAULT_CYCLE_CUTOFF_DAY } from '@/hooks/useCurrentReport';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, parseDecimalBR, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents, MAX_EXPENSE_AGE_DAYS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
-import { receiptFileProblem, receiptHash } from '@/lib/receipts';
+import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 
 interface ExpenseFormDialogProps {
@@ -67,6 +67,13 @@ interface ExpenseFormDialogProps {
   onOpenChange: (open: boolean) => void;
   expense?: Expense | null;
   useCurrentReportFlow?: boolean;
+}
+
+// Distância em km digitada em pt-BR ("12,5", "1.234"), arredondada a 2 casas.
+// parseFloat("1.234") dava 1,234 km e o reembolso saía mil vezes menor.
+function parseKm(input: string): number {
+  const km = parseDecimalBR(input);
+  return Number.isNaN(km) ? NaN : Math.round(km * 100) / 100;
 }
 
 export function ExpenseFormDialog({
@@ -82,6 +89,7 @@ export function ExpenseFormDialog({
   const createExpenseInReport = useCreateExpenseInReport();
   const { data: categories } = useActiveExpenseTypes();
   const { data: policy } = useExpensePolicy();
+  const queryClient = useQueryClient();
   const foodDailyLimit = (policy as { food_daily_limit_cents?: number | null } | undefined)?.food_daily_limit_cents ?? 3000;
   const { data: costCenters = [] } = useActiveCostCenters();
   const { data: projects = [] } = useActiveProjects();
@@ -207,7 +215,7 @@ export function ExpenseFormDialog({
   // o usuário informa a distância, o sistema calcula o reembolso.
   useEffect(() => {
     if (isTransport && watchedByKm && watchedDistanceKm) {
-      const km = parseFloat(watchedDistanceKm.replace(',', '.'));
+      const km = parseKm(watchedDistanceKm);
       if (!Number.isNaN(km) && km > 0) {
         const value = ((km * kmRateCents) / 100).toFixed(2).replace('.', ',');
         if (form.getValues('amount') !== value) {
@@ -226,12 +234,14 @@ export function ExpenseFormDialog({
     }
   }, [watchedCategoryId, categories]);
 
-  // B4 — Buscar relatório para a data selecionada via useQuery (sem race).
+  // B4 — Relatório da data selecionada via useQuery (sem race). Só leitura (D2).
   const dateStrForQuery =
     useCurrentReportFlow && watchedDate && !isEditing
       ? format(watchedDate, 'yyyy-MM-dd')
       : null;
-  const reportForDateQuery = useReportForDate(dateStrForQuery);
+  // O ciclo depende do dia de corte da política: só busca depois que ela carregou.
+  const cycleCutoffDay = policy?.cycle_cutoff_day ?? DEFAULT_CYCLE_CUTOFF_DAY;
+  const reportForDateQuery = useReportForDate(policy ? dateStrForQuery : null, cycleCutoffDay);
   const currentReportForDate: CurrentReport | null = reportForDateQuery.data ?? null;
 
   useEffect(() => {
@@ -275,6 +285,11 @@ export function ExpenseFormDialog({
     }
   }, [expense, form, open]);
 
+  // Última (arquivo, data, valor) mandada para a leitura: só revalida quando algo muda de
+  // fato. Antes o effect reagia ao próprio status da validação e chamava a IA sem parar.
+  const lastValidatedRef = useRef<{ file: File; date: string; amount: number } | null>(null);
+  const { validate: validateReceipt, reset: resetValidation } = receiptValidation;
+
   const triggerValidation = useCallback((file: File) => {
     const dateVal = form.getValues('date');
     const amountStr = form.getValues('amount');
@@ -282,14 +297,18 @@ export function ExpenseFormDialog({
     // tinha a leitura. Valor 0 = "só extrair", sem acusar divergência.
     const formDate = format(dateVal ?? new Date(), 'yyyy-MM-dd');
     const formAmountCents = parseAmountToCents(amountStr || '') || 0;
-    receiptValidation.validate(file, formDate, formAmountCents);
-  }, [form, receiptValidation]);
+    const last = lastValidatedRef.current;
+    if (last && last.file === file && last.date === formDate && last.amount === formAmountCents) return;
+    lastValidatedRef.current = { file, date: formDate, amount: formAmountCents };
+    validateReceipt(file, formDate, formAmountCents);
+  }, [form, validateReceipt]);
 
   const handleFileChange = async (file: File | null) => {
     if (!file) {
       setReceiptFile(null);
       setReceiptPreview(null);
-      receiptValidation.reset();
+      lastValidatedRef.current = null;
+      resetValidation();
       return;
     }
 
@@ -331,7 +350,8 @@ export function ExpenseFormDialog({
       triggerValidation(processedFile);
     } else {
       setReceiptPreview(null);
-      receiptValidation.reset();
+      lastValidatedRef.current = null;
+      resetValidation();
     }
   };
 
@@ -345,19 +365,15 @@ export function ExpenseFormDialog({
     };
   }, []);
 
-  // Re-validate when date or amount changes after file is attached.
-  // B5: incluir todas as deps usadas internamente.
+  // Revalida quando data ou valor mudam depois do anexo, com debounce para não chamar a
+  // IA a cada tecla. Só depois da leitura inicial (disparada em handleFileChange).
+  const watchedDateKey = watchedDate ? format(watchedDate, 'yyyy-MM-dd') : '';
   useEffect(() => {
-    if (
-      receiptFile &&
-      receiptFile.type.startsWith('image/') &&
-      receiptValidation.status !== 'idle' &&
-      receiptValidation.status !== 'validating'
-    ) {
-      triggerValidation(receiptFile);
-    }
-    // watchedDate / watchedAmount mantidos para reagir ao input do usuário.
-  }, [watchedDate, watchedAmount, receiptFile, receiptValidation.status, triggerValidation]);
+    if (!receiptFile || !receiptFile.type.startsWith('image/')) return;
+    if (lastValidatedRef.current?.file !== receiptFile) return;
+    const t = setTimeout(() => triggerValidation(receiptFile), 600);
+    return () => clearTimeout(t);
+  }, [watchedDateKey, watchedAmount, receiptFile, triggerValidation]);
 
   // Preenche valor, data e descrição com o que a nota diz — uma vez por arquivo, sem
   // sobrescrever o que a pessoa já digitou. A data decide o ciclo: nota de 24/09 entra
@@ -382,7 +398,7 @@ export function ExpenseFormDialog({
         }
       } else {
         toast.warning(
-          `A nota é de ${format(d, 'dd/MM/yyyy')}, fora da janela de lançamento (até 20 dias atrás).`,
+          `A nota é de ${format(d, 'dd/MM/yyyy')}, fora da janela de lançamento (até ${MAX_EXPENSE_AGE_DAYS} dias atrás).`,
         );
       }
     }
@@ -393,20 +409,31 @@ export function ExpenseFormDialog({
     if (filled.length) toast.success(`Preenchido pela nota: ${filled.join(', ')}. Confira antes de salvar.`);
   }, [receiptValidation.result, receiptFile, isEditing, form]);
 
-  const uploadReceipt = async (expenseId: string): Promise<string | null> => {
-    if (!receiptFile || !profile?.org_id) return null;
+  // Mesmo caminho da captura rápida (lib/receipts): sobe o arquivo e grava path + hash.
+  const uploadReceipt = async (expenseId: string, reportId: string | null | undefined) => {
+    if (!receiptFile || !profile?.org_id) return;
+    await attachReceipt({
+      file: receiptFile,
+      orgId: profile.org_id,
+      userId: profile.id,
+      reportId,
+      expenseId,
+    });
+  };
 
-    const fileExt = receiptFile.name.split('.').pop();
-    const fileName = `${Date.now()}.${fileExt}`;
-    const reportId = currentReportForDate?.id || 'unassigned';
-    const filePath = `${profile.org_id}/${profile.id}/${reportId}/${expenseId}/${fileName}`;
-
-    const { error } = await supabase.storage
-      .from('receipts')
-      .upload(filePath, receiptFile);
-
-    if (error) throw error;
-    return filePath;
+  // A despesa já foi gravada quando isto roda. Se o upload falhar, fecha o diálogo:
+  // reenviar o form criaria a despesa de novo (e ela viraria possível duplicidade).
+  const uploadAfterSave = async (expenseId: string, reportId: string | null | undefined, failMessage: string) => {
+    try {
+      await uploadReceipt(expenseId, reportId);
+      // receipt_path foi gravado depois do onSuccess da mutation: sem isso a lista e o
+      // relatório seguiam mostrando a despesa sem comprovante até o próximo refetch.
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['report'] });
+    } catch (err) {
+      console.error('receipt upload failed', err);
+      toast.error(failMessage, { duration: 8000 });
+    }
   };
 
   const onSubmit = async (data: FormData) => {
@@ -416,7 +443,7 @@ export function ExpenseFormDialog({
     }
 
     if (data.by_km) {
-      const km = parseFloat((data.distance_km || '').replace(',', '.'));
+      const km = parseKm(data.distance_km || '');
       if (Number.isNaN(km) || km <= 0) {
         form.setError('distance_km', { message: 'Informe a distância em km' });
         return;
@@ -453,7 +480,7 @@ export function ExpenseFormDialog({
         is_event: data.is_event,
         distance_km:
           data.by_km && data.distance_km
-            ? parseFloat(data.distance_km.replace(',', '.'))
+            ? parseKm(data.distance_km)
             : null,
         notes: data.notes || null,
         cost_center_id: data.cost_center_id || null,
@@ -463,23 +490,25 @@ export function ExpenseFormDialog({
       };
 
       if (isEditing && expense) {
-        // Só manda receipt_path quando há arquivo novo: mandar null em toda edição
-        // apagava o comprovante que já estava anexado.
-        const receiptPatch = receiptFile ? { receipt_path: await uploadReceipt(expense.id) } : {};
-        await updateExpense.mutateAsync({ id: expense.id, ...payload, ...receiptPatch });
+        // Sem receipt_path no payload: mandar null em toda edição apagava o comprovante
+        // anexado. O caminho do arquivo novo é gravado por attachReceipt.
+        await updateExpense.mutateAsync({ id: expense.id, ...payload });
+        if (receiptFile) {
+          await uploadAfterSave(
+            expense.id,
+            expense.report?.id,
+            'Alterações salvas, mas o comprovante novo não subiu. Tente anexar de novo em Despesas › Editar.',
+          );
+        }
       } else if (useCurrentReportFlow) {
-        // Create expense in report flow
         const result = await createExpenseInReport.mutateAsync(payload);
-        
-        // Upload receipt after expense is created
         if (receiptFile && result.expense?.id) {
-          const receiptPath = await uploadReceipt(result.expense.id);
-          if (receiptPath) {
-            await supabase
-              .from('expenses')
-              .update({ receipt_path: receiptPath })
-              .eq('id', result.expense.id);
-          }
+          // Despesa tardia não tem `report`; a pasta segue o relatório do período.
+          await uploadAfterSave(
+            result.expense.id,
+            result.report?.id ?? result.late_report?.id,
+            'Despesa salva sem comprovante: o arquivo não subiu. Anexe depois em Despesas › Editar.',
+          );
         }
       } else {
         await createExpense.mutateAsync(payload);
@@ -501,9 +530,15 @@ export function ExpenseFormDialog({
     ? `Limite diário: ${formatCurrency(selectedCategory.daily_limit_cents)}`
     : null;
 
+  // Ciclo da data ainda sem relatório: mostra o período calculado e avisa que o
+  // relatório nasce ao salvar (antes ele era criado só por escolher a data).
+  const reportToBeCreated =
+    !isEditing && !!dateStrForQuery && !!policy && reportForDateQuery.isFetched && !currentReportForDate;
   const displayReport = isEditing
     ? null
-    : currentReportForDate || dashboardContext?.current_report;
+    : currentReportForDate ||
+      (reportToBeCreated && dateStrForQuery ? cycleForDate(dateStrForQuery, cycleCutoffDay) : null) ||
+      dashboardContext?.current_report;
   const cycleClosed = !isEditing && !!currentReportForDate && currentReportForDate.status !== 'draft';
 
   const formContent = (
@@ -519,7 +554,8 @@ export function ExpenseFormDialog({
         {useCurrentReportFlow && displayReport && (
           <Alert>
             <AlertDescription className="text-sm">
-              Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title})
+              Período: {format(parseISO(displayReport.start_date), 'dd/MM')} - {format(parseISO(displayReport.end_date), 'dd/MM')} ({displayReport.title}
+              {reportToBeCreated ? ', será criado ao salvar' : ''})
               {cycleClosed && (
                 <span className="mt-1 block text-[hsl(var(--status-event))]">
                   Este relatório já foi enviado. A despesa vai ficar avulsa e o gestor decide se ela

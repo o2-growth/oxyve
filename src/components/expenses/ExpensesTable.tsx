@@ -22,6 +22,7 @@ import { MoreHorizontal, Pencil, Trash2, FileText, Eye, Paperclip, Image, FileIc
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAddExpenseToReport, canDeleteExpense, canSelectExpense } from './expenseActions';
 
 interface ExpensesTableProps {
   expenses: Expense[];
@@ -43,14 +44,17 @@ export function ExpensesTable({
   onViewReceipt,
 }: ExpensesTableProps) {
   const { profile, isManager } = useAuth();
-  const allSelected = expenses.length > 0 && expenses.every((e) => selectedIds.has(e.id));
-  const someSelected = expenses.some((e) => selectedIds.has(e.id)) && !allSelected;
+  // "Selecionar todas" pega só as próprias: gestor vê a empresa inteira e o lote levava
+  // despesas de funcionários para o relatório dele.
+  const selectable = expenses.filter((e) => canSelectExpense(e, profile?.id));
+  const allSelected = selectable.length > 0 && selectable.every((e) => selectedIds.has(e.id));
+  const someSelected = selectable.some((e) => selectedIds.has(e.id)) && !allSelected;
 
   const toggleAll = () => {
     if (allSelected) {
       onSelectionChange(new Set());
     } else {
-      onSelectionChange(new Set(expenses.map((e) => e.id)));
+      onSelectionChange(new Set(selectable.map((e) => e.id)));
     }
   };
 
@@ -90,6 +94,7 @@ export function ExpensesTable({
               <Checkbox
                 checked={allSelected}
                 onCheckedChange={toggleAll}
+                disabled={selectable.length === 0}
                 aria-label="Selecionar todas"
                 className={cn(someSelected && 'data-[state=checked]:bg-primary/50')}
               />
@@ -118,6 +123,8 @@ export function ExpensesTable({
               <TableCell>
                 <Checkbox
                   checked={selectedIds.has(expense.id)}
+                  disabled={!canSelectExpense(expense, profile?.id)}
+                  title={canSelectExpense(expense, profile?.id) ? undefined : 'Só suas despesas podem ser selecionadas'}
                   onCheckedChange={() => toggleOne(expense.id)}
                   aria-label={`Selecionar despesa ${expense.description}`}
                 />
@@ -200,16 +207,22 @@ export function ExpensesTable({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    {expense.status === 'draft' && expense.user_id === profile?.id ? (
+                    {canDeleteExpense(expense, profile?.id) ? (
                       <>
                         <DropdownMenuItem onClick={() => onEdit(expense)}>
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        {!expense.report && expense.late_decision !== 'pending' && (
+                        {canAddExpenseToReport(expense, profile?.id) && (
                           <DropdownMenuItem onClick={() => onAddToReport(expense)}>
                             <FileText className="mr-2 h-4 w-4" />
                             Adicionar a Relatório
+                          </DropdownMenuItem>
+                        )}
+                        {expense.receipt_path && (
+                          <DropdownMenuItem onClick={() => onViewReceipt?.(expense)}>
+                            <Paperclip className="mr-2 h-4 w-4" />
+                            Ver comprovante
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem

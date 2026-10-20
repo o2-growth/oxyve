@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { reimbursableOf, summarizeReview, type ReviewSummary } from '@/components/reports/reportRules';
+import type { PaymentInfo } from '@/components/payments/PaymentDetails';
 
 export interface Report {
   id: string;
@@ -19,7 +21,14 @@ export interface Report {
   submitted_at?: string | null;
   submitted_late?: boolean | null;
   last_rejection_comment?: string | null;
-  user?: { full_name: string | null } | null;
+  returned_at?: string | null;
+  /** Revisão item a item do gestor (expense_reviews) — a Fila decide com isso. */
+  review?: ReviewSummary;
+  /** Itens marcados pelo banco como possível duplicidade (mesma data+valor+categoria). */
+  possible_duplicate_count?: number;
+  /** Itens reprovados na revisão, para o rascunho do motivo da devolução. */
+  rejected_items?: Array<{ description: string; date: string; comment: string | null }>;
+  user?: ({ full_name: string | null } & PaymentInfo) | null;
 }
 
 export interface ReportWithItems extends Report {
@@ -33,6 +42,9 @@ export interface ReportWithItems extends Report {
       currency: string;
       receipt_path: string | null;
       is_out_of_policy: boolean;
+      possible_duplicate_of?: string | null;
+      /** A despesa mais antiga que coincide (data/descrição), quando visível. */
+      duplicate_of?: { id: string; date: string; description: string } | null;
       category: { name: string } | null;
     };
   }>;
@@ -65,10 +77,14 @@ export interface ReportInput {
  * narrow no shape final. Após Aria-6 (regen types), revisitar.
  */
 type ItemExpense = {
+  id?: string;
+  description?: string | null;
+  date?: string | null;
   amount_cents: number | null;
   reimbursable_cents: number | null;
   is_reimbursable: boolean | null;
   status: string | null;
+  possible_duplicate_of?: string | null;
 };
 
 type ReportRow = {
@@ -80,13 +96,16 @@ type ReportRow = {
   end_date: string | null;
   status: Report['status'];
   last_rejection_comment?: string | null;
+  returned_at?: string | null;
   submitted_late?: boolean | null;
   created_at: string;
   updated_at: string;
   user: { full_name: string | null } | { full_name: string | null }[] | null;
   items: Array<{
+    expense_id?: string;
     expense: ItemExpense | ItemExpense[] | null;
   }>;
+  reviews?: Array<{ expense_id: string; decision: string | null; comment: string | null }> | null;
 };
 
 function pickFirst<T>(value: T | T[] | null | undefined): T | null {
@@ -105,7 +124,8 @@ export function useReports(filters?: { status?: string }) {
         .select(
           `*,
           user:profiles!user_id(full_name),
-          items:report_items(expense:expenses(amount_cents, reimbursable_cents, is_reimbursable, status))`
+          items:report_items(expense_id, expense:expenses(id, description, date, amount_cents, reimbursable_cents, is_reimbursable, status, possible_duplicate_of)),
+          reviews:expense_reviews(expense_id, decision, comment)`
         )
         .order('created_at', { ascending: false });
 
@@ -120,15 +140,31 @@ export function useReports(filters?: { status?: string }) {
 
       return rows.map((row): Report => {
         const items = row.items ?? [];
+        const reviews = row.reviews ?? [];
+        const reviewById = new Map(reviews.map((r) => [r.expense_id, r]));
+        const expenseIds: string[] = [];
+        const rejected_items: NonNullable<Report['rejected_items']> = [];
         let total_cents = 0;
         let reimbursable_cents = 0;
+        let possible_duplicate_count = 0;
         for (const item of items) {
           const expense = pickFirst(item.expense);
-          // Reprovada não conta; reembolsável é o valor já com o teto de alimentação.
+          const expenseId = item.expense_id ?? expense?.id;
+          if (expenseId) expenseIds.push(expenseId);
+          // Reprovada (legado) não conta em nada.
           if (!expense || expense.status === 'rejected') continue;
-          const amount = expense.amount_cents ?? 0;
-          total_cents += amount;
-          if (expense.is_reimbursable) reimbursable_cents += expense.reimbursable_cents ?? amount;
+          if (expense.possible_duplicate_of) possible_duplicate_count += 1;
+          total_cents += expense.amount_cents ?? 0;
+          // Mesma conta do Detalhe: teto, não reembolsável e reprovada na revisão.
+          const review = expenseId ? reviewById.get(expenseId) : undefined;
+          reimbursable_cents += reimbursableOf(expense, review?.decision);
+          if (review?.decision === 'rejected') {
+            rejected_items.push({
+              description: expense.description ?? 'Despesa',
+              date: expense.date ?? '',
+              comment: review.comment,
+            });
+          }
         }
         return {
           id: row.id,
@@ -139,12 +175,16 @@ export function useReports(filters?: { status?: string }) {
           end_date: row.end_date,
           status: row.status,
           last_rejection_comment: row.last_rejection_comment ?? null,
+          returned_at: row.returned_at ?? null,
           submitted_late: row.submitted_late ?? null,
           created_at: row.created_at,
           updated_at: row.updated_at,
           total_cents,
           reimbursable_cents,
           expense_count: items.length,
+          review: summarizeReview(expenseIds, reviews),
+          possible_duplicate_count,
+          rejected_items,
           user: pickFirst(row.user),
         };
       });
@@ -164,25 +204,30 @@ export function useReport(id: string) {
         .single();
       if (error) throw error;
 
+      // PIX e banco de quem recebe: o admin confere ao marcar como pago (decisão 4).
+      // A RLS de profiles já mostra esses dados ao dono e a gestores/admins.
       const { data: profileData } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, pix_key, pix_key_type, bank_name, bank_branch, bank_account')
         .eq('id', report.user_id)
         .single();
 
-      const { data: items } = await supabase
+      const { data: items, error: itemsError } = await supabase
         .from('report_items')
         .select(
           `id,
            expense:expenses(
              id, date, description, amount_cents, currency, receipt_path,
-             is_out_of_policy, is_reimbursable, payment_method,
+             is_out_of_policy, is_reimbursable, payment_method, possible_duplicate_of,
              category:expense_categories(name),
              cost_center:cost_centers(name, code),
              project:projects(name, code)
            )`
         )
         .eq('report_id', id);
+      // Sem isto, um erro (ex.: front publicado antes da migration de
+      // possible_duplicate_of) mostrava o relatório vazio, como se não tivesse itens.
+      if (itemsError) throw itemsError;
 
       const { data: approvals } = await supabase
         .from('report_approvals')
@@ -195,6 +240,24 @@ export function useReport(id: string) {
         .from('expense_reviews')
         .select('*')
         .eq('report_id', id);
+
+      // Possível duplicidade: busca a outra despesa (data/descrição) para o gestor
+      // saber com qual comparar. Pode estar fora deste relatório.
+      type DupItem = { expense: { possible_duplicate_of?: string | null } | null };
+      const dupIds = [
+        ...new Set(
+          ((items || []) as DupItem[])
+            .map((it) => it.expense?.possible_duplicate_of)
+            .filter((v): v is string => !!v),
+        ),
+      ];
+      const duplicatesById: Record<string, { id: string; date: string; description: string }> = {};
+      if (dupIds.length) {
+        const { data: dups } = await supabase.from('expenses').select('id, date, description').in('id', dupIds);
+        (dups || []).forEach((d) => {
+          duplicatesById[d.id] = d;
+        });
+      }
 
       const approvalsWithProfiles = await Promise.all(
         (approvals || []).map(async (approval) => {
@@ -225,12 +288,16 @@ export function useReport(id: string) {
       // Attach review info to each item.
       type ItemRow = {
         id: string;
-        expense: { id: string; amount_cents?: number | null } | null;
+        expense: { id: string; amount_cents?: number | null; possible_duplicate_of?: string | null } | null;
       };
       const itemsWithReviews = ((items || []) as ItemRow[]).map((item) => {
         const review = item.expense ? reviewsByExpenseId[item.expense.id] : undefined;
+        const dupId = item.expense?.possible_duplicate_of;
         return {
           ...item,
+          expense: item.expense
+            ? { ...item.expense, duplicate_of: dupId ? duplicatesById[dupId] ?? null : null }
+            : item.expense,
           review_decision: review?.decision || null,
           review_comment: review?.comment || null,
         };
@@ -279,31 +346,6 @@ export function useCreateReport() {
     },
     onError: (error) => {
       toast.error('Erro ao criar relatório: ' + error.message);
-    },
-  });
-}
-
-export function useUpdateReport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ id, ...input }: ReportInput & { id: string }) => {
-      const { data, error } = await supabase
-        .from('reports')
-        .update(input)
-        .eq('id', id)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', variables.id] });
-      toast.success('Relatório atualizado!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao atualizar relatório: ' + error.message);
     },
   });
 }
@@ -389,6 +431,10 @@ export function useRemoveExpenseFromReport() {
     onSuccess: (_, { reportId }) => {
       queryClient.invalidateQueries({ queryKey: ['report', reportId] });
       queryClient.invalidateQueries({ queryKey: ['reports'] });
+      // A despesa volta a ser avulsa: lista e contadores de Despesas mudam também.
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['current-report'] });
       toast.success('Despesa removida do relatório!');
     },
     onError: (error) => {
@@ -405,85 +451,6 @@ export function useRemoveExpenseFromReport() {
 //  - retorna `submitted_late` para sinalizar atraso.
 // Mantemos só o RPC para evitar duas fontes de verdade divergentes.
 
-export function useApproveReport() {
-  const queryClient = useQueryClient();
-  const { profile } = useAuth();
-
-  return useMutation({
-    mutationFn: async ({ reportId, decision, comment }: { reportId: string; decision: 'approved' | 'rejected'; comment?: string }) => {
-      const { data: items } = await supabase
-        .from('report_items')
-        .select('expense_id')
-        .eq('report_id', reportId);
-
-      const { error: approvalError } = await supabase.from('report_approvals').insert({
-        report_id: reportId,
-        approver_id: profile!.id,
-        decision,
-        comment,
-      });
-      if (approvalError) throw approvalError;
-
-      const { error: reportError } = await supabase
-        .from('reports')
-        .update({ status: decision })
-        .eq('id', reportId);
-      if (reportError) throw reportError;
-
-      if (items?.length) {
-        const expenseIds = items.map((i) => i.expense_id);
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .update({ status: decision })
-          .in('id', expenseIds);
-        if (expenseError) throw expenseError;
-      }
-    },
-    onSuccess: (_, { reportId, decision }) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success(decision === 'approved' ? 'Relatório aprovado!' : 'Relatório reprovado!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao processar aprovação: ' + error.message);
-    },
-  });
-}
-
-export function useMarkReportAsPaid() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reportId: string) => {
-      const { data: items } = await supabase
-        .from('report_items')
-        .select('expense_id')
-        .eq('report_id', reportId);
-
-      const { error: reportError } = await supabase
-        .from('reports')
-        .update({ status: 'paid' })
-        .eq('id', reportId);
-      if (reportError) throw reportError;
-
-      if (items?.length) {
-        const expenseIds = items.map((i) => i.expense_id);
-        const { error: expenseError } = await supabase
-          .from('expenses')
-          .update({ status: 'paid' })
-          .in('id', expenseIds);
-        if (expenseError) throw expenseError;
-      }
-    },
-    onSuccess: (_, reportId) => {
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      queryClient.invalidateQueries({ queryKey: ['report', reportId] });
-      queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      toast.success('Relatório marcado como pago!');
-    },
-    onError: (error) => {
-      toast.error('Erro ao marcar como pago: ' + error.message);
-    },
-  });
-}
+// useApproveReport, useMarkReportAsPaid e useUpdateReport (escrita direta em
+// reports/expenses) foram removidos: o banco bloqueia esse caminho e a decisão e o
+// pagamento passam só pelas RPCs de useReportActions.

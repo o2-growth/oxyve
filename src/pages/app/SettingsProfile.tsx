@@ -28,6 +28,7 @@ import { useAuth, type PixKeyType } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Loader2, User } from 'lucide-react';
+import { PushSettingsCard } from '@/components/notifications/PushSettingsCard';
 
 // GAP-G022: validação CPF / CNPJ por módulo 11 (lib `cpf-cnpj-validator`).
 const optionalDigits = z
@@ -357,6 +358,9 @@ export default function SettingsProfile() {
               </div>
             </form>
           </Form>
+
+          {/* Fora do form: liga/desliga na hora, não depende de "Salvar". */}
+          <PushSettingsCard />
         </div>
       </SettingsLayout>
     </AppShell>

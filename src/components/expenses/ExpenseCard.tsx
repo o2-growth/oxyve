@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MoreVertical, Pencil, Trash2, FileText, Eye, Paperclip, Image, FileIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAddExpenseToReport, canDeleteExpense, canSelectExpense } from './expenseActions';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -53,7 +54,8 @@ export function ExpenseCard({
   };
 
   // Rascunho próprio edita e exclui, esteja ou não num relatório (aberto ou devolvido).
-  const isDraft = expense.status === 'draft' && isOwn;
+  const isDraft = canDeleteExpense(expense, profile?.id);
+  const selectable = canSelectExpense(expense, profile?.id);
 
   // Carimbo de auditoria — chip pill mono uppercase âmbar.
   const STAMP =
@@ -70,9 +72,17 @@ export function ExpenseCard({
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           {/* Área de toque de 44px em volta do checkbox de 16px. */}
-          <label className="-m-3 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center">
+          {/* Despesa de outra pessoa não entra em ação em lote (só as próprias). */}
+          <label
+            className={cn(
+              '-m-3 flex h-11 w-11 shrink-0 items-center justify-center',
+              selectable ? 'cursor-pointer' : 'cursor-not-allowed',
+            )}
+            title={selectable ? undefined : 'Só suas despesas podem ser selecionadas'}
+          >
             <Checkbox
-              checked={isSelected}
+              checked={selectable && isSelected}
+              disabled={!selectable}
               onCheckedChange={() => onSelect(expense.id)}
               aria-label={`Selecionar ${expense.description}`}
             />
@@ -136,10 +146,16 @@ export function ExpenseCard({
                           <Pencil className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        {!expense.report && expense.late_decision !== 'pending' && (
+                        {canAddExpenseToReport(expense, profile?.id) && (
                           <DropdownMenuItem onClick={() => onAddToReport(expense)}>
                             <FileText className="mr-2 h-4 w-4" />
                             Adicionar a Relatório
+                          </DropdownMenuItem>
+                        )}
+                        {expense.receipt_path && (
+                          <DropdownMenuItem onClick={() => onViewReceipt?.(expense)}>
+                            <Paperclip className="mr-2 h-4 w-4" />
+                            Ver comprovante
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem

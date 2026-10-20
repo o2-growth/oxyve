@@ -1,14 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, type PixKeyType } from '@/contexts/AuthContext';
 
 /**
  * Painel Admin de Gestão Financeira.
  *
  * Consome a RPC `get_admin_financial_overview` (sem args). Todos os valores
  * monetários vêm em CENTAVOS — usar `formatCurrency` (@/lib/constants) para
- * exibir. O backend bloqueia não-admins: a RPC retorna erro, tratado na UI
- * como "Acesso restrito aos administradores".
+ * exibir. O backend bloqueia não-gestores com "Acesso restrito"; a UI só mostra
+ * acesso restrito para esse erro (isPermissionError) — rede/servidor vira
+ * "tentar de novo".
  */
 
 export interface AdminCycle {
@@ -42,6 +43,12 @@ export interface PersonRow {
   excecoes: number;
   transport_projected_cents: number;
   food_projected_cents: number;
+  /** Dados de pagamento de quem recebe (profile), para o admin conferir ao pagar. */
+  pix_key?: string | null;
+  pix_key_type?: PixKeyType | null;
+  bank_name?: string | null;
+  bank_branch?: string | null;
+  bank_account?: string | null;
 }
 
 export interface SectorRow {

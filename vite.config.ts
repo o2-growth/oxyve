@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
+import { runtimeCaching } from "./src/pwa/runtimeCaching";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -52,63 +53,9 @@ export default defineConfig(({ mode }) => ({
         clientsClaim: true,
         // Não pular waiting automaticamente — UpdatePrompt controla o reload.
         skipWaiting: false,
-        runtimeCaching: [
-          // Supabase REST (PostgREST) — network-first com fallback de 5min.
-          {
-            urlPattern: ({ url }) =>
-              url.pathname.startsWith("/rest/v1/") ||
-              /\.supabase\.co\/rest\/v1\//.test(url.href),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-rest",
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 5,
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Supabase Edge Functions.
-          {
-            urlPattern: ({ url }) =>
-              url.pathname.startsWith("/functions/v1/") ||
-              /\.supabase\.co\/functions\/v1\//.test(url.href),
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "supabase-functions",
-              networkTimeoutSeconds: 5,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 5,
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Imagens (recibos, avatares, storage Supabase) — cache-first.
-          {
-            urlPattern: ({ request }) => request.destination === "image",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "images",
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          // Fonts.
-          {
-            urlPattern: ({ request }) => request.destination === "font",
-            handler: "CacheFirst",
-            options: {
-              cacheName: "fonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
+        // Regras em src/pwa/runtimeCaching.ts (testadas no Vitest). Nada de
+        // Supabase (REST, functions, storage) entra no cache do SW.
+        runtimeCaching,
       },
     }),
   ].filter(Boolean),

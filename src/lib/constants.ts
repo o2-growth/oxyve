@@ -44,16 +44,36 @@ export const parseDateOnly = (date: string | Date): Date => {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(date);
 };
 
-// Valor digitado em pt-BR → centavos. Aceita "61,40", "1.234,56", "R$ 61,40" e "61.40";
-// devolve NaN para o que não for número. Antes era parseFloat(s.replace(',', '.')), que
-// lia "1.234,56" como R$ 1,23.
-export const parseAmountToCents = (input: string): number => {
+// Número digitado em pt-BR → number. Vírgula é decimal; ponto é milhar quando forma grupos
+// de 3 dígitos ("1.500", "1.234.567") e decimal nos demais casos ("61.40", "12.5").
+// Devolve NaN para o que não for número (inclusive negativo).
+export const parseDecimalBR = (input: string): number => {
   let s = (input || '').replace(/[R$\s]/g, '');
   if (!/^\d[\d.,]*$/.test(s)) return NaN;
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-  else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
+  // "1.500" é mil e quinhentos: antes virava R$ 1,50 e o reembolso saía mil vezes menor.
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s) || (s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
   const n = Number(s);
-  return Number.isFinite(n) ? Math.round(n * 100) : NaN;
+  return Number.isFinite(n) ? n : NaN;
+};
+
+// Valor digitado em pt-BR → centavos. Aceita "61,40", "1.234,56", "1.500", "R$ 61,40" e
+// "61.40". Antes era parseFloat(s.replace(',', '.')), que lia "1.234,56" como R$ 1,23.
+export const parseAmountToCents = (input: string): number => {
+  const n = parseDecimalBR(input);
+  return Number.isNaN(n) ? NaN : Math.round(n * 100);
+};
+
+/**
+ * Limite opcional digitado em R$ (teto diário de categoria/tipo). Vazio = sem
+ * limite (null); texto inválido ou negativo = 'invalid'. Mesma leitura pt-BR do
+ * valor da despesa: "1.500" é mil e quinhentos, não R$ 1,50.
+ */
+export const parseOptionalLimitCents = (input: string | null | undefined): number | null | 'invalid' => {
+  const raw = (input ?? '').trim();
+  if (!raw) return null;
+  const cents = parseAmountToCents(raw);
+  return Number.isNaN(cents) ? 'invalid' : cents;
 };
 
 // Teto de sanidade: R$ 1 milhão por lançamento.

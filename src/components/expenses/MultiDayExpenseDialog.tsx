@@ -2,7 +2,7 @@
  * Onda 3d — lançamento multi-dia.
  *
  * Dialog focado para lançar uma despesa recorrente por vários dias (ex.:
- * alimentação de seg a sex): o usuário escolhe a categoria, o período e o valor
+ * alimentação de vários dias): o usuário escolhe a categoria, o período e o valor
  * POR DIA. Chama a RPC create_expense_multiday, que gera uma despesa por dia
  * reusando o motor de política (teto diário, ciclo, evento) de forma atômica.
  */
@@ -10,7 +10,7 @@ import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { format, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -45,7 +45,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Loader2, PartyPopper, CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatCurrency } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, formatAmountInput, endOfToday, minExpenseDate } from '@/lib/constants';
+import { multiDaySchema } from './multiDaySchema';
 import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useCreateExpenseMultiday } from '@/hooks/useCurrentReport';
@@ -57,32 +58,7 @@ interface MultiDayExpenseDialogProps {
 }
 
 
-const schema = z
-  .object({
-    category_id: z.string().min(1, 'Escolha a categoria'),
-    start_date: z.date({ required_error: 'Data inicial obrigatória' }),
-    end_date: z.date({ required_error: 'Data final obrigatória' }),
-    amount_per_day: z.string().min(1, 'Informe o valor por dia'),
-    description: z.string().min(1, 'Descrição obrigatória'),
-    is_event: z.boolean(),
-    notes: z.string().optional(),
-  })
-  .refine((d) => d.end_date >= d.start_date, {
-    message: 'A data final deve ser igual ou posterior à inicial',
-    path: ['end_date'],
-  })
-  // Evento (libera o teto diário) exige justificativa escrita.
-  .superRefine((d, ctx) => {
-    if (d.is_event && (!d.notes || d.notes.trim().length < 3)) {
-      ctx.addIssue({
-        path: ['notes'],
-        code: z.ZodIssueCode.custom,
-        message: 'Descreva o motivo da exceção de evento.',
-      });
-    }
-  });
-
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<typeof multiDaySchema>;
 
 export function MultiDayExpenseDialog({
   open,
@@ -94,7 +70,7 @@ export function MultiDayExpenseDialog({
   const grouped = useMemo(() => groupBySector(categories), [categories]);
 
   const form = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(multiDaySchema),
     defaultValues: {
       category_id: '',
       start_date: new Date(),
@@ -114,18 +90,15 @@ export function MultiDayExpenseDialog({
 
   const days =
     start && end && end >= start ? differenceInCalendarDays(end, start) + 1 : 0;
-  const perDayCents = Math.round(
-    parseFloat((amountStr || '0').replace(',', '.') || '0') * 100,
-  );
+  const parsedPerDay = parseAmountToCents(amountStr || '');
+  const perDayCents = Number.isNaN(parsedPerDay) ? 0 : parsedPerDay;
   const totalCents = days * perDayCents;
 
   const onSubmit = async (data: FormData) => {
     try {
       await createMultiday.mutateAsync({
         description: data.description,
-        amount_cents_per_day: Math.round(
-          parseFloat(data.amount_per_day.replace(',', '.')) * 100,
-        ),
+        amount_cents_per_day: parseAmountToCents(data.amount_per_day),
         start_date: format(data.start_date, 'yyyy-MM-dd'),
         end_date: format(data.end_date, 'yyyy-MM-dd'),
         category_id: data.category_id,
@@ -223,7 +196,14 @@ export function MultiDayExpenseDialog({
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} initialFocus className="pointer-events-auto" />
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(d) => d > endOfToday() || d < minExpenseDate()}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
@@ -249,7 +229,14 @@ export function MultiDayExpenseDialog({
                         </FormControl>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(d) => start && d < start} initialFocus className="pointer-events-auto" />
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(d) => d > endOfToday() || d < minExpenseDate() || (!!start && d < start)}
+                          initialFocus
+                          className="pointer-events-auto"
+                        />
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
@@ -265,7 +252,16 @@ export function MultiDayExpenseDialog({
                 <FormItem>
                   <FormLabel>Valor por dia (R$)</FormLabel>
                   <FormControl>
-                    <Input placeholder="0,00" className="h-12" inputMode="decimal" {...field} />
+                    <Input
+                      placeholder="0,00"
+                      className="h-12"
+                      inputMode="decimal"
+                      {...field}
+                      onBlur={() => {
+                        field.onChange(formatAmountInput(field.value));
+                        field.onBlur();
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

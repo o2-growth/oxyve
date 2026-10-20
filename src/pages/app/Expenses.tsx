@@ -1,5 +1,6 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,8 @@ import { AddToReportDialog } from '@/components/expenses/AddToReportDialog';
 import { ExpenseFiltersPopover, AdvancedFilters } from '@/components/expenses/ExpenseFiltersPopover';
 import { ExpensesTable } from '@/components/expenses/ExpensesTable';
 import { ExpenseCard } from '@/components/expenses/ExpenseCard';
+import { canAddExpenseToReport, canDeleteExpense } from '@/components/expenses/expenseActions';
+import { ReceiptPreviewDialog } from '@/components/reports/ReceiptPreviewDialog';
 import {
   useExpenses,
   useExpenseCounts,
@@ -42,7 +45,7 @@ const TAB_CONFIG: { value: ExpenseTab; label: string; emptyMessage: string }[] =
 ];
 
 export default function Expenses() {
-  const { isManager } = useAuth();
+  const { isManager, profile } = useAuth();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<ExpenseTab>('all');
@@ -56,6 +59,21 @@ export default function Expenses() {
   const [isAddToReportOpen, setIsAddToReportOpen] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // "Adicionar a relatório" do menu de uma despesa x botão do lote. Antes o diálogo
+  // usava a seleção sempre que havia itens marcados, mesmo vindo do menu de outra.
+  const [addMode, setAddMode] = useState<'single' | 'bulk'>('single');
+  const [receiptTarget, setReceiptTarget] = useState<{ path: string; title: string } | null>(null);
+
+  // Atalho do PWA (manifest: /app/expenses?new=1) abre direto o formulário de nova despesa.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('new') !== '1') return;
+    setSelectedExpense(null);
+    setIsFormOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('new');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const { data: counts } = useExpenseCounts();
   const { data: expenses, isLoading } = useExpenses({
@@ -94,21 +112,21 @@ export default function Expenses() {
     return expenses?.filter((e) => selectedIds.has(e.id)) || [];
   }, [expenses, selectedIds]);
 
-  // Check if all selected are deletable (draft + no report)
+  // Lote segue as mesmas regras do menu individual (expenseActions): só despesas
+  // próprias, e "adicionar" exige avulsa sem decisão pendente do gestor.
   const canDeleteSelected = useMemo(() => {
     return (
       selectedExpenses.length > 0 &&
-      selectedExpenses.every((e) => e.status === 'draft' && !e.report)
+      selectedExpenses.every((e) => canDeleteExpense(e, profile?.id))
     );
-  }, [selectedExpenses]);
+  }, [selectedExpenses, profile?.id]);
 
-  // Check if all selected can be added to report (draft + no report)
   const canAddToReport = useMemo(() => {
     return (
       selectedExpenses.length > 0 &&
-      selectedExpenses.every((e) => e.status === 'draft' && !e.report)
+      selectedExpenses.every((e) => canAddExpenseToReport(e, profile?.id))
     );
-  }, [selectedExpenses]);
+  }, [selectedExpenses, profile?.id]);
 
   const handleEdit = (expense: Expense) => {
     setSelectedExpense(expense);
@@ -122,7 +140,22 @@ export default function Expenses() {
 
   const handleAddToReport = (expense: Expense) => {
     setSelectedExpense(expense);
+    setAddMode('single');
     setIsAddToReportOpen(true);
+  };
+
+  const handleBulkAddToReport = () => {
+    setAddMode('bulk');
+    setIsAddToReportOpen(true);
+  };
+
+  const handleViewReceipt = (expense: Expense) => {
+    if (expense.receipt_path) setReceiptTarget({ path: expense.receipt_path, title: expense.description });
+  };
+
+  const openNewExpense = () => {
+    setSelectedExpense(null);
+    setIsFormOpen(true);
   };
 
   const toggleSelection = (id: string) => {
@@ -144,8 +177,9 @@ export default function Expenses() {
   };
 
   const confirmBulkDelete = async () => {
-    if (selectedIds.size > 0) {
-      await deleteExpenses.mutateAsync([...selectedIds]);
+    // Só o que está na lista e passou nas regras (a seleção pode ter ids de outra aba).
+    if (selectedExpenses.length > 0) {
+      await deleteExpenses.mutateAsync(selectedExpenses.map((e) => e.id));
       setIsBulkDeleteOpen(false);
       setSelectedIds(new Set());
     }
@@ -175,16 +209,16 @@ export default function Expenses() {
         description={isManager ? 'Todas as despesas da O2, com o nome de quem lançou' : 'Gerencie suas despesas e comprovantes'}
         actions={
           <div className="hidden md:flex items-center gap-2">
-            {selectedIds.size > 0 && (
+            {selectedExpenses.length > 0 && (
               <>
                 {canAddToReport && (
                   <Button
                     variant="outline"
-                    onClick={() => setIsAddToReportOpen(true)}
+                    onClick={handleBulkAddToReport}
                     className="gap-2"
                   >
                     <FileText className="h-4 w-4" />
-                    Adicionar a relatório ({selectedIds.size})
+                    Adicionar a relatório ({selectedExpenses.length})
                   </Button>
                 )}
                 {canDeleteSelected && (
@@ -194,7 +228,7 @@ export default function Expenses() {
                     className="gap-2 text-destructive hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
-                    Excluir ({selectedIds.size})
+                    Excluir ({selectedExpenses.length})
                   </Button>
                 )}
               </>
@@ -203,7 +237,7 @@ export default function Expenses() {
               <CalendarDays className="h-4 w-4" />
               Vários dias
             </Button>
-            <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+            <Button onClick={openNewExpense} className="gap-2">
               <Plus className="h-4 w-4" />
               Nova Despesa
             </Button>
@@ -211,18 +245,31 @@ export default function Expenses() {
         }
       />
 
-      {/* Mobile bulk actions */}
-      {isMobile && selectedIds.size > 0 && (
-        <div className="mb-4 flex gap-2">
+      {/* Celular (<768px, onde o header esconde os botões): lançamento manual e vários
+          dias. A captura por foto continua no botão central da barra inferior. */}
+      <div className="mb-4 flex gap-2 md:hidden">
+        <Button variant="outline" size="sm" onClick={openNewExpense} className="h-11 flex-1 gap-1">
+          <Plus className="h-4 w-4" />
+          Nova despesa
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => setIsMultiDayOpen(true)} className="h-11 flex-1 gap-1">
+          <CalendarDays className="h-4 w-4" />
+          Vários dias
+        </Button>
+      </div>
+
+      {/* Ações em lote no celular — mesmo corte (md) do header, para não duplicar. */}
+      {selectedExpenses.length > 0 && (
+        <div className="mb-4 flex gap-2 md:hidden">
           {canAddToReport && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsAddToReportOpen(true)}
+              onClick={handleBulkAddToReport}
               className="flex-1 gap-1"
             >
               <FileText className="h-4 w-4" />
-              Relatório ({selectedIds.size})
+              Relatório ({selectedExpenses.length})
             </Button>
           )}
           {canDeleteSelected && (
@@ -233,7 +280,7 @@ export default function Expenses() {
               className="flex-1 gap-1 text-destructive"
             >
               <Trash2 className="h-4 w-4" />
-              Excluir ({selectedIds.size})
+              Excluir ({selectedExpenses.length})
             </Button>
           )}
         </div>
@@ -375,7 +422,7 @@ export default function Expenses() {
           }
           action={
             activeTab === 'all' ? (
-              <Button onClick={() => setIsFormOpen(true)} className="gap-2">
+              <Button onClick={openNewExpense} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Nova Despesa
               </Button>
@@ -402,6 +449,7 @@ export default function Expenses() {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onAddToReport={handleAddToReport}
+                onViewReceipt={handleViewReceipt}
               />
             </div>
           ))}
@@ -415,6 +463,7 @@ export default function Expenses() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onAddToReport={handleAddToReport}
+          onViewReceipt={handleViewReceipt}
         />
       )}
 
@@ -434,8 +483,18 @@ export default function Expenses() {
       <AddToReportDialog
         open={isAddToReportOpen}
         onOpenChange={setIsAddToReportOpen}
-        expense={selectedExpense}
-        expenseIds={selectedIds.size > 0 ? [...selectedIds] : undefined}
+        expense={addMode === 'single' ? selectedExpense : null}
+        expenseIds={addMode === 'bulk' ? selectedExpenses.map((e) => e.id) : undefined}
+        onAdded={() => {
+          if (addMode === 'bulk') setSelectedIds(new Set());
+          setSelectedExpense(null);
+        }}
+      />
+
+      <ReceiptPreviewDialog
+        path={receiptTarget?.path ?? null}
+        title={receiptTarget?.title}
+        onOpenChange={(open) => !open && setReceiptTarget(null)}
       />
 
       <ConfirmDialog
@@ -453,7 +512,7 @@ export default function Expenses() {
         open={isBulkDeleteOpen}
         onOpenChange={setIsBulkDeleteOpen}
         title="Excluir despesas"
-        description={`Tem certeza que deseja excluir ${selectedIds.size} despesa(s)? Esta ação não pode ser desfeita.`}
+        description={`Tem certeza que deseja excluir ${selectedExpenses.length} despesa(s)? Esta ação não pode ser desfeita.`}
         confirmLabel="Excluir"
         variant="destructive"
         onConfirm={confirmBulkDelete}
