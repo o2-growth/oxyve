@@ -60,7 +60,7 @@ import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useValidateReceipt, receiptPolicyBlocks, readingReview } from '@/hooks/useValidateReceipt';
+import { useValidateReceipt, receiptPolicyBlocks, readingReview, receiptDateNotice } from '@/hooks/useValidateReceipt';
 import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { READ_WARN_BOX, READ_WARN_FIELD, READ_WARN_TEXT } from './readingWarning';
@@ -417,11 +417,8 @@ export function ExpenseFormDialog({
           form.setValue('date', d, { shouldValidate: true });
           filled.push('data');
         }
-      } else {
-        toast.warning(
-          `A nota é de ${format(d, 'dd/MM/yyyy')}, fora da janela de lançamento (até ${MAX_EXPENSE_AGE_DAYS} dias atrás).`,
-        );
       }
+      // Fora da janela: a despesa fica com hoje e o aviso amarelo explica (receiptDateNotice).
     }
     if (r.extracted_supplier && !form.getValues('description')) {
       form.setValue('description', r.extracted_supplier.slice(0, 200));
@@ -459,6 +456,7 @@ export function ExpenseFormDialog({
       userId: profile.id,
       reportId,
       expenseId,
+      receiptDate: receiptValidation.result?.extracted_date ?? null,
     });
   };
 
@@ -491,12 +489,9 @@ export function ExpenseFormDialog({
       }
     }
 
-    // Motor de política — comprovante (OCR): PIX, sem CNPJ, cartão sem NF, ou
-    // data divergente do dia bloqueiam o lançamento (PO-0002 4.9.1/4.9.3).
-    const receiptBlocks = receiptPolicyBlocks(
-      receiptValidation.result,
-      format(data.date, 'yyyy-MM-dd'),
-    );
+    // Motor de política — comprovante (OCR): PIX, sem CNPJ e cartão sem NF bloqueiam
+    // (PO-0002 4.9.3). Data divergente do dia (4.9.1) só avisa; o gestor vê o selo.
+    const receiptBlocks = receiptPolicyBlocks(receiptValidation.result);
     if (receiptBlocks.length > 0) {
       form.setError('root', { message: receiptBlocks[0] });
       return;
@@ -945,6 +940,11 @@ export function ExpenseFormDialog({
                 divergences={receiptValidation.divergences}
                 errorMessage={receiptValidation.errorMessage}
               />
+              {!isReadOnly && receiptFile && receiptDateNotice(readResult, watchedDateKey) && (
+                <p className={READ_WARN_BOX} data-testid="receipt-date-notice">
+                  {receiptDateNotice(readResult, watchedDateKey)}
+                </p>
+              )}
               {readReview.messages.length > 0 && (
                 <ul className={cn(READ_WARN_BOX, 'space-y-0.5')} data-testid="reading-issues">
                   {readReview.messages.map((m) => (

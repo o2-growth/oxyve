@@ -152,6 +152,13 @@ describe.each([false, true])('ApprovalQueue (mobile=%s)', (isMobile) => {
     expect(screen.getAllByRole('button', { name: /^Aprovar Dup/ }).length).toBeGreaterThan(0);
   });
 
+  it('selo de data da nota diferente no resumo', () => {
+    mockReports = [report({ id: 'a', title: 'Datas', receipt_date_mismatch_count: 1 })];
+    renderQueue();
+    expect(screen.getByTestId('queue-receipt-date-mismatch')).toHaveTextContent('Data da nota diferente');
+    expect(screen.getAllByRole('button', { name: /^Aprovar Datas/ }).length).toBeGreaterThan(0);
+  });
+
   it('sem duplicidade não mostra o selo', () => {
     mockReports = [report({ id: 'a', title: 'Limpo', possible_duplicate_count: 0 })];
     renderQueue();

@@ -49,8 +49,9 @@ vi.mock('@/hooks/useCurrentReport', async (importOriginal) => ({
   useReportForDate: () => ({ data: null, isFetched: true }),
   useCreateExpenseInReport: () => ({ mutateAsync, isPending: false }),
 }));
+const attachReceipt = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/receipts', () => ({
-  attachReceipt: vi.fn().mockResolvedValue('path'),
+  attachReceipt,
   receiptFileProblem: vi.fn().mockResolvedValue(null),
   receiptHash: vi.fn().mockResolvedValue('hash'),
 }));
@@ -212,6 +213,21 @@ describe('QuickExpenseSheet — teto de alimentação', () => {
     expect(amount.value).toBe('30,00');
     fireEvent.click(screen.getByTestId('quick-event-switch'));
     await waitFor(() => expect(amount.value).toBe('70,00'));
+  });
+
+  it('nota fora da janela de 20 dias: salva com a data de hoje, avisa e guarda a data da nota', async () => {
+    const old = format(new Date(Date.now() - 29 * 86400000), 'yyyy-MM-dd');
+    invoke.mockResolvedValue({ ...reading(2500), data: { ...reading(2500).data, extracted_date: old } });
+    attachReceipt.mockResolvedValue('path');
+    render(<QuickExpenseSheet open onOpenChange={() => {}} />, { wrapper });
+    await photo();
+    expect(screen.getByTestId('receipt-date-notice')).toHaveTextContent(/fora da janela de 20 dias/);
+    fireEvent.change(categorySelect(), { target: { value: 'park1' } });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('quick-save-btn'));
+    });
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ date: today })));
+    await waitFor(() => expect(attachReceipt).toHaveBeenCalledWith(expect.objectContaining({ receiptDate: old })));
   });
 
   it('categoria não-alimentação salva o valor da nota', async () => {

@@ -68,7 +68,8 @@ import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { useExpensePolicy } from '@/hooks/usePolicy';
 import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
-import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
+import { useValidateReceipt, receiptPolicyBlocks, receiptDateNotice } from '@/hooks/useValidateReceipt';
+import { receiptDateInWindow } from '@/lib/receiptDate';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, foodCapCents, foodCapLabel, formatAmountInput } from '@/lib/constants';
 import { useFoodCapAmount } from '@/hooks/useFoodCapAmount';
@@ -283,6 +284,7 @@ export function QuickExpenseSheet({
         userId: profile.id,
         reportId: result.report?.id,
         expenseId: result.expense.id,
+        receiptDate: validation.result?.extracted_date ?? null,
       });
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
     } catch (err) {
@@ -302,8 +304,8 @@ export function QuickExpenseSheet({
       return;
     }
     const extracted = validation.result;
-    const finalDate = extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd');
-    const blocks = receiptPolicyBlocks(validation.result, finalDate);
+    const finalDate = expenseDateFromReading(extracted?.extracted_date);
+    const blocks = receiptPolicyBlocks(validation.result);
     if (blocks.length > 0) {
       toast.error(blocks[0]);
       return;
@@ -337,7 +339,7 @@ export function QuickExpenseSheet({
 
     try {
       const result = await createExpense.mutateAsync({
-        date: extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd'),
+        date: finalDate,
         description,
         // Alimentação: o lançado (nota limitada ao teto), o mesmo que a tela mostra.
         amount_cents: launchedFromNote(extracted.extracted_amount_cents),
@@ -371,10 +373,7 @@ export function QuickExpenseSheet({
       form.setError('description', { message: 'Descreva as refeições (ex.: 20 marmitas do mês).' });
       return;
     }
-    const blocks = receiptPolicyBlocks(
-      validation.result,
-      format(data.date, 'yyyy-MM-dd'),
-    );
+    const blocks = receiptPolicyBlocks(validation.result);
     if (blocks.length > 0) {
       toast.error(blocks[0]);
       return;
@@ -406,9 +405,8 @@ export function QuickExpenseSheet({
   const goToEdit = () => {
     const extracted = validation.result;
     form.reset({
-      date: extracted?.extracted_date
-        ? new Date(extracted.extracted_date + 'T00:00:00')
-        : new Date(),
+      // Nota fora da janela de lançamento: a despesa fica com hoje (o banco recusaria).
+      date: new Date(expenseDateFromReading(extracted?.extracted_date) + 'T00:00:00'),
       description: '',
       amount: centsToInput(extracted?.extracted_amount_cents ?? null),
     });
@@ -440,6 +438,20 @@ export function QuickExpenseSheet({
   }, [validation.status]);
 
   const isSaving = createExpense.isPending;
+
+  // Data da nota ≠ data da despesa: só avisa (o gestor vê o selo na revisão).
+  const watchedDate = form.watch('date');
+  const dateNotice = receiptDateNotice(
+    validation.result,
+    step === 'edit' && watchedDate
+      ? format(watchedDate, 'yyyy-MM-dd')
+      : expenseDateFromReading(validation.result?.extracted_date),
+  );
+  const dateNoticeBox = dateNotice && (
+    <p className={READ_WARN_BOX} data-testid="receipt-date-notice">
+      {dateNotice}
+    </p>
+  );
 
   // Destaque some quando a pessoa mexe no campo (o form nasce com o valor lido).
   const { dirtyFields } = form.formState;
@@ -698,6 +710,8 @@ export function QuickExpenseSheet({
             )}
           </div>
 
+          {dateNoticeBox}
+
           {categoryAndEvent}
 
           <div className="flex flex-col gap-2">
@@ -852,6 +866,8 @@ export function QuickExpenseSheet({
               </div>
             </div>
 
+            {dateNoticeBox}
+
             {categoryAndEvent}
 
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2">
@@ -906,6 +922,11 @@ export function QuickExpenseSheet({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Data da despesa a partir da nota: a da nota se estiver na janela de lançamento, senão hoje. */
+function expenseDateFromReading(extracted?: string | null): string {
+  return extracted && receiptDateInWindow(extracted) ? extracted : format(new Date(), 'yyyy-MM-dd');
 }
 
 /** Descrição quando a pessoa não escreve: estabelecimento da nota, senão categoria + data. */
