@@ -54,6 +54,17 @@ serve(async (req) => {
       }
       if (!code) return redirecionar(urlRetorno(APP_URL, "erro", "negado"));
 
+      // Quem pediu ainda é admin da mesma org? (pode ter perdido o papel ou
+      // mudado de org nos 10 min do state). A org sai do state, nunca da URL.
+      const [{ data: papeis }, { data: perfil }] = await Promise.all([
+        sb.from("user_roles").select("role").eq("user_id", st.user_id),
+        sb.from("profiles").select("org_id").eq("id", st.user_id).maybeSingle(),
+      ]);
+      const aindaAdmin = (papeis ?? []).some((r: { role: string }) => r.role === "admin");
+      if (!aindaAdmin || (perfil as { org_id: string | null } | null)?.org_id !== st.org_id) {
+        return redirecionar(urlRetorno(APP_URL, "erro", "permissao"));
+      }
+
       const { url: tokenUrl, init } = buildTokenRequest(cred, { grant: "authorization_code", code });
       const res = await fetch(tokenUrl, { ...init, signal: AbortSignal.timeout(20_000) });
       const body = await res.json().catch(() => null);
@@ -77,6 +88,23 @@ serve(async (req) => {
         console.error("contaazul-oauth: conta-conectada falhou", e);
       }
 
+      // Outra empresa do Conta Azul: pessoas, contas e de-para salvos apontam
+      // para a anterior e lançariam no lugar errado. Recusa e desfaz a conexão nova.
+      const { data: anterior } = await sb
+        .from("contaazul_connection")
+        .select("id_empresa")
+        .eq("org_id", st.org_id)
+        .maybeSingle();
+      const idAnterior = (anterior as { id_empresa: string | null } | null)?.id_empresa ?? null;
+      if (idAnterior && empresa.idEmpresa && idAnterior !== empresa.idEmpresa) {
+        try {
+          await api.revogar(empresa.idEmpresa);
+        } catch (e) {
+          console.error("contaazul-oauth: revogação da empresa diferente falhou", e);
+        }
+        return redirecionar(urlRetorno(APP_URL, "erro", "outra_empresa"));
+      }
+
       const agora = new Date().toISOString();
       const { error } = await sb.from("contaazul_connection").upsert(
         {
@@ -85,8 +113,8 @@ serve(async (req) => {
           refresh_token: tokens.refreshToken,
           token_expires_at: tokens.expiresAt,
           refresh_lock_until: null,
-          id_empresa: empresa.idEmpresa,
-          empresa_nome: empresa.nome,
+          // Sem resposta do conta-conectada, mantém a empresa já salva.
+          ...(empresa.idEmpresa ? { id_empresa: empresa.idEmpresa, empresa_nome: empresa.nome } : {}),
           connected_at: agora,
           connected_by: st.user_id,
           precisa_reconectar: false,

@@ -387,6 +387,8 @@ const CA_MOTIVO: Record<string, string> = {
   token: 'o Conta Azul não aceitou o código de autorização.',
   credenciais: 'faltam as credenciais do app no servidor.',
   banco: 'não foi possível salvar a conexão.',
+  permissao: 'só um administrador da organização pode conectar.',
+  outra_empresa: 'a empresa escolhida é diferente da que já estava conectada. Entre no Conta Azul com a mesma empresa.',
 };
 
 export default function Gestao() {
