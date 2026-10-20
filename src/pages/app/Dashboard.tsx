@@ -1,3 +1,4 @@
+import { ReportStatusBadge } from '@/components/reports/ReportStatusBadge';
 import { useState } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -334,11 +335,7 @@ export default function Dashboard() {
                         <div className="min-w-0 flex-1">
                           <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
                             <span className="truncate">{report.title}</span>
-                            {isReturnedReport(report) && (
-                              <span className="shrink-0 rounded bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive">
-                                Devolvido
-                              </span>
-                            )}
+                            <ReportStatusBadge report={report} />
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
                             {isManager && <>{owner} • </>}

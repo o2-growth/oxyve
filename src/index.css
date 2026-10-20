@@ -186,12 +186,13 @@
 }
 
 @layer utilities {
-  .status-draft { @apply bg-muted text-muted-foreground; }
-  .status-submitted { background-color: hsl(var(--status-submitted) / 0.15); color: hsl(var(--status-submitted)); }
-  .status-approved { background-color: hsl(var(--status-approved) / 0.15); color: hsl(var(--status-approved)); }
-  .status-rejected { background-color: hsl(var(--status-rejected) / 0.15); color: hsl(var(--status-rejected)); }
-  .status-paid { background-color: hsl(var(--status-paid) / 0.15); color: hsl(var(--status-paid)); }
-  .status-out-of-policy { background-color: hsl(var(--status-event) / 0.15); color: hsl(var(--status-event)); }
+  /* Selos de status: fundo, borda e texto fortes para ler de relance. */
+  .status-draft { background-color: hsl(var(--status-draft) / 0.14); color: hsl(var(--foreground)); border-color: hsl(var(--status-draft) / 0.55); }
+  .status-submitted { background-color: hsl(var(--status-submitted) / 0.18); color: hsl(var(--status-submitted)); border-color: hsl(var(--status-submitted) / 0.5); }
+  .status-approved { background-color: hsl(var(--status-approved) / 0.18); color: hsl(var(--status-approved)); border-color: hsl(var(--status-approved) / 0.5); }
+  .status-rejected { background-color: hsl(var(--status-rejected) / 0.18); color: hsl(var(--status-rejected)); border-color: hsl(var(--status-rejected) / 0.5); }
+  .status-paid { background-color: hsl(var(--status-paid) / 0.2); color: hsl(var(--status-paid)); border-color: hsl(var(--status-paid) / 0.55); }
+  .status-out-of-policy { background-color: hsl(var(--status-event) / 0.18); color: hsl(var(--status-event)); border-color: hsl(var(--status-event) / 0.5); }
 
   /* Entrada de conteúdo (rota / stagger de listas) */
   .o2-rise { animation: o2-rise 0.24s var(--ease, cubic-bezier(0.2, 0.8, 0.2, 1)) both; }
