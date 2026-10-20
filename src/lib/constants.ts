@@ -109,11 +109,16 @@ export const formatAmountInput = (input: string): string => {
 };
 
 /**
- * Prévia do valor lançado de alimentação: menor entre a nota e dias × teto diário.
- * O banco (tg_expenses_regras) ainda desconta o que o dia/mês já usou; a prévia não.
+ * Valor lançado de alimentação: menor entre a nota e dias × teto diário. É o que
+ * o campo Valor mostra; o banco (tg_expenses_regras) ainda desconta o que o dia/mês
+ * já usou e nunca reembolsa acima do teto.
  */
-export const previewFoodCents = (noteCents: number, dailyLimitCents: number, days = 1): number =>
-  Math.min(noteCents, Math.max(1, days) * dailyLimitCents);
+export const foodCapCents = (noteCents: number, dailyLimitCents: number, days = 1): number =>
+  Math.min(noteCents, Math.max(1, days || 1) * dailyLimitCents);
+
+/** Texto do teto: "R$ 30,00/dia" ou "R$ 30,00/dia × 3 dias". */
+export const foodCapLabel = (dailyLimitCents: number, days = 1): string =>
+  `${formatCurrency(dailyLimitCents)}/dia${days > 1 ? ` × ${days} dias` : ''}`;
 
 export const formatDate = (date: string | Date): string => {
   return new Intl.DateTimeFormat('pt-BR').format(parseDateOnly(date));

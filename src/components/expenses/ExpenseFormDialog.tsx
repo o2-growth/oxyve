@@ -52,7 +52,9 @@ import { useActiveExpenseTypes, ExpenseType } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useExpensePolicy, useActiveCostCenters, useActiveProjects } from '@/hooks/usePolicy';
 import { useDashboardContext, useCreateExpenseInReport, useReportForDate, cycleForDate, CurrentReport, DEFAULT_CYCLE_CUTOFF_DAY } from '@/hooks/useCurrentReport';
-import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, parseDecimalBR, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, previewFoodCents, MAX_EXPENSE_AGE_DAYS } from '@/lib/constants';
+import { PAYMENT_METHOD_LABELS, formatCurrency, parseAmountToCents, parseDecimalBR, amountFieldError, endOfToday, minExpenseDate, formatAmountInput, MAX_EXPENSE_AGE_DAYS } from '@/lib/constants';
+import { useFoodCapAmount } from '@/hooks/useFoodCapAmount';
+import { FoodCapHint } from './FoodCapHint';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
@@ -204,6 +206,16 @@ export function ExpenseFormDialog({
     form.watch('by_km') || (isFood && !form.watch('is_event') && Number(watchedFoodDays || 1) > 1);
   const kmRateCents = policy?.km_rate_cents ?? 120;
 
+  // Alimentação (sem evento): o campo Valor é o lançado, até dias × teto diário;
+  // o valor da nota fica como referência (e é o que se compara com a leitura).
+  const foodCap = useFoodCapAmount({
+    active: isFood && !watchedIsEvent,
+    dailyLimitCents: foodDailyLimit,
+    days: Math.min(31, Math.max(1, parseInt(watchedFoodDays || '1', 10) || 1)),
+    setAmount: (v) => form.setValue('amount', v, { shouldValidate: true }),
+  });
+  const { reset: resetFoodCap, referenceCents } = foodCap;
+
   // Fora de categoria de transporte, o modo km não se aplica.
   useEffect(() => {
     if (!isTransport && form.getValues('by_km')) {
@@ -264,6 +276,7 @@ export function ExpenseFormDialog({
       });
       setReceiptFile(null);
       setReceiptPreview(null);
+      resetFoodCap(expense.amount_cents);
     } else {
       form.reset({
         date: new Date(),
@@ -283,8 +296,9 @@ export function ExpenseFormDialog({
       });
       setReceiptFile(null);
       setReceiptPreview(null);
+      resetFoodCap();
     }
-  }, [expense, form, open]);
+  }, [expense, form, open, resetFoodCap]);
 
   // Última (arquivo, data, valor) mandada para a leitura: só revalida quando algo muda de
   // fato. Antes o effect reagia ao próprio status da validação e chamava a IA sem parar.
@@ -297,12 +311,13 @@ export function ExpenseFormDialog({
     // Antes saía aqui sem valor digitado — e quem anexava a nota primeiro nunca
     // tinha a leitura. Valor 0 = "só extrair", sem acusar divergência.
     const formDate = format(dateVal ?? new Date(), 'yyyy-MM-dd');
-    const formAmountCents = parseAmountToCents(amountStr || '') || 0;
+    // Alimentação: compara com o valor da NOTA — o lançado pode ser menor por causa do teto.
+    const formAmountCents = referenceCents(amountStr || '') || 0;
     const last = lastValidatedRef.current;
     if (last && last.file === file && last.date === formDate && last.amount === formAmountCents) return;
     lastValidatedRef.current = { file, date: formDate, amount: formAmountCents };
     validateReceipt(file, formDate, formAmountCents);
-  }, [form, validateReceipt]);
+  }, [form, validateReceipt, referenceCents]);
 
   const handleFileChange = async (file: File | null) => {
     if (!file) {
@@ -374,7 +389,7 @@ export function ExpenseFormDialog({
     if (lastValidatedRef.current?.file !== receiptFile) return;
     const t = setTimeout(() => triggerValidation(receiptFile), 600);
     return () => clearTimeout(t);
-  }, [watchedDateKey, watchedAmount, receiptFile, triggerValidation]);
+  }, [watchedDateKey, watchedAmount, foodCap.noteCents, receiptFile, triggerValidation]);
 
   // Preenche valor, data e descrição com o que a nota diz — uma vez por arquivo, sem
   // sobrescrever o que a pessoa já digitou. A data decide o ciclo: nota de 24/09 entra
@@ -390,7 +405,8 @@ export function ExpenseFormDialog({
     }
     const filled: string[] = [];
     if (r.extracted_amount_cents && r.extracted_amount_cents > 0 && !form.getValues('amount')) {
-      form.setValue('amount', formatAmountInput(String(r.extracted_amount_cents / 100)), { shouldValidate: true });
+      // Alimentação: o campo recebe o lançado (até o teto) e a nota fica de referência.
+      foodCap.applyNote(r.extracted_amount_cents);
       filled.push('valor');
     }
     if (r.extracted_date) {
@@ -418,6 +434,7 @@ export function ExpenseFormDialog({
     } else {
       toast.success(`Preenchido pela nota: ${filled.join(', ')}. Confira antes de salvar.`);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- foodCap.applyNote muda a cada render; o effect roda uma vez por arquivo.
   }, [receiptValidation.result, receiptFile, isEditing, form]);
 
   // Destaque enquanto o campo ainda tem o que a leitura duvidosa trouxe; some quando
@@ -429,7 +446,7 @@ export function ExpenseFormDialog({
     canFlag &&
     readReview.amount &&
     readResult.extracted_amount_cents != null &&
-    parseAmountToCents(watchedAmount || '') === readResult.extracted_amount_cents;
+    referenceCents(watchedAmount || '') === readResult.extracted_amount_cents;
   const flagDate =
     canFlag && readReview.date && !!readResult.extracted_date && watchedDateKey === readResult.extracted_date;
 
@@ -647,13 +664,15 @@ export function ExpenseFormDialog({
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{isFood && !watchedIsEvent ? 'Valor da nota (R$)' : 'Valor (R$)'}</FormLabel>
+                <FormLabel>Valor (R$)</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="0,00"
                     {...field}
                     onBlur={(e) => {
-                      field.onChange(formatAmountInput(e.target.value));
+                      const formatted = formatAmountInput(e.target.value);
+                      field.onChange(formatted);
+                      if (!watchedByKm) foodCap.onAmountBlur(formatted);
                       field.onBlur();
                     }}
                     disabled={isReadOnly}
@@ -669,20 +688,7 @@ export function ExpenseFormDialog({
                     Calculado: km × {formatCurrency(kmRateCents)}
                   </p>
                 )}
-                {isFood && !watchedIsEvent && parseAmountToCents(field.value || '') > 0 && (() => {
-                  const nota = parseAmountToCents(field.value || '');
-                  const lancado = previewFoodCents(nota, foodDailyLimit, Number(watchedFoodDays || 1));
-                  return (
-                    <p className="text-sm">
-                      Valor lançado: <strong className="o2-num">{formatCurrency(lancado)}</strong>
-                      {lancado < nota && (
-                        <span className="text-xs text-muted-foreground">
-                          {' '}— teto de {formatCurrency(foodDailyLimit)}/dia
-                        </span>
-                      )}
-                    </p>
-                  );
-                })()}
+                {!isReadOnly && <FoodCapHint cap={foodCap} amount={field.value} />}
                 <FormMessage />
               </FormItem>
             )}

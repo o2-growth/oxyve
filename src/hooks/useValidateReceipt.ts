@@ -263,7 +263,9 @@ export function useValidateReceipt() {
         );
       }
 
-      if (result.extracted_amount_cents != null && result.extracted_amount_cents !== formAmountCents) {
+      // Valor 0 = só extrair (form ainda sem valor). Em alimentação o form manda o valor
+      // da NOTA, não o lançado (que pode ser menor por causa do teto).
+      if (result.extracted_amount_cents != null && formAmountCents > 0 && result.extracted_amount_cents !== formAmountCents) {
         divergences.push(
           `Valor no comprovante: ${formatCurrency(result.extracted_amount_cents)}, Valor informado: ${formatCurrency(formAmountCents)}`
         );

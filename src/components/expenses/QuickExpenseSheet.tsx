@@ -70,7 +70,9 @@ import { useActiveExpenseTypes } from '@/hooks/useExpenseTypes';
 import { groupBySector } from '@/lib/categoryGroups';
 import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
-import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents, formatAmountInput } from '@/lib/constants';
+import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, foodCapCents, foodCapLabel, formatAmountInput } from '@/lib/constants';
+import { useFoodCapAmount } from '@/hooks/useFoodCapAmount';
+import { FoodCapHint } from './FoodCapHint';
 import { O2Rings } from '@/components/brand/O2Rings';
 import { READ_WARN_BOX, READ_WARN_FIELD, READ_WARN_TEXT } from './readingWarning';
 
@@ -155,6 +157,20 @@ export function QuickExpenseSheet({
     },
   });
 
+  // Alimentação (sem evento): o campo Valor é o lançado, até dias × teto diário.
+  const foodDaysNum = Math.min(31, Math.max(1, parseInt(foodDays, 10) || 1));
+  const capActive = isFood && !isEvent;
+  const foodCap = useFoodCapAmount({
+    active: capActive,
+    dailyLimitCents: foodDailyLimit,
+    days: foodDaysNum,
+    setAmount: (v) => form.setValue('amount', v, { shouldValidate: true }),
+  });
+  const watchedAmount = form.watch('amount');
+  /** Valor lançado a partir do valor da nota lido no comprovante. */
+  const launchedFromNote = (noteCents: number) =>
+    capActive ? foodCapCents(noteCents, foodDailyLimit, foodDaysNum) : noteCents;
+
   // Reset state quando o sheet abre/fecha.
   useEffect(() => {
     if (!open) {
@@ -169,6 +185,7 @@ export function QuickExpenseSheet({
       autoOpenedRef.current = false;
       validation.reset();
       form.reset({ date: new Date(), description: '', amount: '' });
+      foodCap.reset();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -322,7 +339,8 @@ export function QuickExpenseSheet({
       const result = await createExpense.mutateAsync({
         date: extracted?.extracted_date || format(new Date(), 'yyyy-MM-dd'),
         description,
-        amount_cents: extracted?.extracted_amount_cents ?? 0,
+        // Alimentação: o lançado (nota limitada ao teto), o mesmo que a tela mostra.
+        amount_cents: launchedFromNote(extracted.extracted_amount_cents),
         category_id: categoryId,
         is_event: isEvent,
         food_days: isFood && !isEvent ? Math.min(31, Math.max(1, parseInt(foodDays, 10) || 1)) : 1,
@@ -394,6 +412,9 @@ export function QuickExpenseSheet({
       description: '',
       amount: centsToInput(extracted?.extracted_amount_cents ?? null),
     });
+    foodCap.reset();
+    // Nota lida → campo com o lançado (até o teto, se alimentação).
+    foodCap.applyNote(extracted?.extracted_amount_cents);
     // "Digitar sem foto" pode vir de "Aguardando câmera..."; sem isso o Voltar caía nele.
     setWaitingForCamera(false);
     setStep('edit');
@@ -629,28 +650,21 @@ export function QuickExpenseSheet({
                   </ul>
                 )}
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="o2-eyebrow">{isFood && !isEvent ? 'Nota' : 'Valor'}</span>
+                  <span className="o2-eyebrow">Valor</span>
                   <span className={cn('o2-num font-medium', validation.review.amount && 'text-[hsl(var(--status-event))]')}>
                     {extractedSummary.amount != null
-                      ? formatCurrency(extractedSummary.amount)
+                      ? formatCurrency(launchedFromNote(extractedSummary.amount))
                       : 'não detectado'}
                   </span>
                 </div>
-                {isFood && !isEvent && extractedSummary.amount != null && (
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="o2-eyebrow">Valor lançado</span>
-                    <span className="o2-num font-semibold text-foreground">
-                      {formatCurrency(
-                        previewFoodCents(extractedSummary.amount, foodDailyLimit, parseInt(foodDays, 10) || 1),
-                      )}
-                      {extractedSummary.amount > foodDailyLimit * (parseInt(foodDays, 10) || 1) && (
-                        <span className="ml-1 text-xs font-normal text-muted-foreground">
-                          teto {formatCurrency(foodDailyLimit)}/dia
-                        </span>
-                      )}
-                    </span>
-                  </div>
-                )}
+                {capActive &&
+                  extractedSummary.amount != null &&
+                  launchedFromNote(extractedSummary.amount) < extractedSummary.amount && (
+                    <p className="text-xs text-muted-foreground text-right" data-testid="food-cap-note">
+                      Nota: <span className="o2-num">{formatCurrency(extractedSummary.amount)}</span> · lançado até o
+                      teto de {foodCapLabel(foodDailyLimit, foodDaysNum)}. Você pode alterar em "Editar detalhes".
+                    </p>
+                  )}
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Data</span>
                   <span className={cn('o2-num font-medium', validation.review.date && 'text-[hsl(var(--status-event))]')}>
@@ -767,7 +781,7 @@ export function QuickExpenseSheet({
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{isFood && !isEvent ? 'Valor da nota (R$)' : 'Valor (R$)'}</FormLabel>
+                    <FormLabel>Valor (R$)</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="0,00"
@@ -777,7 +791,9 @@ export function QuickExpenseSheet({
                         {...field}
                         // Mostra como o valor foi lido ("1.500" → "1.500,00") antes de salvar.
                         onBlur={() => {
-                          field.onChange(formatAmountInput(field.value));
+                          const formatted = formatAmountInput(field.value);
+                          field.onChange(formatted);
+                          foodCap.onAmountBlur(formatted);
                           field.onBlur();
                         }}
                       />
@@ -831,6 +847,9 @@ export function QuickExpenseSheet({
                   </FormItem>
                 )}
               />
+              <div className="col-span-2 -mt-1 space-y-0.5 empty:hidden">
+                <FoodCapHint cap={foodCap} amount={watchedAmount} />
+              </div>
             </div>
 
             {categoryAndEvent}
