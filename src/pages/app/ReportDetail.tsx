@@ -254,7 +254,8 @@ export default function ReportDetail() {
   const isOwner = report?.user_id === user?.id;
   const isReturned = report?.status === 'draft' && !!r?.last_rejection_comment;
   const canEdit = isOwner && report?.status === 'draft';
-  const canApprove = isManager && (!isOwner || isAdmin) && report?.status === 'submitted';
+  // Decisão do negócio: gestor também aprova o próprio relatório (com a revisão item a item).
+  const canApprove = isManager && report?.status === 'submitted';
   const canMarkPaid = isAdmin && report?.status === 'approved';
   const showReviewStatus =
     (isReturned && items.some((it) => it.review_decision)) || report?.status === 'rejected' || report?.status === 'approved' || report?.status === 'submitted';
