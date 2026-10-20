@@ -10,6 +10,9 @@
  *    salva, ou vai pra `edit` pra refinar.
  * 3. `edit` — form (descrição, valor, data, categoria, evento).
  *
+ * Leitura duvidosa (valor/data com confiança média ou baixa, foto tremida, nota
+ * cortada...) não salva pelo atalho: vai para `edit` com os campos destacados.
+ *
  * HEIC é convertido pra JPEG via `convertHeicToJpeg` antes do preview/OCR.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -69,6 +72,7 @@ import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateRece
 import { convertHeicToJpeg } from '@/lib/convertHeic';
 import { formatCurrency, parseAmountToCents, amountFieldError, endOfToday, minExpenseDate, previewFoodCents, formatAmountInput } from '@/lib/constants';
 import { O2Rings } from '@/components/brand/O2Rings';
+import { READ_WARN_BOX, READ_WARN_FIELD, READ_WARN_TEXT } from './readingWarning';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -287,10 +291,22 @@ export function QuickExpenseSheet({
       toast.error(blocks[0]);
       return;
     }
+    if (validation.review.notAReceipt) {
+      toast.warning('Isso não parece um comprovante. Tire outra foto ou preencha os dados à mão.');
+      goToEdit();
+      return;
+    }
     // Sem valor lido do cupom não há "salvar rápido": salvar R$ 0,00 em silêncio era
     // o que acontecia. Leva para o formulário com o foco no valor.
     if (!extracted?.extracted_amount_cents || extracted.extracted_amount_cents <= 0) {
       toast.error('Não consegui ler o valor do comprovante — confira os dados.');
+      goToEdit();
+      return;
+    }
+    // Leitura duvidosa não vira despesa sem a pessoa olhar: valor errado salvo pelo
+    // atalho só aparece para o aprovador, que devolve o relatório inteiro.
+    if (validation.review.amount || validation.review.date) {
+      toast.warning('Leitura com dúvida — confira o valor e a data antes de salvar.');
       goToEdit();
       return;
     }
@@ -403,6 +419,11 @@ export function QuickExpenseSheet({
   }, [validation.status]);
 
   const isSaving = createExpense.isPending;
+
+  // Destaque some quando a pessoa mexe no campo (o form nasce com o valor lido).
+  const { dirtyFields } = form.formState;
+  const flagAmount = !!file && validation.review.amount && !dirtyFields.amount;
+  const flagDate = !!file && validation.review.date && !dirtyFields.date;
 
   // Bloco reutilizável: categoria + toggle de evento.
   const categoryAndEvent = (
@@ -594,11 +615,22 @@ export function QuickExpenseSheet({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="o2-eyebrow">Analisando comprovante...</span>
               </div>
+            ) : validation.review.notAReceipt ? (
+              <p className={cn(READ_WARN_BOX, 'font-medium')} data-testid="not-a-receipt-warning">
+                Isso não parece um comprovante. Tire outra foto da nota ou preencha os dados à mão.
+              </p>
             ) : extractedSummary ? (
               <div className="space-y-1.5 text-sm">
+                {validation.review.messages.length > 0 && (
+                  <ul className={cn(READ_WARN_BOX, 'space-y-0.5')} data-testid="reading-issues">
+                    {validation.review.messages.map((m) => (
+                      <li key={m}>{m}</li>
+                    ))}
+                  </ul>
+                )}
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">{isFood && !isEvent ? 'Nota' : 'Valor'}</span>
-                  <span className="o2-num font-medium">
+                  <span className={cn('o2-num font-medium', validation.review.amount && 'text-[hsl(var(--status-event))]')}>
                     {extractedSummary.amount != null
                       ? formatCurrency(extractedSummary.amount)
                       : 'não detectado'}
@@ -621,7 +653,7 @@ export function QuickExpenseSheet({
                 )}
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Data</span>
-                  <span className="o2-num font-medium">
+                  <span className={cn('o2-num font-medium', validation.review.date && 'text-[hsl(var(--status-event))]')}>
                     {extractedSummary.date
                       ? format(
                           new Date(extractedSummary.date + 'T00:00:00'),
@@ -633,10 +665,15 @@ export function QuickExpenseSheet({
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="o2-eyebrow">Confiança</span>
-                  <span className="font-mono text-sm font-medium">
-                    {CONFIDENCE_LABELS[String(extractedSummary.confidence).toLowerCase()] ??
-                      extractedSummary.confidence}
-                  </span>
+                  {/* Campo em dúvida manda: "Alta" ao lado de um valor em amarelo confundia. */}
+                  {validation.review.amount || validation.review.date ? (
+                    <span className="font-mono text-sm font-medium text-[hsl(var(--status-event))]">Conferir</span>
+                  ) : (
+                    <span className="font-mono text-sm font-medium">
+                      {CONFIDENCE_LABELS[String(extractedSummary.confidence).toLowerCase()] ??
+                        extractedSummary.confidence}
+                    </span>
+                  )}
                 </div>
               </div>
             ) : (
@@ -734,8 +771,9 @@ export function QuickExpenseSheet({
                     <FormControl>
                       <Input
                         placeholder="0,00"
-                        className="h-12"
+                        className={cn('h-12', flagAmount && READ_WARN_FIELD)}
                         inputMode="decimal"
+                        data-testid="quick-amount-input"
                         {...field}
                         // Mostra como o valor foi lido ("1.500" → "1.500,00") antes de salvar.
                         onBlur={() => {
@@ -744,6 +782,7 @@ export function QuickExpenseSheet({
                         }}
                       />
                     </FormControl>
+                    {flagAmount && <p className={READ_WARN_TEXT}>Confira o valor lido</p>}
                     <FormMessage />
                   </FormItem>
                 )}
@@ -760,9 +799,11 @@ export function QuickExpenseSheet({
                         <FormControl>
                           <Button
                             variant="outline"
+                            data-testid="quick-date-btn"
                             className={cn(
                               'h-12 pl-3 text-left font-normal',
-                              !field.value && 'text-muted-foreground'
+                              !field.value && 'text-muted-foreground',
+                              flagDate && READ_WARN_FIELD,
                             )}
                           >
                             {field.value ? (
@@ -785,6 +826,7 @@ export function QuickExpenseSheet({
                         />
                       </PopoverContent>
                     </Popover>
+                    {flagDate && <p className={READ_WARN_TEXT}>Confira a data lida</p>}
                     <FormMessage />
                   </FormItem>
                 )}

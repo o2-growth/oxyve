@@ -11,13 +11,98 @@ export type ReceiptType =
   | 'comprovante_cartao'
   | 'outro';
 
+export type ReadConfidence = 'high' | 'medium' | 'low';
+
+export type ReceiptIssue =
+  | 'blurry'
+  | 'cropped'
+  | 'multiple_totals'
+  | 'handwritten'
+  | 'not_a_receipt'
+  | 'low_light'
+  | 'other';
+
 export interface ValidationResult {
   extracted_date: string | null;
   extracted_amount_cents: number | null;
   extracted_cnpj: string | null;
   extracted_supplier: string | null;
   receipt_type: ReceiptType | null;
-  confidence: 'high' | 'medium' | 'low';
+  confidence: ReadConfidence;
+  amount_confidence: ReadConfidence;
+  date_confidence: ReadConfidence;
+  issues: ReceiptIssue[];
+  /** Só informativo por enquanto (não escolhe categoria). */
+  expense_kind_hint: 'food' | 'transport' | 'other' | null;
+  model_used: string | null;
+}
+
+/** O que a pessoa precisa conferir antes de salvar o que a leitura trouxe. */
+export interface ReadingReview {
+  amount: boolean;
+  date: boolean;
+  notAReceipt: boolean;
+  /** Uma frase curta por problema da foto, na ordem em que vieram. */
+  messages: string[];
+}
+
+export const ISSUE_MESSAGES: Partial<Record<ReceiptIssue, string>> = {
+  blurry: 'Foto tremida — confira os valores',
+  cropped: 'Nota cortada — confira o total',
+  multiple_totals: 'Mais de um total na nota — confira o valor',
+  not_a_receipt: 'Isso não parece um comprovante',
+  handwritten: 'Nota escrita à mão — confira os valores',
+  low_light: 'Foto escura — confira os valores',
+};
+
+// Problemas que põem em dúvida o número lido. "Mais de um total" só afeta o valor.
+const AMOUNT_ISSUES: ReceiptIssue[] = ['blurry', 'cropped', 'multiple_totals', 'handwritten', 'low_light'];
+const DATE_ISSUES: ReceiptIssue[] = ['blurry', 'cropped', 'handwritten', 'low_light'];
+
+const NO_REVIEW: ReadingReview = { amount: false, date: false, notAReceipt: false, messages: [] };
+
+/**
+ * Por campo, se a leitura pede conferência: confiança média/baixa ou problema
+ * na foto. Sem leitura não há o que conferir.
+ */
+export function readingReview(result: ValidationResult | null): ReadingReview {
+  if (!result) return NO_REVIEW;
+  const issues = result.issues ?? [];
+  const messages = issues.map((i) => ISSUE_MESSAGES[i]).filter((m): m is string => !!m);
+  if (issues.includes('not_a_receipt')) {
+    return { amount: false, date: false, notAReceipt: true, messages };
+  }
+  return {
+    amount: result.amount_confidence !== 'high' || issues.some((i) => AMOUNT_ISSUES.includes(i)),
+    date: result.date_confidence !== 'high' || issues.some((i) => DATE_ISSUES.includes(i)),
+    notAReceipt: false,
+    messages,
+  };
+}
+
+const CONFIDENCES: ReadConfidence[] = ['high', 'medium', 'low'];
+const asConfidence = (v: unknown): ReadConfidence | null =>
+  CONFIDENCES.includes(v as ReadConfidence) ? (v as ReadConfidence) : null;
+
+/** Resposta da função → resultado. Aceita a resposta antiga (sem confiança por campo). */
+export function toValidationResult(data: Record<string, unknown>): ValidationResult {
+  const confidence = asConfidence(data.confidence) ?? 'low';
+  const issues = Array.isArray(data.issues) ? (data.issues as ReceiptIssue[]) : [];
+  const notAReceipt = issues.includes('not_a_receipt');
+  return {
+    // Foto que não é comprovante não preenche nada, mesmo que a função mande algo.
+    extracted_date: notAReceipt ? null : (data.extracted_date as string) || null,
+    extracted_amount_cents: notAReceipt ? null : (data.extracted_amount_cents as number) ?? null,
+    extracted_cnpj: notAReceipt ? null : (data.extracted_cnpj as string) || null,
+    extracted_supplier: notAReceipt ? null : (data.extracted_supplier as string) || null,
+    receipt_type: notAReceipt ? null : (data.receipt_type as ReceiptType) || null,
+    confidence: notAReceipt ? 'low' : confidence,
+    amount_confidence: asConfidence(data.amount_confidence) ?? confidence,
+    date_confidence: asConfidence(data.date_confidence) ?? confidence,
+    issues,
+    expense_kind_hint: (data.expense_kind_hint as ValidationResult['expense_kind_hint']) ?? null,
+    model_used: (data.model_used as string) ?? null,
+  };
 }
 
 /**
@@ -152,17 +237,20 @@ export function useValidateReceipt() {
         return;
       }
 
-      const result: ValidationResult = {
-        extracted_date: data.extracted_date || null,
-        extracted_amount_cents: data.extracted_amount_cents ?? null,
-        extracted_cnpj: data.extracted_cnpj || null,
-        extracted_supplier: data.extracted_supplier || null,
-        receipt_type: data.receipt_type || null,
-        confidence: data.confidence || 'low',
-      };
+      const result = toValidationResult(data ?? {});
 
       // Compare with form values
       const divergences: string[] = [];
+
+      if (result.issues.includes('not_a_receipt')) {
+        setState({
+          status: 'warning',
+          result,
+          divergences: ['Isso não parece um comprovante. Tire outra foto da nota ou preencha à mão.'],
+          errorMessage: null,
+        });
+        return;
+      }
 
       if (result.confidence === 'low') {
         setState({ status: 'warning', result, divergences: ['Não foi possível ler o comprovante com clareza.'], errorMessage: null });
@@ -205,5 +293,6 @@ export function useValidateReceipt() {
 
   // Identidade estável: o form usa o retorno em deps de useCallback/useEffect; um objeto
   // novo a cada render realimentava a validação (loop de chamadas à IA).
-  return useMemo(() => ({ ...state, validate, reset }), [state, validate, reset]);
+  const review = useMemo(() => readingReview(state.result), [state.result]);
+  return useMemo(() => ({ ...state, review, validate, reset }), [state, review, validate, reset]);
 }

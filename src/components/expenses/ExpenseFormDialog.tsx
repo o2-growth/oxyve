@@ -58,9 +58,10 @@ import { ReceiptUpload } from './ReceiptUpload';
 import { ReceiptValidation } from './ReceiptValidation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useValidateReceipt, receiptPolicyBlocks } from '@/hooks/useValidateReceipt';
+import { useValidateReceipt, receiptPolicyBlocks, readingReview } from '@/hooks/useValidateReceipt';
 import { attachReceipt, receiptFileProblem, receiptHash } from '@/lib/receipts';
 import { convertHeicToJpeg } from '@/lib/convertHeic';
+import { READ_WARN_BOX, READ_WARN_FIELD, READ_WARN_TEXT } from './readingWarning';
 
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -383,6 +384,10 @@ export function ExpenseFormDialog({
     const r = receiptValidation.result;
     if (!r || !receiptFile || isEditing || autofilledRef.current === receiptFile) return;
     autofilledRef.current = receiptFile;
+    if (r.issues.includes('not_a_receipt')) {
+      toast.warning('Isso não parece um comprovante. Confira a foto anexada — nada foi preenchido.');
+      return;
+    }
     const filled: string[] = [];
     if (r.extracted_amount_cents && r.extracted_amount_cents > 0 && !form.getValues('amount')) {
       form.setValue('amount', formatAmountInput(String(r.extracted_amount_cents / 100)), { shouldValidate: true });
@@ -406,8 +411,27 @@ export function ExpenseFormDialog({
       form.setValue('description', r.extracted_supplier.slice(0, 200));
       filled.push('estabelecimento');
     }
-    if (filled.length) toast.success(`Preenchido pela nota: ${filled.join(', ')}. Confira antes de salvar.`);
+    if (!filled.length) return;
+    const review = readingReview(r);
+    if (review.amount || review.date) {
+      toast.warning(`Preenchido pela nota: ${filled.join(', ')}. Leitura com dúvida — confira os campos destacados.`);
+    } else {
+      toast.success(`Preenchido pela nota: ${filled.join(', ')}. Confira antes de salvar.`);
+    }
   }, [receiptValidation.result, receiptFile, isEditing, form]);
+
+  // Destaque enquanto o campo ainda tem o que a leitura duvidosa trouxe; some quando
+  // a pessoa corrige.
+  const readResult = receiptValidation.result;
+  const readReview = receiptValidation.review;
+  const canFlag = !isReadOnly && !!receiptFile && !!readResult;
+  const flagAmount =
+    canFlag &&
+    readReview.amount &&
+    readResult.extracted_amount_cents != null &&
+    parseAmountToCents(watchedAmount || '') === readResult.extracted_amount_cents;
+  const flagDate =
+    canFlag && readReview.date && !!readResult.extracted_date && watchedDateKey === readResult.extracted_date;
 
   // Mesmo caminho da captura rápida (lib/receipts): sobe o arquivo e grava path + hash.
   const uploadReceipt = async (expenseId: string, reportId: string | null | undefined) => {
@@ -585,9 +609,11 @@ export function ExpenseFormDialog({
                       <Button
                         variant="outline"
                         disabled={isReadOnly}
+                        data-testid="expense-date-btn"
                         className={cn(
                           'h-12 pl-3 text-left font-normal',
-                          !field.value && 'text-muted-foreground'
+                          !field.value && 'text-muted-foreground',
+                          flagDate && READ_WARN_FIELD,
                         )}
                       >
                         {field.value ? (
@@ -610,6 +636,7 @@ export function ExpenseFormDialog({
                     />
                   </PopoverContent>
                 </Popover>
+                {flagDate && <p className={READ_WARN_TEXT}>Confira a data lida</p>}
                 <FormMessage />
               </FormItem>
             )}
@@ -631,10 +658,12 @@ export function ExpenseFormDialog({
                     }}
                     disabled={isReadOnly}
                     readOnly={watchedByKm}
-                    className={cn('h-12', watchedByKm && 'bg-muted')}
+                    className={cn('h-12', watchedByKm && 'bg-muted', flagAmount && READ_WARN_FIELD)}
                     inputMode="decimal"
+                    data-testid="expense-amount-input"
                   />
                 </FormControl>
+                {flagAmount && <p className={READ_WARN_TEXT}>Confira o valor lido</p>}
                 {watchedByKm && (
                   <p className="text-xs text-muted-foreground">
                     Calculado: km × {formatCurrency(kmRateCents)}
@@ -899,11 +928,26 @@ export function ExpenseFormDialog({
               onFileChange={handleFileChange}
             />
           )}
-          <ReceiptValidation
-            status={receiptValidation.status}
-            divergences={receiptValidation.divergences}
-            errorMessage={receiptValidation.errorMessage}
-          />
+          {readReview.notAReceipt ? (
+            <p className={cn(READ_WARN_BOX, 'font-medium')} data-testid="not-a-receipt-warning">
+              Isso não parece um comprovante. Anexe a foto da nota ou preencha os dados à mão.
+            </p>
+          ) : (
+            <>
+              <ReceiptValidation
+                status={receiptValidation.status}
+                divergences={receiptValidation.divergences}
+                errorMessage={receiptValidation.errorMessage}
+              />
+              {readReview.messages.length > 0 && (
+                <ul className={cn(READ_WARN_BOX, 'space-y-0.5')} data-testid="reading-issues">
+                  {readReview.messages.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </div>
 
         {isFood && !watchedIsEvent && (
