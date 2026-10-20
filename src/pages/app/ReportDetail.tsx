@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ReportStatusBadge } from '@/components/reports/ReportStatusBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState, LoadError } from '@/components/ui/EmptyState';
 import { Progress } from '@/components/ui/progress';
@@ -531,7 +532,7 @@ export default function ReportDetail() {
       {/* Status and Actions Bar */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <StatusBadge status={report.status} type="report" />
+          <ReportStatusBadge report={report} />
           {r?.submitted_late && (
             <Badge variant="outline" className="border-amber-500 text-amber-600">
               <Clock className="mr-1 h-3 w-3" />
@@ -966,7 +967,7 @@ export default function ReportDetail() {
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-2">
               <span className="text-muted-foreground">Status</span>
-              <StatusBadge status={report.status} type="report" />
+              <ReportStatusBadge report={report} />
             </div>
             <Separator />
             {canApprove && totalExpenses > 0 && (
