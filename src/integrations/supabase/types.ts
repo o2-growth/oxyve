@@ -29,6 +29,195 @@ export type Database = {
         }
         Relationships: []
       }
+      contaazul_category_map: {
+        Row: {
+          ca_categoria_id: string
+          ca_categoria_nome: string | null
+          expense_category_id: string | null
+          id: string
+          kind: string | null
+          org_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ca_categoria_id: string
+          ca_categoria_nome?: string | null
+          expense_category_id?: string | null
+          id?: string
+          kind?: string | null
+          org_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ca_categoria_id?: string
+          ca_categoria_nome?: string | null
+          expense_category_id?: string | null
+          id?: string
+          kind?: string | null
+          org_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contaazul_category_map_expense_category_id_fkey"
+            columns: ["expense_category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contaazul_category_map_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contaazul_connection: {
+        Row: {
+          access_token: string | null
+          ativo: boolean
+          connected_at: string | null
+          connected_by: string | null
+          conta_financeira_id: string | null
+          conta_financeira_nome: string | null
+          created_at: string
+          dia_vencimento: number
+          empresa_nome: string | null
+          id_empresa: string | null
+          last_error: string | null
+          last_poll_at: string | null
+          last_sync_at: string | null
+          org_id: string
+          precisa_reconectar: boolean
+          refresh_lock_until: string | null
+          refresh_token: string | null
+          token_expires_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          access_token?: string | null
+          ativo?: boolean
+          connected_at?: string | null
+          connected_by?: string | null
+          conta_financeira_id?: string | null
+          conta_financeira_nome?: string | null
+          created_at?: string
+          dia_vencimento?: number
+          empresa_nome?: string | null
+          id_empresa?: string | null
+          last_error?: string | null
+          last_poll_at?: string | null
+          last_sync_at?: string | null
+          org_id: string
+          precisa_reconectar?: boolean
+          refresh_lock_until?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string | null
+          ativo?: boolean
+          connected_at?: string | null
+          connected_by?: string | null
+          conta_financeira_id?: string | null
+          conta_financeira_nome?: string | null
+          created_at?: string
+          dia_vencimento?: number
+          empresa_nome?: string | null
+          id_empresa?: string | null
+          last_error?: string | null
+          last_poll_at?: string | null
+          last_sync_at?: string | null
+          org_id?: string
+          precisa_reconectar?: boolean
+          refresh_lock_until?: string | null
+          refresh_token?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contaazul_connection_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contaazul_oauth_state: {
+        Row: {
+          created_at: string
+          expires_at: string
+          org_id: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          org_id: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          org_id?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contaazul_oauth_state_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contaazul_sector_map: {
+        Row: {
+          ca_centro_custo_id: string
+          ca_centro_custo_nome: string | null
+          org_id: string
+          sector: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ca_centro_custo_id: string
+          ca_centro_custo_nome?: string | null
+          org_id: string
+          sector: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ca_centro_custo_id?: string
+          ca_centro_custo_nome?: string | null
+          org_id?: string
+          sector?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contaazul_sector_map_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_centers: {
         Row: {
           code: string | null
@@ -555,6 +744,7 @@ export type Database = {
           bank_account: string | null
           bank_branch: string | null
           bank_name: string | null
+          ca_pessoa_id: string | null
           cpf_cnpj: string | null
           created_at: string
           currency: string | null
@@ -571,6 +761,7 @@ export type Database = {
           bank_account?: string | null
           bank_branch?: string | null
           bank_name?: string | null
+          ca_pessoa_id?: string | null
           cpf_cnpj?: string | null
           created_at?: string
           currency?: string | null
@@ -587,6 +778,7 @@ export type Database = {
           bank_account?: string | null
           bank_branch?: string | null
           bank_name?: string | null
+          ca_pessoa_id?: string | null
           cpf_cnpj?: string | null
           created_at?: string
           currency?: string | null
@@ -815,6 +1007,16 @@ export type Database = {
       }
       reports: {
         Row: {
+          ca_approved_at: string | null
+          ca_attempts: number
+          ca_checked_at: string | null
+          ca_claimed_at: string | null
+          ca_conta_id: string | null
+          ca_error: string | null
+          ca_parcela_id: string | null
+          ca_sent_at: string | null
+          ca_status: string | null
+          ca_vencimento: string | null
           created_at: string
           cycle_key: string | null
           due_date: string | null
@@ -832,6 +1034,16 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ca_approved_at?: string | null
+          ca_attempts?: number
+          ca_checked_at?: string | null
+          ca_claimed_at?: string | null
+          ca_conta_id?: string | null
+          ca_error?: string | null
+          ca_parcela_id?: string | null
+          ca_sent_at?: string | null
+          ca_status?: string | null
+          ca_vencimento?: string | null
           created_at?: string
           cycle_key?: string | null
           due_date?: string | null
@@ -849,6 +1061,16 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ca_approved_at?: string | null
+          ca_attempts?: number
+          ca_checked_at?: string | null
+          ca_claimed_at?: string | null
+          ca_conta_id?: string | null
+          ca_error?: string | null
+          ca_parcela_id?: string | null
+          ca_sent_at?: string | null
+          ca_status?: string | null
+          ca_vencimento?: string | null
           created_at?: string
           cycle_key?: string | null
           due_date?: string | null
@@ -923,6 +1145,39 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: number
       }
+      contaazul_claim_pendentes: { Args: { p_limit?: number; p_org: string }; Returns: string[] }
+      contaazul_get_config: { Args: never; Returns: Json }
+      contaazul_list_reports: { Args: { p_limit?: number }; Returns: Json }
+      contaazul_marcar_pago: { Args: { p_report_id: string }; Returns: boolean }
+      contaazul_reenviar: { Args: { p_report_id: string }; Returns: Json }
+      contaazul_report_data: { Args: { p_report_id: string }; Returns: Json }
+      contaazul_save_config: {
+        Args: {
+          p_ativo: boolean
+          p_conta_financeira_id: string
+          p_conta_financeira_nome: string
+          p_dia_vencimento: number
+        }
+        Returns: Json
+      }
+      contaazul_set_category_map: {
+        Args: {
+          p_ca_categoria_id: string
+          p_ca_categoria_nome: string
+          p_expense_category_id: string
+          p_kind: string
+        }
+        Returns: undefined
+      }
+      contaazul_set_sector_map: {
+        Args: {
+          p_ca_centro_custo_id: string
+          p_ca_centro_custo_nome: string
+          p_sector: string
+        }
+        Returns: undefined
+      }
+      contaazul_try_lock_refresh: { Args: { p_org: string; p_seconds?: number }; Returns: boolean }
       create_expense_in_current_report: {
         Args: {
           p_amount_cents: number
@@ -982,6 +1237,7 @@ export type Database = {
         Args: { p_destino: string; p_expense_id: string }
         Returns: Json
       }
+      dispatch_contaazul_sync: { Args: never; Returns: number }
       dispatch_pending_notification_emails: { Args: never; Returns: number }
       dispatch_pending_notification_pushes: { Args: never; Returns: number }
       expense_in_any_report: {
