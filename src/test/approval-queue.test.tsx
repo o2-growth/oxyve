@@ -66,20 +66,14 @@ describe.each([false, true])('ApprovalQueue (mobile=%s)', (isMobile) => {
   });
   afterEach(() => cleanup());
 
-  it('não lista o próprio relatório', () => {
+  it('lista também o próprio relatório (gestor aprova o próprio)', () => {
     mockReports = [
       report({ id: 'a', title: 'Do colega' }),
       report({ id: 'b', title: 'Meu', user_id: 'me' }),
     ];
     renderQueue();
     expect(screen.getAllByText('Do colega').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Meu')).toBeNull();
-  });
-
-  it('só o próprio relatório: fila vazia', () => {
-    mockReports = [report({ id: 'b', title: 'Meu', user_id: 'me' })];
-    renderQueue();
-    expect(screen.getByText('Nenhum relatório pendente')).toBeInTheDocument();
+    expect(screen.getAllByText('Meu').length).toBeGreaterThan(0);
   });
 
   it('sem revisão completa não oferece Aprovar; o botão leva ao Detalhe', () => {

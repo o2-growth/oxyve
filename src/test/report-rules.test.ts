@@ -123,9 +123,9 @@ describe('isReturnedReport', () => {
 });
 
 describe('isAwaitingApprovalBy', () => {
-  it('conta só relatório enviado de outra pessoa', () => {
+  it('conta todo relatório enviado, inclusive o próprio', () => {
     expect(isAwaitingApprovalBy({ status: 'submitted', user_id: 'a' }, 'me')).toBe(true);
-    expect(isAwaitingApprovalBy({ status: 'submitted', user_id: 'me' }, 'me')).toBe(false);
+    expect(isAwaitingApprovalBy({ status: 'submitted', user_id: 'me' }, 'me')).toBe(true);
     expect(isAwaitingApprovalBy({ status: 'draft', user_id: 'a' }, 'me')).toBe(false);
   });
 });

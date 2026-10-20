@@ -87,8 +87,9 @@ export function isReturnedReport(r: { status: string; last_rejection_comment?: s
 }
 
 /** Fila de aprovação: enviado e de outra pessoa (mesmo critério dos contadores). */
-export function isAwaitingApprovalBy(r: { status: string; user_id: string }, userId: string | undefined): boolean {
-  return r.status === 'submitted' && r.user_id !== userId;
+/** Na fila do gestor entra todo relatório enviado, inclusive o dele: gestor aprova o próprio. */
+export function isAwaitingApprovalBy(r: { status: string; user_id: string }, _userId: string | undefined): boolean {
+  return r.status === 'submitted';
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
