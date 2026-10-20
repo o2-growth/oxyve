@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppShell } from '@/components/layout/AppShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { GestaoUsuarios } from '@/components/gestao/GestaoUsuarios';
 import { GestaoCategorias } from '@/components/gestao/GestaoCategorias';
+import { GestaoContaAzul } from '@/components/gestao/GestaoContaAzul';
 import {
   Card,
   CardContent,
@@ -378,10 +380,35 @@ const REPORT_STATUS_LABEL: Record<string, string> = {
   rejected: 'reprovado',
 };
 
+// Volta do OAuth do Conta Azul (contaazul-oauth redireciona com ?ca=...).
+const CA_MOTIVO: Record<string, string> = {
+  state: 'o pedido expirou ou já foi usado. Tente conectar de novo.',
+  negado: 'a autorização foi negada no Conta Azul.',
+  token: 'o Conta Azul não aceitou o código de autorização.',
+  credenciais: 'faltam as credenciais do app no servidor.',
+  banco: 'não foi possível salvar a conexão.',
+  permissao: 'só um administrador da organização pode conectar.',
+  outra_empresa: 'a empresa escolhida é diferente da que já estava conectada. Entre no Conta Azul com a mesma empresa.',
+};
+
 export default function Gestao() {
   const { isAdmin, isManager, isLoading: authLoading } = useAuth();
   const { data, isLoading, isError, error, refetch } = useAdminOverview();
   const [selectedPerson, setSelectedPerson] = useState<PersonRow | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const retornoCa = searchParams.get('ca');
+  const [tab, setTab] = useState(retornoCa ? 'contaazul' : 'financeiro');
+
+  useEffect(() => {
+    if (!retornoCa) return;
+    if (retornoCa === 'conectado') toast.success('Conta Azul conectado.');
+    else toast.error(`Não foi possível conectar o Conta Azul: ${CA_MOTIVO[searchParams.get('motivo') ?? ''] ?? 'tente de novo.'}`);
+    // Tira o parâmetro para o aviso não voltar no F5.
+    const next = new URLSearchParams(searchParams);
+    next.delete('ca');
+    next.delete('motivo');
+    setSearchParams(next, { replace: true });
+  }, [retornoCa, searchParams, setSearchParams]);
 
   const people = useMemo(
     () =>
@@ -465,8 +492,8 @@ export default function Gestao() {
         description="Painel administrativo da organização"
       />
 
-      <Tabs defaultValue="financeiro" className="w-full">
-        <TabsList className="mb-4 md:mb-6">
+      <Tabs value={isAdmin ? tab : 'financeiro'} onValueChange={setTab} className="w-full">
+        <TabsList className="mb-4 md:mb-6 h-auto flex-wrap">
           <TabsTrigger value="financeiro" className="font-mono text-[11px] uppercase tracking-wider">
             Financeiro
           </TabsTrigger>
@@ -478,6 +505,9 @@ export default function Gestao() {
               </TabsTrigger>
               <TabsTrigger value="categorias" className="font-mono text-[11px] uppercase tracking-wider">
                 Categorias
+              </TabsTrigger>
+              <TabsTrigger value="contaazul" className="font-mono text-[11px] uppercase tracking-wider">
+                Conta Azul
               </TabsTrigger>
             </>
           )}
@@ -717,6 +747,10 @@ export default function Gestao() {
 
             <TabsContent value="categorias" className="mt-0">
               <GestaoCategorias />
+            </TabsContent>
+
+            <TabsContent value="contaazul" className="mt-0">
+              <GestaoContaAzul />
             </TabsContent>
           </>
         )}
