@@ -100,6 +100,11 @@ fora do ar) tenta sozinho até 5 vezes.
 conta no Conta Azul (por referência e por descrição + valor + vencimento) antes
 de criar.
 
+**Nunca lança duas baixas para a mesma parcela:** cada baixa é reservada no
+banco antes da chamada (cron e "Sincronizar agora" rodando juntos não duplicam)
+e a parcela é consultada antes; se a baixa não teve resposta, a próxima
+conferência só acontece depois de 10 min.
+
 ## Erros comuns
 
 - `Funcionário sem CPF no perfil.` — o colaborador precisa preencher o CPF em
@@ -110,6 +115,10 @@ de criar.
 - `Reconectar` / `O acesso foi revogado...` — a conexão caiu (revogada no
   Conta Azul ou credencial vencida). Clique em **Reconectar**; os pendentes
   seguem depois.
+- `a empresa escolhida é diferente da que já estava conectada` — a reconexão
+  precisa ser com a mesma empresa do Conta Azul: pessoas, contas e de-para
+  salvos pertencem a ela. Trocar de empresa exige limpar a integração com
+  ajuda do time técnico.
 
 ## Limitações
 
