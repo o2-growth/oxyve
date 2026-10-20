@@ -50,6 +50,7 @@ vi.mock('@/components/layout/AppShell', () => ({
 }));
 vi.mock('@/components/gestao/GestaoUsuarios', () => ({ GestaoUsuarios: () => null }));
 vi.mock('@/components/gestao/GestaoCategorias', () => ({ GestaoCategorias: () => null }));
+vi.mock('@/components/gestao/GestaoContaAzul', () => ({ GestaoContaAzul: () => <div>aba conta azul</div> }));
 const toastSuccess = vi.fn();
 vi.mock('sonner', () => ({ toast: { success: (...a: unknown[]) => toastSuccess(...a), error: vi.fn() } }));
 
@@ -181,5 +182,40 @@ describe('Gestão — pagamento só admin e dados de pagamento (decisões 1 e 4)
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText('Pessoa sem dados de pagamento cadastrados.')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /Confirmar pagamento/ })).toBeInTheDocument();
+  });
+});
+
+describe('Gestão — aba Conta Azul', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    toastSuccess.mockClear();
+    overview = okOverview();
+  });
+
+  function renderEm(url: string) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[url]}>
+          <Gestao />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it('só admin vê a aba', () => {
+    auth = { isAdmin: false, isManager: true, isLoading: false };
+    renderEm('/app/gestao');
+    expect(screen.queryByRole('tab', { name: 'Conta Azul' })).toBeNull();
+    auth = { isAdmin: true, isManager: true, isLoading: false };
+  });
+
+  it('volta do OAuth (?ca=conectado) abre a aba e avisa', async () => {
+    auth = { isAdmin: true, isManager: true, isLoading: false };
+    renderEm('/app/gestao?ca=conectado');
+    expect(await screen.findByText('aba conta azul')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Conta Azul' })).toHaveAttribute('data-state', 'active');
+    expect(toastSuccess).toHaveBeenCalledWith('Conta Azul conectado.');
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
   });
 });
