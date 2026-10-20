@@ -1009,6 +1009,7 @@ export type Database = {
         Row: {
           ca_approved_at: string | null
           ca_attempts: number
+          ca_baixa_claimed_at: string | null
           ca_checked_at: string | null
           ca_claimed_at: string | null
           ca_conta_id: string | null
@@ -1036,6 +1037,7 @@ export type Database = {
         Insert: {
           ca_approved_at?: string | null
           ca_attempts?: number
+          ca_baixa_claimed_at?: string | null
           ca_checked_at?: string | null
           ca_claimed_at?: string | null
           ca_conta_id?: string | null
@@ -1063,6 +1065,7 @@ export type Database = {
         Update: {
           ca_approved_at?: string | null
           ca_attempts?: number
+          ca_baixa_claimed_at?: string | null
           ca_checked_at?: string | null
           ca_claimed_at?: string | null
           ca_conta_id?: string | null
@@ -1145,6 +1148,7 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: number
       }
+      contaazul_claim_baixa: { Args: { p_report_id: string }; Returns: boolean }
       contaazul_claim_pendentes: { Args: { p_limit?: number; p_org: string }; Returns: string[] }
       contaazul_get_config: { Args: never; Returns: Json }
       contaazul_list_reports: { Args: { p_limit?: number }; Returns: Json }

@@ -122,6 +122,9 @@ ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS ca_claimed_at timestamptz;
 ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS ca_checked_at timestamptz;
 ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS ca_approved_at timestamptz;
 ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS ca_vencimento date;
+-- Reserva da baixa: duas execuções do sync (cron + "Sincronizar agora") não
+-- podem lançar a baixa da mesma parcela duas vezes.
+ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS ca_baixa_claimed_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS reports_ca_status_idx
   ON public.reports (org_id, ca_status) WHERE ca_status IS NOT NULL;
@@ -179,13 +182,14 @@ BEGIN
     NEW.ca_status := NULL; NEW.ca_conta_id := NULL; NEW.ca_parcela_id := NULL;
     NEW.ca_error := NULL; NEW.ca_sent_at := NULL; NEW.ca_attempts := 0;
     NEW.ca_claimed_at := NULL; NEW.ca_checked_at := NULL; NEW.ca_approved_at := NULL;
-    NEW.ca_vencimento := NULL;
+    NEW.ca_vencimento := NULL; NEW.ca_baixa_claimed_at := NULL;
   ELSE
     NEW.ca_status := OLD.ca_status; NEW.ca_conta_id := OLD.ca_conta_id;
     NEW.ca_parcela_id := OLD.ca_parcela_id; NEW.ca_error := OLD.ca_error;
     NEW.ca_sent_at := OLD.ca_sent_at; NEW.ca_attempts := OLD.ca_attempts;
     NEW.ca_claimed_at := OLD.ca_claimed_at; NEW.ca_checked_at := OLD.ca_checked_at;
     NEW.ca_approved_at := OLD.ca_approved_at; NEW.ca_vencimento := OLD.ca_vencimento;
+    NEW.ca_baixa_claimed_at := OLD.ca_baixa_claimed_at;
   END IF;
   RETURN NEW;
 END;
@@ -557,6 +561,26 @@ BEGIN
 END;
 $function$;
 
+-- Reserva a baixa de um relatório pago: só uma execução por vez, e a próxima
+-- tentativa só depois de 10 min (tempo para uma baixa sem resposta aparecer na
+-- parcela, que o sync consulta antes de lançar).
+CREATE OR REPLACE FUNCTION public.contaazul_claim_baixa(p_report_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE _n integer;
+BEGIN
+  UPDATE public.reports
+     SET ca_baixa_claimed_at = now()
+   WHERE id = p_report_id AND status = 'paid' AND ca_status = 'enviado' AND ca_parcela_id IS NOT NULL
+     AND (ca_baixa_claimed_at IS NULL OR ca_baixa_claimed_at < now() - interval '10 minutes');
+  GET DIAGNOSTICS _n = ROW_COUNT;
+  RETURN _n = 1;
+END;
+$function$;
+
 -- Quitação vista no Conta Azul: mesmo efeito do mark_report_paid (relatório e
 -- despesas aprovadas viram 'paid'), sem exigir admin porque quem paga é o
 -- sistema. O gatilho de auditoria grava o evento 'paid'; aqui ele ganha actor
@@ -593,6 +617,8 @@ REVOKE EXECUTE ON FUNCTION public.contaazul_claim_pendentes(uuid, integer) FROM 
 REVOKE EXECUTE ON FUNCTION public.contaazul_report_data(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.contaazul_try_lock_refresh(uuid, integer) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.contaazul_marcar_pago(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.contaazul_claim_baixa(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.contaazul_claim_baixa(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.contaazul_claim_pendentes(uuid, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.contaazul_report_data(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.contaazul_try_lock_refresh(uuid, integer) TO service_role;

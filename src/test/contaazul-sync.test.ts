@@ -84,6 +84,7 @@ function storeFalso(d: ReportData) {
   };
   const pessoas: Record<string, string> = {};
   const pagosNoOxy: string[] = [];
+  let baixaReservada = false;
   const store: SyncStore = {
     reservarPendentes: async () => {
       if (est.ca_status !== 'pendente') return [];
@@ -102,6 +103,11 @@ function storeFalso(d: ReportData) {
     marcarIncerto: async (_id, m) => { est.ca_error = m; },
     listarParaBaixa: async () => (est.status === 'paid' && est.ca_status === 'enviado' ? [{ id: d.report.id, ca_parcela_id: est.ca_parcela_id! }] : []),
     listarParaPolling: async () => (est.status === 'approved' && est.ca_status === 'enviado' ? [{ id: d.report.id, ca_parcela_id: est.ca_parcela_id! }] : []),
+    reservarBaixa: async () => {
+      if (baixaReservada) return false;
+      baixaReservada = true;
+      return true;
+    },
     marcarPagoSync: async () => { Object.assign(est, { ca_status: 'pago_sync', ca_error: null }); },
     marcarErroPagamento: async (_id, m, final) => { est.ca_error = m; if (final) est.ca_status = 'erro'; },
     marcarConferido: async (_id, aviso) => { est.ca_error = aviso; },
@@ -299,6 +305,21 @@ describe('pagamento', () => {
     expect(est.ca_status).toBe('pago_sync');
   });
 
+  it('duas execuções juntas (cron + "Sincronizar agora"): só uma lança a baixa', async () => {
+    const { store } = storeFalso(dados({ ca_status: 'enviado', ca_parcela_id: 'parc-1', status: 'paid' }));
+    const f = fetchFalso({
+      'GET /v1/financeiro/parcelas/parc-1': [{ status: 200, body: { id: 'parc-1', status: 'PENDENTE', nao_pago: 42.55 } }],
+      'POST /v1/financeiro/baixas': [{ status: 200, body: { id: 'b1' } }],
+    });
+    const rep = { id: 'r1', ca_parcela_id: 'parc-1' };
+    const r = await Promise.all([
+      lancarBaixa({ api: api(f.fn), store, agora }, rep, 'conta-1'),
+      lancarBaixa({ api: api(f.fn), store, agora }, rep, 'conta-1'),
+    ]);
+    expect(r.sort()).toEqual(['baixado', 'ignorado']);
+    expect(f.chamadas.filter((c) => c.method === 'POST')).toHaveLength(1);
+  });
+
   it('parcela já quitada lá: não lança baixa de novo', async () => {
     const { store, est } = storeFalso(dados({ ca_status: 'enviado', ca_parcela_id: 'parc-1', status: 'paid' }));
     const f = fetchFalso({ 'GET /v1/financeiro/parcelas/parc-1': [{ status: 200, body: { status: 'QUITADO' } }] });
@@ -399,6 +420,21 @@ describe('token', () => {
     const f = fetchFalso({ 'POST /oauth/token': [{ status: 400, body: { error: 'invalid_grant', error_subtype: 'invalid_refresh_token' } }] });
     await expect(obterAccessToken('o', { store, fetch: f.fn, credenciais: cred, relogio, agora: agoraTk })).rejects.toMatchObject({ reconectar: true });
     expect(log[1]).toMatch(/^reconectar:A credencial salva não vale mais/);
+  });
+
+  it('invalid_grant porque outra execução já rodou o refresh: usa o token novo, sem reconectar', async () => {
+    const t = tokenStore({ access_token: null, refresh_token: 'R1', token_expires_at: null });
+    let leituras = 0;
+    t.store.lerConexao = async () => {
+      leituras++;
+      // 1ª e 2ª leitura (antes e depois da trava) veem R1; depois do 400, já está R2.
+      return leituras >= 3
+        ? { access_token: 'A-outro', refresh_token: 'R2', token_expires_at: '2026-10-20T13:00:00Z' }
+        : { ...t.conn };
+    };
+    const f = fetchFalso({ 'POST /oauth/token': [{ status: 400, body: { error: 'invalid_grant' } }] });
+    expect(await obterAccessToken('o', { store: t.store, fetch: f.fn, credenciais: cred, relogio, agora: agoraTk })).toBe('A-outro');
+    expect(t.log.some((l) => l.startsWith('reconectar'))).toBe(false);
   });
 
   it('API com 401: renova uma vez e repete a chamada', async () => {

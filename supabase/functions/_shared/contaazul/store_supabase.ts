@@ -105,6 +105,11 @@ export function criarSyncStore(sb: SupabaseClient): SyncStore {
       upd("marcar erro", id, { ca_status: final ? "erro" : "pendente", ca_error: mensagem }, "enviando"),
     marcarIncerto: (id, mensagem) => upd("marcar envio incerto", id, { ca_error: mensagem }, "enviando"),
     listarParaBaixa: (orgId, limite) => lista(orgId, "paid", limite, false),
+    async reservarBaixa(reportId) {
+      const { data, error } = await sb.rpc("contaazul_claim_baixa", { p_report_id: reportId });
+      if (error) falha("reservar a baixa", error);
+      return data === true;
+    },
     listarParaPolling: (orgId, limite) => lista(orgId, "approved", limite, true),
     marcarPagoSync: (id) => upd("marcar pago", id, { ca_status: "pago_sync", ca_error: null, ca_checked_at: agora() }),
     marcarErroPagamento: (id, mensagem, final) =>

@@ -60,7 +60,8 @@ export async function obterAccessToken(
         if (!conn?.refresh_token) throw new ContaAzulError(RECONECTAR, null, null);
         if (valido(conn)) return conn.access_token as string;
 
-        const { url, init } = buildTokenRequest(deps.credenciais, { grant: "refresh_token", refreshToken: conn.refresh_token });
+        const usado = conn.refresh_token;
+        const { url, init } = buildTokenRequest(deps.credenciais, { grant: "refresh_token", refreshToken: usado });
         let res: Response;
         try {
           res = await deps.fetch(url, { ...init, signal: comTimeout(20_000) });
@@ -76,7 +77,22 @@ export async function obterAccessToken(
         }
         if (!res.ok) {
           const t = traduzirErroToken(res.status, body);
-          if (t.reconectar) await deps.store.marcarReconectar(orgId, t.mensagem);
+          if (t.reconectar) {
+            // A trava vence em 30 s: se outra execução renovou nesse meio tempo,
+            // o refresh usado aqui já tinha rodado e o invalid_grant não quer
+            // dizer conexão perdida. Só marca reconectar se o refresh salvo
+            // ainda é o que foi recusado.
+            const atual = await deps.store.lerConexao(orgId);
+            if (atual?.refresh_token && atual.refresh_token !== usado) {
+              if (valido(atual)) return atual.access_token as string;
+              throw new ContaAzulError(
+                { mensagem: "Renovação do acesso ao Conta Azul em andamento. Nova tentativa no próximo ciclo.", transitorio: true, reconectar: false },
+                res.status,
+                body,
+              );
+            }
+            await deps.store.marcarReconectar(orgId, t.mensagem);
+          }
           throw new ContaAzulError(t, res.status, body);
         }
         const tokens = parseTokenResponse(body, agora());

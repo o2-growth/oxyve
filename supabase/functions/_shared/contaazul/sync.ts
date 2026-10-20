@@ -80,6 +80,8 @@ export interface SyncStore {
   /** POST sem resposta: fica 'enviando' (o claim reabre em 10 min e confere antes). */
   marcarIncerto(reportId: string, mensagem: string): Promise<void>;
   listarParaBaixa(orgId: string, limite: number): Promise<ReportParaPagamento[]>;
+  /** RPC contaazul_claim_baixa: só uma execução lança a baixa (false = outra já está nela). */
+  reservarBaixa(reportId: string): Promise<boolean>;
   listarParaPolling(orgId: string, limite: number): Promise<ReportParaPagamento[]>;
   marcarPagoSync(reportId: string): Promise<void>;
   /** ca_error no relatório já enviado; final=true tira de 'enviado' para 'erro'. */
@@ -239,7 +241,10 @@ export async function lancarBaixa(
   ctx: SyncCtx,
   rep: ReportParaPagamento,
   contaFinanceiraId: string | null,
-): Promise<"baixado" | "ja_quitado" | "erro"> {
+): Promise<"baixado" | "ja_quitado" | "erro" | "ignorado"> {
+  // Reserva antes do GET: duas execuções juntas veriam a parcela em aberto e
+  // lançariam duas baixas.
+  if (!(await ctx.store.reservarBaixa(rep.id))) return "ignorado";
   try {
     const parcela = parseParcela(await ctx.api.obterParcela(rep.ca_parcela_id));
     if (parcelaQuitada(parcela.status)) {
@@ -319,8 +324,8 @@ export async function sincronizarOrg(
 
   for (const rep of await ctx.store.listarParaBaixa(org.id, 20)) {
     const r = await lancarBaixa(ctx, rep, org.conta_financeira_id);
-    if (r !== "erro") resumo.baixas++;
-    else resumo.erros++;
+    if (r === "baixado" || r === "ja_quitado") resumo.baixas++;
+    else if (r === "erro") resumo.erros++;
   }
 
   const ultimo = org.last_poll_at ? new Date(org.last_poll_at).getTime() : 0;

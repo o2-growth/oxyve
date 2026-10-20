@@ -280,6 +280,20 @@ SET ROLE service_role;
 SELECT t.ok(NOT public.contaazul_marcar_pago((SELECT ana FROM rep)), 'quitação: segunda vez não faz nada');
 RESET role;
 
+-- ================================================================ reserva da baixa
+-- Relatório pago no Oxy VE com conta lá: só uma execução lança a baixa.
+SET ROLE service_role;
+SELECT t.ok(public.contaazul_claim_baixa((SELECT ana FROM rep)) IS FALSE, 'baixa: pago_sync não é reservado');
+UPDATE public.reports SET status = 'paid', ca_status = 'enviado' WHERE id = (SELECT bia FROM rep);
+SELECT t.ok(public.contaazul_claim_baixa((SELECT bia FROM rep)), 'baixa: primeira execução reserva');
+SELECT t.ok(NOT public.contaazul_claim_baixa((SELECT bia FROM rep)), 'baixa: segunda execução não lança de novo');
+UPDATE public.reports SET ca_baixa_claimed_at = now() - interval '11 minutes' WHERE id = (SELECT bia FROM rep);
+SELECT t.ok(public.contaazul_claim_baixa((SELECT bia FROM rep)), 'baixa: reserva vencida (10 min) libera nova conferência');
+RESET role;
+SELECT t.as_user('00000000-0000-0000-0000-0000000000ad');
+SELECT t.raises(format($q$SELECT public.contaazul_claim_baixa(%L)$q$, (SELECT bia FROM rep)), 'permission denied', 'rls: admin não chama a reserva da baixa');
+RESET role;
+
 -- ================================================================ trava da renovação
 SET ROLE service_role;
 SELECT t.ok(public.contaazul_try_lock_refresh('00000000-0000-0000-0000-0000000000a1', 30), 'trava: primeira execução pega');
