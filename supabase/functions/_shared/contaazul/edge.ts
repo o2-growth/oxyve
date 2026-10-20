@@ -35,11 +35,22 @@ export function serviceClient(): SupabaseClient {
   });
 }
 
-/** Credenciais do app no portal do Conta Azul; null se faltar alguma. */
-export function credenciais(): Credenciais | null {
-  const clientId = Deno.env.get("CONTAAZUL_CLIENT_ID");
-  const clientSecret = Deno.env.get("CONTAAZUL_CLIENT_SECRET");
-  const redirectUri = Deno.env.get("CONTAAZUL_REDIRECT_URI");
+/**
+ * Credenciais do app no portal do Conta Azul; null se faltar alguma. Vêm das env
+ * CONTAAZUL_* ou, se não houver, do Vault (contaazul_app_credentials, só service_role).
+ */
+export async function credenciais(sb: SupabaseClient): Promise<Credenciais | null> {
+  let clientId = Deno.env.get("CONTAAZUL_CLIENT_ID");
+  let clientSecret = Deno.env.get("CONTAAZUL_CLIENT_SECRET");
+  let redirectUri = Deno.env.get("CONTAAZUL_REDIRECT_URI");
+  if (!clientId || !clientSecret || !redirectUri) {
+    const { data, error } = await sb.rpc("contaazul_app_credentials");
+    if (error) console.error("contaazul: leitura das credenciais no Vault falhou", error.message);
+    const v = (data ?? {}) as { client_id?: string; client_secret?: string; redirect_uri?: string };
+    clientId ||= v.client_id ?? undefined;
+    clientSecret ||= v.client_secret ?? undefined;
+    redirectUri ||= v.redirect_uri ?? undefined;
+  }
   if (!clientId || !clientSecret || !redirectUri) return null;
   return { clientId, clientSecret, redirectUri };
 }

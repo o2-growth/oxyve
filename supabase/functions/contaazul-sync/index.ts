@@ -70,7 +70,7 @@ serve(async (req) => {
     const sb = serviceClient();
     const body = await req.json().catch(() => ({}));
     const action = typeof body?.action === "string" ? body.action : "";
-    const cred = credenciais();
+    const cred = await credenciais(sb);
 
     if (action === "cron") {
       if (!ehSistema(req)) return json({ error: "unauthorized" }, 401);

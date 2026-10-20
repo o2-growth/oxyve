@@ -148,8 +148,23 @@ export function useContaAzulActions() {
       if (!url) throw new Error('Não foi possível iniciar a conexão.');
       return url;
     },
-    // Sai do app para o login do Conta Azul; o callback volta para a Gestão.
-    onSuccess: (url) => window.location.assign(url),
+    // Abre o login do Conta Azul em outra aba. O retorno cadastrado no app pode
+    // ser um site de terceiro que não carrega: aí o admin cola o endereço na tela.
+    onSuccess: (url) => {
+      if (!window.open(url, '_blank', 'noopener')) window.location.assign(url);
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
+  const concluirColando = useMutation({
+    mutationFn: async (url: string) => {
+      const { error } = await supabase.functions.invoke('contaazul-oauth', { body: { action: 'colar', url } });
+      if (error) throw new Error(await invokeErrorMessage(error, 'Não foi possível concluir a conexão.'));
+    },
+    onSuccess: () => {
+      toast.success('Conta Azul conectado.');
+      invalidar();
+    },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -244,5 +259,5 @@ export function useContaAzulActions() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  return { conectar, desconectar, salvarConfig, salvarCategoria, salvarSetor, reenviar, sincronizar };
+  return { conectar, concluirColando, desconectar, salvarConfig, salvarCategoria, salvarSetor, reenviar, sincronizar };
 }

@@ -116,7 +116,8 @@ function ConexaoCard() {
   const { data: cfg, isLoading, isError, refetch } = useContaAzulConfig();
   const conectado = !!cfg?.conectado && !cfg?.precisa_reconectar;
   const opcoes = useContaAzulOpcoes(conectado);
-  const { conectar, desconectar, salvarConfig, sincronizar } = useContaAzulActions();
+  const { conectar, concluirColando, desconectar, salvarConfig, sincronizar } = useContaAzulActions();
+  const [urlColada, setUrlColada] = useState('');
   const [confirmando, setConfirmando] = useState(false);
 
   const [conta, setConta] = useState<CaOpcao | null>(null);
@@ -167,10 +168,36 @@ function ConexaoCard() {
 
         <div className="flex flex-wrap gap-2">
           {!conectado ? (
-            <Button onClick={() => conectar.mutate()} disabled={conectar.isPending} className="h-11 gap-2">
-              {conectar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
-              {cfg.precisa_reconectar ? 'Reconectar Conta Azul' : 'Conectar Conta Azul'}
-            </Button>
+            <div className="w-full space-y-3">
+              <Button onClick={() => conectar.mutate()} disabled={conectar.isPending} className="h-11 gap-2">
+                {conectar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
+                {cfg.precisa_reconectar ? 'Reconectar Conta Azul' : 'Conectar Conta Azul'}
+              </Button>
+              {/* Retorno cadastrado no app pode ser um site que não carrega: o admin
+                  autoriza na outra aba e cola aqui o endereço que ficou na barra. */}
+              <div className="space-y-1.5">
+                <Label htmlFor="ca-url-colada" className="o2-eyebrow">Depois de autorizar, cole aqui o endereço da barra</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="ca-url-colada"
+                    value={urlColada}
+                    onChange={(e) => setUrlColada(e.target.value)}
+                    placeholder="https://…/callback?code=…&state=…"
+                    className="h-11"
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-11 gap-2"
+                    disabled={!urlColada.trim() || concluirColando.isPending}
+                    onClick={() => concluirColando.mutate(urlColada.trim(), { onSuccess: () => setUrlColada('') })}
+                  >
+                    {concluirColando.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                    Concluir conexão
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">O código da autorização vale 3 minutos: cole logo depois de autorizar.</p>
+              </div>
+            </div>
           ) : (
             <>
               <Button
